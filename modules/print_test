@@ -1,0 +1,72 @@
+import os
+import tempfile
+import subprocess
+import time
+from printer import imprimir_ticket, imprimir_comanda
+
+def print_via_notepad(text):
+    """Envía contenido a imprimir Thermal usando Notepad"""
+    try:
+        # Crear archivo temporal
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+            f.write(text)
+            temp_file = f.name
+        
+        print(f"✓ Archivo temporal creado: {temp_file}")
+        
+        # Abrir con Notepad
+        os.startfile(temp_file)
+        time.sleep(1)
+        
+        # Imprimir desde Notepad
+        os.system(f'notepad /p "{temp_file}"')
+        time.sleep(2)
+        
+        # Limpiar
+        os.remove(temp_file)
+        print("✓ Archivo enviado a imprimir")
+        return True
+    except Exception as e:
+        print(f"✗ Error: {e}")
+        return False
+
+# Prueba con impresora térmica POS-80
+def test_printer():
+    """Prueba la impresora térmica POS-80"""
+    print("Probando impresora térmica POS-80...")
+    
+    # Datos de prueba para ticket
+    venta_prueba = {
+        'folio': 'TEST-001',
+        'fecha': '2026-03-04 12:00:00',
+        'total': 150.00,
+        'metodo_pago': 'Efectivo',
+        'items': [
+            {'nombre': 'Producto 1', 'cantidad': 2, 'precio_unitario': 25.00},
+            {'nombre': 'Producto 2', 'cantidad': 1, 'precio_unitario': 100.00}
+        ]
+    }
+    
+    cajero = "Test Cajero"
+    
+    # Imprimir ticket de prueba
+    if imprimir_ticket(venta_prueba, cajero):
+        print("✓ Ticket de prueba impreso correctamente")
+    else:
+        print("✗ Error al imprimir ticket")
+    
+    # Datos de prueba para comanda
+    items_comanda = [
+        {'nombre_producto': 'Producto 1', 'cantidad': 2},
+        {'nombre_producto': 'Producto 2', 'cantidad': 1}
+    ]
+    
+    # Imprimir comanda de prueba
+    if imprimir_comanda(1, items_comanda):
+        print("✓ Comanda de prueba impresa correctamente")
+    else:
+        print("✗ Error al imprimir comanda")
+
+# Ejecutar prueba
+if __name__ == "__main__":
+    test_printer()

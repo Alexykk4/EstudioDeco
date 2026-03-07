@@ -1,0 +1,28 @@
+# Entornos virtuales
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Base de datos (tiene datos de ventas reales)
+*.db
+
+# Credenciales secretas
+assets/credentials.json
+assets/*.jsonZone.Identifier
+
+# Reportes generados
+reports/*.pdf
+
+# Backups
+*_backup.py
+
+# Windows
+*Zone.Identifier
+*Zone?Identifier
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
