@@ -410,6 +410,10 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
     <div class="spacer"></div>
     <div class="user-pill" id="userPill" onclick="showNipModal()" title="Cambiar usuario"><span class="dot"></span><span id="userName">Sin usuario</span></div>
     <button class="btn btn-sage" onclick="showNipModal()">🔑 Ingresar</button>
+    <button class="btn" style="background:#66BB6A;color:white;" onclick="showFondoModal()">🏦 Abrir Caja</button>
+    <button class="btn" style="background:#26A69A;color:white;" onclick="showIngresoModal()">💰 Ingreso</button>
+    <button class="btn btn-ghost" onclick="showGlobalSearch()">🔍 Buscar</button>
+    <button class="btn btn-ghost" onclick="showPreCorteModal()">👁 Pre-Corte</button>
     <button class="btn btn-gold" onclick="showCorteModal()">📊 Corte</button>
     <button class="btn btn-ghost" onclick="showGastoModal()">💸 Gasto</button>
   </header>
@@ -535,7 +539,6 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
         </div>
       </div>
       <div class="order-actions">
-        <button class="btn-ghost" id="btnComanda" onclick="enviarComanda()" hidden>📤 Enviar comanda</button>
         <button class="btn-clear" onclick="limpiarOrden()">🗑</button>
         <button class="btn-cobrar" id="btnCobrar" onclick="cobrar()" disabled>Cobrar</button>
       </div>
@@ -1021,7 +1024,6 @@ async function addItemFinal(prod,tienda,nombre_hist,precio,abierto){
         producto_id:prod.id, tienda_id:tienda.id, nombre:nombre_hist,
         cantidad:1, precio_unitario:precio, es_precio_abierto:abierto
       }});
-      if(res.comanda) toast('🖨','Comanda enviada a barra');
       // refresh order
       const todas = await api(`/mesas/${selectedMesa.id}/ordenes`);
       currentOrden = todas.find(x=>x.id === selectedOrden.id);
@@ -1081,10 +1083,6 @@ function renderOrder(){
   if(metodoPago==='Mixto' && items.length>0){
       calcMixto('efectivo');
   }
-  // show/hide comanda button when we're on a mesa with items
-  const btnCom = document.getElementById('btnComanda');
-  if(selectedMesa && items.length>0){ btnCom.hidden = false; } else { btnCom.hidden = true; }
-
   const c=document.getElementById('orderItems');
   if(!items.length){c.innerHTML=`<div class="order-empty"><span class="order-empty-icon">📋</span><span>Sin artículos</span></div>`;return;}
 
@@ -1104,15 +1102,6 @@ function renderOrder(){
     </div>`;
   }).join('');
 }
-async function enviarComanda(){
-  if(!selectedOrden) return;
-  try{
-    const res = await api(`/ordenes/${selectedOrden.id}/comanda`,{method:'POST'});
-    if(res.printed>0) toast('🖨','Comanda enviada a barra');
-    else toast('ℹ️','Nada por imprimir');
-  }catch(e){ toast('❌',e.message,'var(--red)'); }
-}
-
 async function removeDbItem(itemId){
   await api(`/orden-items/${itemId}`,{method:'DELETE'});
   const todas = await api(`/mesas/${selectedMesa.id}/ordenes`);
@@ -1128,6 +1117,13 @@ function limpiarOrden(){
 }
 
 window.allExtrasTienda1 = []; // Cache to avoid duplicate fetch
+
+function applyDiscount(inputId, priceInputId) {
+  const dsc = parseFloat(document.getElementById(inputId)?.value) || 0;
+  const orig = parseFloat(document.getElementById(inputId)?.dataset.orig) || 0;
+  if (dsc < 0 || dsc > 100 || !orig) return;
+  document.getElementById(priceInputId).value = (orig * (1 - dsc / 100)).toFixed(2);
+}
 
 async function showEditItemModalDb(id, nombre, precio, tienda_id, producto_id) {
   const cleanNombre = nombre.replace(" (Frío)", "").replace(" (Caliente)", "");
@@ -1180,14 +1176,16 @@ async function showEditItemModalDb(id, nombre, precio, tienda_id, producto_id) {
       }
   }
 
+  const labelCliente = tienda_id === 1 ? 'Nombre en vaso / Cliente' : 'Nota / Cliente';
   showModal(`<div class="modal-title">✏️ Editar Artículo</div>
     <div class="field"><label>Descripción Base</label><input type="text" id="edN_base" class="input" value="${baseNombre}" readonly style="background:#f4f4f4; color:#888;"></div>
-    <div class="field"><label>Nombre en vaso / Cliente</label><input type="text" id="edN_cliente" class="input" value="${clienteNombre}"></div>
+    <div class="field"><label>${labelCliente}</label><input type="text" id="edN_cliente" class="input" value="${clienteNombre}"></div>
     ${tempHtml}
     ${extrasHtml}
     <div class="field"><label>Precio Unitario</label><input type="number" id="edP" class="input" step="0.01" value="${precio}" onkeydown="if(event.key==='Enter')doEditItemDb(${id})"></div>
+    <div class="field"><label>Descuento (%)</label><div style="display:flex;gap:8px;align-items:center;"><input type="number" id="edDsc" class="input" style="width:80px" min="0" max="100" step="1" value="0" data-orig="${precio}" oninput="applyDiscount('edDsc','edP')"><button type="button" class="btn btn-ghost btn-sm" onclick="applyDiscount('edDsc','edP')">Aplicar</button><span style="font-size:11px;color:var(--text-muted)">0% = sin descuento</span></div></div>
     <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="doEditItemDb(${id})">Guardar</button></div>`);
-  setTimeout(()=>document.getElementById('edP')?.focus(),100);
+  setTimeout(()=>document.getElementById('edN_cliente')?.focus(),100);
 }
 
 async function doEditItemDb(id) {
@@ -1262,14 +1260,16 @@ async function showEditItemModalCart(idx, nombre, precio, producto_id) {
       }
   }
 
+  const labelClienteC = tienda_id === 1 ? 'Nombre en vaso / Cliente' : 'Nota / Cliente';
   showModal(`<div class="modal-title">✏️ Editar Artículo</div>
     <div class="field"><label>Descripción Base</label><input type="text" id="edN_base" class="input" value="${baseNombre}" readonly style="background:#f4f4f4; color:#888;"></div>
-    <div class="field"><label>Nombre en vaso / Cliente</label><input type="text" id="edN_cliente" class="input" value="${clienteNombre}"></div>
+    <div class="field"><label>${labelClienteC}</label><input type="text" id="edN_cliente" class="input" value="${clienteNombre}"></div>
     ${tempHtml}
     ${extrasHtml}
     <div class="field"><label>Precio Unitario</label><input type="number" id="edP" class="input" step="0.01" value="${precio}" onkeydown="if(event.key==='Enter')doEditItemCart(${idx})"></div>
+    <div class="field"><label>Descuento (%)</label><div style="display:flex;gap:8px;align-items:center;"><input type="number" id="edDsc" class="input" style="width:80px" min="0" max="100" step="1" value="0" data-orig="${precio}" oninput="applyDiscount('edDsc','edP')"><button type="button" class="btn btn-ghost btn-sm" onclick="applyDiscount('edDsc','edP')">Aplicar</button><span style="font-size:11px;color:var(--text-muted)">0% = sin descuento</span></div></div>
     <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="doEditItemCart(${idx})">Guardar</button></div>`);
-  setTimeout(()=>document.getElementById('edP')?.focus(),100);
+  setTimeout(()=>document.getElementById('edN_cliente')?.focus(),100);
 }
 
 function doEditItemCart(idx) {
@@ -1460,6 +1460,36 @@ async function addMk(){
   renderOrder(); closeModal();
 }
 
+function showFondoModal(){
+  if(!usuario)return showNipModal(showFondoModal);
+  showModal(`<div class="modal-simple"><div class="modal-title">🏦 Abrir Caja</div><div class="modal-sub">Fondo de caja al inicio del turno</div>
+    <div class="field"><label>Monto del fondo</label><input type="number" id="fM" class="input" placeholder="0.00" step="0.01" onkeydown="if(event.key==='Enter')doFondo()"></div>
+    <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn" style="background:#66BB6A;color:white;" onclick="doFondo()">Guardar Fondo</button></div></div>`);
+  setTimeout(()=>document.getElementById('fM')?.focus(),100);
+}
+async function doFondo(){
+  const m=parseFloat(document.getElementById('fM').value);
+  if(isNaN(m)||m<0)return;
+  await api('/fondo',{method:'POST',body:{monto:m}});
+  closeModal(); toast('✅',`Fondo de caja: $${m.toFixed(2)}`,'var(--green-ok)');
+}
+
+function showIngresoModal(){
+  if(!usuario)return showNipModal(showIngresoModal);
+  showModal(`<div class="modal-simple"><div class="modal-title">💰 Registrar Ingreso</div><div class="modal-sub">Pago recibido fuera de ventas</div>
+    <div class="field"><label>Concepto</label><input id="iC" class="input" placeholder="Ej: Anticipo taller, abono cliente"></div>
+    <div class="field"><label>Monto</label><input type="number" id="iM" class="input" placeholder="0.00" step="0.01"></div>
+    <div class="field"><label>Método de pago</label><select id="iP" class="input"><option value="Efectivo">💵 Efectivo</option><option value="Tarjeta">💳 Tarjeta / Transferencia</option></select></div>
+    <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn" style="background:#26A69A;color:white;" onclick="doIngreso()">Guardar Ingreso</button></div></div>`);
+  setTimeout(()=>document.getElementById('iC')?.focus(),100);
+}
+async function doIngreso(){
+  const c=document.getElementById('iC').value.trim(), m=parseFloat(document.getElementById('iM').value), p=document.getElementById('iP').value;
+  if(!c||!m||m<=0)return;
+  await api('/ingresos',{method:'POST',body:{usuario_id:usuario.id,concepto:c,monto:m,metodo_pago:p}});
+  closeModal(); toast('✅',`Ingreso: $${m.toFixed(2)} (${p})`,'var(--green-ok)');
+}
+
 function showGastoModal(){
   if(!usuario)return showNipModal(showGastoModal);
   const opts=tiendas.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('');
@@ -1482,19 +1512,26 @@ async function showCorteModal(){
   if(usuario.perfil!=='Administrador'){toast('⚠️','Solo Administrador','var(--gold)');return;}
   const r=await api('/report/corte');
   const esp=r.efectivo_esperado;
+  const tarEsp=r.tarjeta_esperado||0;
+  const totalEsp=r.total_esperado||0;
+  const fondoApertura=r.fondo_apertura||0;
   const desdeStr=r.desde?r.desde.slice(11,19):'00:00:00';
   const BILLS=[1000,500,200,100,50,20], COINS=[10,5,2,1,0.5];
   const bRows=BILLS.map(d=>`<div class="denom-row"><span class="denom-label">$${d.toLocaleString()}</span><input type="number" id="b${d}" class="input denom-input" value="0" min="0" oninput="calcCorte(${esp})"></div>`).join('');
   const cRows=COINS.map(d=>`<div class="denom-row"><span class="denom-label">$${d%1?d:Math.trunc(d)}</span><input type="number" id="m${d}" class="input denom-input" value="0" min="0" oninput="calcCorte(${esp})"></div>`).join('');
   showModal(`<div class="modal-body">
     <div class="modal-title">📊 Corte de Caja</div><div class="modal-sub">Turno desde ${desdeStr} · ${r.num_ventas} tickets</div>
-    <div class="resumen-grid" style="margin-bottom:12px;">
-      <div class="res-card"><div class="res-label">Ingresos Brutos</div><div class="res-val v">$${r.total_ventas.toFixed(2)}</div></div>
-      <div class="res-card"><div class="res-label">Gastos Op.</div><div class="res-val g">-$${r.total_gastos.toFixed(2)}</div></div>
-      <div class="res-card"><div class="res-label">Esperado en Caja</div><div class="res-val e">$${r.efectivo_esperado.toFixed(2)}</div></div>
-      <div class="res-card" style="background:var(--sage-light)"><div class="res-label" style="color:var(--sage-dark)">Utilidad Neta</div><div class="res-val" style="color:var(--sage-dark)">$${r.utilidad.toFixed(2)}</div></div>
+    <div class="resumen-grid" style="margin-bottom:12px;grid-template-columns:repeat(3,1fr);">
+      <div class="res-card"><div class="res-label">💵 Efectivo</div><div class="res-val v">$${(r.total_efectivo||0).toFixed(2)}</div></div>
+      <div class="res-card"><div class="res-label">💳 Tarjeta</div><div class="res-val" style="color:var(--gold)">$${(r.total_tarjeta||0).toFixed(2)}</div></div>
+      <div class="res-card"><div class="res-label">📦 Gastos</div><div class="res-val g">-$${r.total_gastos.toFixed(2)}</div></div>
     </div>
-    <div class="field"><label>🏦 Fondo de caja inicial</label><input type="number" id="cFondo" class="input" value="0" min="0" placeholder="0.00" oninput="calcCorte(${esp})"></div>
+    <div class="resumen-grid" style="margin-bottom:12px;grid-template-columns:repeat(3,1fr);">
+      <div class="res-card" style="background:#E8F5E9"><div class="res-label" style="color:#2E7D32">Ef. en Caja</div><div class="res-val" style="color:#2E7D32">$${esp.toFixed(2)}</div></div>
+      <div class="res-card" style="background:#E3F2FD"><div class="res-label" style="color:#1565C0">Tarjeta Neta</div><div class="res-val" style="color:#1565C0">$${tarEsp.toFixed(2)}</div></div>
+      <div class="res-card" style="background:var(--sage-light)"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${totalEsp.toFixed(2)}</div></div>
+    </div>
+    <div class="field"><label>🏦 Fondo de caja inicial</label><input type="number" id="cFondo" class="input" value="${fondoApertura}" min="0" placeholder="0.00" oninput="calcCorte(${esp})"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
       <div><div style="font-size:10px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">💵 Billetes</div>${bRows}</div>
       <div><div style="font-size:10px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">🪙 Monedas</div>${cRows}</div>
@@ -1503,7 +1540,7 @@ async function showCorteModal(){
       <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text-muted)">Total contado:</span><span id="cTotalCont" style="font-family:'JetBrains Mono',monospace;font-weight:700;">$0.00</span></div>
       <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text-muted)">Menos fondo de caja:</span><span id="cMenosFondo" style="font-family:'JetBrains Mono',monospace;">-$0.00</span></div>
       <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);margin-bottom:3px;"><span style="font-weight:700;">Efectivo real (ventas):</span><span id="cReal" style="font-family:'JetBrains Mono',monospace;font-weight:700;">$0.00</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text-muted)">Esperado (sistema):</span><span style="font-family:'JetBrains Mono',monospace;color:var(--text-muted);">$${r.efectivo_esperado.toFixed(2)}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text-muted)">Esperado (sistema):</span><span style="font-family:'JetBrains Mono',monospace;color:var(--text-muted);">$${esp.toFixed(2)}</span></div>
       <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);"><span style="font-weight:700;">Diferencia:</span><span id="cDif" style="font-family:'JetBrains Mono',monospace;font-weight:700;">$0.00</span></div>
     </div>
   </div>
@@ -1515,7 +1552,7 @@ async function showCorteModal(){
     </div>
   </div>`);
   const m = document.querySelector('#modals .modal');
-  m.style.width = '620px';
+  m.style.width = '640px';
   m.style.maxWidth = '98vw';
 }
 async function printCorteDia(){
@@ -1646,6 +1683,113 @@ function toast(icon,msg,bc){
   const t=document.createElement('div');t.className='toast';
   if(bc)t.style.borderLeftColor=bc;t.style.borderLeft=`3px solid ${bc||'var(--sage)'}`;
   t.innerHTML=`${icon} ${msg}`;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);
+}
+
+/* ── BUSCADOR GLOBAL ── */
+async function showGlobalSearch() {
+  let allProds;
+  try { allProds = await api('/catalog'); } catch(e) { toast('❌',e.message,'var(--red)'); return; }
+  showModal(`<div class="modal-body">
+    <div class="modal-title">🔍 Buscar Producto</div>
+    <div class="modal-sub">Busca en todas las tiendas · ${selectedOrden ? 'Agregará a la orden actual' : 'Venta directa'}</div>
+    <div class="field"><input type="text" id="gsInput" class="input" placeholder="Escribe el nombre del producto..." autofocus></div>
+    <div id="gsResults" style="max-height:380px;overflow-y:auto;"></div>
+  </div>
+  <div class="modal-footer"><div class="modal-btns" style="margin-top:0"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div>`);
+  const m=document.querySelector('#modals .modal'); m.style.width='580px'; m.style.maxWidth='98vw';
+  const inp=document.getElementById('gsInput');
+  const results=document.getElementById('gsResults');
+  function render(){
+    const q=(inp.value||'').toLowerCase().trim();
+    const filt=q ? allProds.filter(p=>p.nombre.toLowerCase().includes(q)||(p.tienda_nombre||'').toLowerCase().includes(q)) : allProds.slice(0,40);
+    if(!filt.length){results.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-muted)">Sin resultados</div>';return;}
+    results.innerHTML=filt.map(p=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);cursor:pointer;border-bottom:1px solid var(--border-light);"
+        onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''"
+        onclick="pickGlobal(${p.id},${JSON.stringify(p.nombre).replace(/"/g,'&quot;')},${p.precio},${p.tienda_id},${p.es_precio_abierto?1:0})">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;">${p.nombre}</div>
+          <div style="font-size:11px;color:var(--text-muted);">${p.tienda_nombre}${p.stock_local<=0?' · ⚠ Sin stock':''}</div>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--sage);">${p.es_precio_abierto?'Abierto':'$'+p.precio.toFixed(2)}</div>
+      </div>`).join('');
+  }
+  inp.addEventListener('input',render);
+  render();
+  setTimeout(()=>inp?.focus(),80);
+}
+
+async function pickGlobal(prodId,nombre,precio,tiendaId,esAbierto){
+  if(!usuario) return showNipModal(()=>pickGlobal(prodId,nombre,precio,tiendaId,esAbierto));
+  const tienda=tiendas.find(t=>t.id===tiendaId)||{id:tiendaId,nombre:'',precio_abierto:0};
+  if(esAbierto){
+    closeModal();
+    showModal(`<div class="modal-title">🛍️ ${nombre}</div><div class="modal-sub">Monto variable</div>
+      <div class="field"><label>Descripción</label><input type="text" id="gsD" class="input" value="${nombre}"></div>
+      <div class="field"><label>Monto</label><input type="number" id="gsM" class="input" placeholder="0.00" step="0.01" onkeydown="if(event.key==='Enter')doPickGsAbierto(${prodId},${tiendaId})"></div>
+      <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="doPickGsAbierto(${prodId},${tiendaId})">Agregar</button></div>`);
+    setTimeout(()=>document.getElementById('gsM')?.focus(),80);
+    return;
+  }
+  closeModal();
+  const prod={id:prodId,nombre,precio,es_precio_abierto:false,stock_local:99,stock_minimo:0,categoria_producto:''};
+  await addItemFinal(prod,tienda,nombre,precio,false);
+}
+
+async function doPickGsAbierto(prodId,tiendaId){
+  const m=parseFloat(document.getElementById('gsM').value); const d=document.getElementById('gsD').value.trim();
+  if(!m||m<=0)return;
+  closeModal();
+  const tienda=tiendas.find(t=>t.id===tiendaId)||{id:tiendaId};
+  const prod={id:prodId,nombre:d,precio:m,es_precio_abierto:true,stock_local:99,stock_minimo:0,categoria_producto:''};
+  await addItemFinal(prod,tienda,d,m,true);
+}
+
+/* ── PRE-CORTE (vista previa sin confirmar) ── */
+async function showPreCorteModal(){
+  if(!usuario)return showNipModal(showPreCorteModal);
+  let r;
+  try{ r=await api('/report/corte'); }catch(e){toast('❌',e.message,'var(--red)');return;}
+  const desdeStr=r.desde?r.desde.slice(11,19):'00:00:00';
+  const tiendaRows=r.ventas_por_tienda.map(t=>`
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border-light);">
+      <span style="color:var(--text-secondary)">${t.tienda}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:600;">$${t.total.toFixed(2)}</span>
+    </div>`).join('');
+  const gastosRows=r.gastos_detalle.map(g=>`
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-light);">
+      <span style="color:var(--text-muted)">${g.concepto}</span>
+      <span style="font-family:'JetBrains Mono',monospace;color:var(--red);">-$${g.monto.toFixed(2)}</span>
+    </div>`).join('');
+  const ingRows=(r.ingresos_detalle||[]).map(i=>`
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-light);">
+      <span style="color:var(--text-muted)">${i.concepto} <span style="opacity:.6">(${i.metodo_pago})</span></span>
+      <span style="font-family:'JetBrains Mono',monospace;color:var(--green-ok);">+$${i.monto.toFixed(2)}</span>
+    </div>`).join('');
+  showModal(`<div class="modal-body">
+    <div class="modal-title">👁 Pre-Corte</div>
+    <div class="modal-sub">Turno desde ${desdeStr} · ${r.num_ventas} ticket${r.num_ventas!==1?'s':''} · Sin confirmar</div>
+    <div class="resumen-grid" style="margin-bottom:10px;grid-template-columns:repeat(3,1fr);">
+      <div class="res-card"><div class="res-label">💵 Efectivo</div><div class="res-val v">$${(r.total_efectivo||0).toFixed(2)}</div></div>
+      <div class="res-card"><div class="res-label">💳 Tarjeta</div><div class="res-val" style="color:var(--gold)">$${(r.total_tarjeta||0).toFixed(2)}</div></div>
+      <div class="res-card"><div class="res-label">📦 Gastos</div><div class="res-val g">-$${(r.total_gastos||0).toFixed(2)}</div></div>
+    </div>
+    <div class="resumen-grid" style="margin-bottom:14px;grid-template-columns:repeat(3,1fr);">
+      <div class="res-card" style="background:#E8F5E9"><div class="res-label" style="color:#2E7D32">Ef. en Caja</div><div class="res-val" style="color:#2E7D32">$${(r.efectivo_esperado||0).toFixed(2)}</div></div>
+      <div class="res-card" style="background:#E3F2FD"><div class="res-label" style="color:#1565C0">Tarjeta Neta</div><div class="res-val" style="color:#1565C0">$${(r.tarjeta_esperado||0).toFixed(2)}</div></div>
+      <div class="res-card" style="background:var(--sage-light)"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${(r.total_esperado||0).toFixed(2)}</div></div>
+    </div>
+    ${tiendaRows?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Ventas por tienda</div>${tiendaRows}</div>`:''}
+    ${gastosRows?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Gastos del turno</div>${gastosRows}</div>`:''}
+    ${ingRows?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Ingresos registrados</div>${ingRows}</div>`:''}
+  </div>
+  <div class="modal-footer">
+    <div class="modal-btns" style="margin-top:0">
+      <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+      ${usuario.perfil==='Administrador'?`<button class="btn btn-gold" onclick="closeModal();showCorteModal()">📊 Ir a Corte</button>`:''}
+    </div>
+  </div>`);
+  const m=document.querySelector('#modals .modal'); m.style.width='560px'; m.style.maxWidth='98vw';
 }
 
 init();
