@@ -15,7 +15,8 @@ from modules.database import (
     listar_mesas, abrir_mesa, agregar_item_orden,
     quitar_item_orden, cerrar_mesa, obtener_items_comanda, get_connection,
     obtener_ordenes_mesa, renombrar_orden, cancelar_orden_mesa,
-    obtener_todos_los_productos, crear_producto, actualizar_producto, eliminar_producto
+    obtener_todos_los_productos, crear_producto, actualizar_producto, eliminar_producto,
+    actualizar_item_orden
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf
@@ -39,11 +40,15 @@ class AddItemReq(BaseModel):
     cantidad: int = 1
     precio_unitario: float
     es_precio_abierto: bool = False
+class EditItemReq(BaseModel):
+    nombre: str
+    precio_unitario: float
 class CerrarMesaReq(BaseModel):
     usuario_id: int
     metodo_pago: str
     monto_efectivo: float = 0.0
     monto_tarjeta: float = 0.0
+    efectivo_recibido: float = 0.0
 
 class MesaNombreReq(BaseModel):
     nombre: str
@@ -54,9 +59,11 @@ class AbrirMesaReq(BaseModel):
 
 class GastoReq(BaseModel):
     usuario_id: int
+    categoria: str | None = None
     tienda_id: int | None = None
     concepto: str
     monto: float
+    origen: str = "Caja"
 class CorteReq(BaseModel):
     usuario_id: int
     efectivo_real: float
@@ -74,6 +81,8 @@ class ProductReq(BaseModel):
     stock_local: int
     stock_minimo: int
     codigo: str = ""
+    es_precio_abierto: bool = False
+    categoria_producto: str = ""
 
 # ── Pages ──
 @app.get("/")
@@ -99,12 +108,12 @@ async def api_get_catalog(): return obtener_todos_los_productos()
 
 @app.post("/api/catalog")
 async def api_post_catalog(r: ProductReq):
-    pid = crear_producto(r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo)
+    pid = crear_producto(r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo, 1 if r.es_precio_abierto else 0, r.categoria_producto)
     return {"id": pid}
 
 @app.put("/api/catalog/{pid}")
 async def api_put_catalog(pid: int, r: ProductReq):
-    actualizar_producto(pid, r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo)
+    actualizar_producto(pid, r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo, 1 if r.es_precio_abierto else 0, r.categoria_producto)
     return {"ok": True}
 
 @app.delete("/api/catalog/{pid}")
@@ -184,6 +193,11 @@ async def api_comanda(oid: int):
     ok = imprimir_comanda(label, items)
     return {"printed": len(items) if ok else 0}
 
+@app.put("/api/orden-items/{item_id}")
+async def api_put_item(item_id: int, r: EditItemReq):
+    actualizar_item_orden(item_id, r.nombre, r.precio_unitario)
+    return {"ok": True}
+
 @app.delete("/api/orden-items/{item_id}")
 async def api_del_item(item_id: int):
     quitar_item_orden(item_id); return {"ok": True}
@@ -196,7 +210,7 @@ async def api_cancelar_orden(oid: int):
 
 @app.post("/api/ordenes/{oid}/cerrar")
 async def api_cerrar(oid: int, r: CerrarMesaReq):
-    venta = cerrar_mesa(oid, r.usuario_id, r.metodo_pago, r.monto_efectivo, r.monto_tarjeta)
+    venta = cerrar_mesa(oid, r.usuario_id, r.metodo_pago, r.monto_efectivo, r.monto_tarjeta, r.efectivo_recibido)
     if not venta: raise HTTPException(400, "No se pudo cerrar")
     
     conn = get_connection()
@@ -211,7 +225,7 @@ async def api_cerrar(oid: int, r: CerrarMesaReq):
 # ── Ventas directas (sin mesa) ──
 @app.post("/api/ventas")
 async def api_venta_directa(r: dict):
-    venta = registrar_venta(r["usuario_id"], r["metodo_pago"], r["items"], r.get("monto_efectivo", 0.0), r.get("monto_tarjeta", 0.0))
+    venta = registrar_venta(r["usuario_id"], r["metodo_pago"], r["items"], r.get("monto_efectivo", 0.0), r.get("monto_tarjeta", 0.0), r.get("efectivo_recibido", 0.0))
     conn = get_connection()
     row = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (r["usuario_id"],)).fetchone()
     conn.close()
@@ -243,6 +257,54 @@ async def api_imprimir_corte(r: ImprimirCorteReq):
 
 @app.get("/api/report/corte")
 async def api_resumen(): return obtener_resumen_dia()
+
+@app.get("/api/report/semanal")
+async def api_resumen_semanal():
+    from datetime import date, timedelta
+    conn = get_connection()
+    dias = []
+    total_semana = 0.0
+    total_efectivo = 0.0
+    total_tarjeta = 0.0
+    total_gastos_semana = 0.0
+
+    for i in range(6, -1, -1):
+        fecha = (date.today() - timedelta(days=i)).strftime("%Y-%m-%d")
+        rv = conn.execute(
+            "SELECT COALESCE(SUM(total),0) as tv, COALESCE(SUM(monto_efectivo),0) as te, COALESCE(SUM(monto_tarjeta),0) as tt, COUNT(*) as nv FROM ventas WHERE DATE(created_at)=?",
+            (fecha,)
+        ).fetchone()
+        rg = conn.execute(
+            "SELECT COALESCE(SUM(monto),0) as tg FROM gastos WHERE DATE(created_at)=?",
+            (fecha,)
+        ).fetchone()
+        por_tienda = conn.execute(
+            "SELECT t.nombre, COALESCE(SUM(vd.subtotal),0) as subtotal FROM venta_detalle vd JOIN ventas v ON v.id=vd.venta_id JOIN tiendas t ON t.id=vd.tienda_id WHERE DATE(v.created_at)=? GROUP BY t.nombre",
+            (fecha,)
+        ).fetchall()
+        total_semana += rv["tv"]
+        total_efectivo += rv["te"]
+        total_tarjeta += rv["tt"]
+        total_gastos_semana += rg["tg"]
+        dias.append({
+            "fecha": fecha,
+            "total_ventas": rv["tv"],
+            "num_ventas": rv["nv"],
+            "efectivo": rv["te"],
+            "tarjeta": rv["tt"],
+            "gastos": rg["tg"],
+            "por_tienda": [{"tienda": r["nombre"], "total": r["subtotal"]} for r in por_tienda],
+        })
+
+    conn.close()
+    return {
+        "dias": dias,
+        "total_semana": total_semana,
+        "total_efectivo": total_semana and total_efectivo,
+        "total_tarjeta": total_semana and total_tarjeta,
+        "total_gastos": total_gastos_semana,
+        "utilidad": total_semana - total_gastos_semana,
+    }
 
 @app.post("/api/corte")
 async def api_corte(r: CorteReq):

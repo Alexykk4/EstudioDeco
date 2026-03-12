@@ -83,23 +83,23 @@ def obtener_todos_los_productos():
     conn.close()
     return [dict(r) for r in rows]
 
-def crear_producto(tienda_id, nombre, precio, costo, stock_local, stock_minimo, codigo=""):
+def crear_producto(tienda_id, nombre, precio, costo, stock_local, stock_minimo, codigo="", es_precio_abierto=0, categoria_producto=""):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO productos (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo) VALUES (?,?,?,?,?,?,?)",
-        (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo)
+        "INSERT INTO productos (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo, es_precio_abierto, categoria_producto) VALUES (?,?,?,?,?,?,?,?,?)",
+        (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo, es_precio_abierto, categoria_producto)
     )
     conn.commit()
     prod_id = cur.lastrowid
     conn.close()
     return prod_id
 
-def actualizar_producto(id, tienda_id, nombre, precio, costo, stock_local, stock_minimo, codigo=""):
+def actualizar_producto(id, tienda_id, nombre, precio, costo, stock_local, stock_minimo, codigo="", es_precio_abierto=0, categoria_producto=""):
     conn = get_connection()
     conn.execute(
-        "UPDATE productos SET tienda_id=?, codigo=?, nombre=?, precio=?, costo=?, stock_local=?, stock_minimo=?, updated_at=datetime('now','localtime') WHERE id=?",
-        (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo, id)
+        "UPDATE productos SET tienda_id=?, codigo=?, nombre=?, precio=?, costo=?, stock_local=?, stock_minimo=?, es_precio_abierto=?, categoria_producto=?, updated_at=datetime('now','localtime') WHERE id=?",
+        (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo, es_precio_abierto, categoria_producto, id)
     )
     conn.commit()
     conn.close()
@@ -165,26 +165,28 @@ def obtener_ordenes_mesa(mesa_id):
     conn.close()
     return res
 
-def agregar_item_orden(orden_id, producto_id, tienda_id, nombre, cantidad, precio, es_precio_abierto=False):
+def agregar_item_orden(orden_id, producto_id, tienda_id, nombre_producto, cantidad, precio_unitario, es_precio_abierto=False):
     conn = get_connection()
-    # Check if same product already in order - if so, increase quantity
-    existing = conn.execute(
-        "SELECT id, cantidad FROM orden_items WHERE orden_id=? AND producto_id=? AND producto_id IS NOT NULL",
-        (orden_id, producto_id)
-    ).fetchone() if producto_id else None
 
-    if existing:
-        conn.execute("UPDATE orden_items SET cantidad=cantidad+? WHERE id=?", (cantidad, existing["id"]))
-        item_id = existing["id"]
-    else:
-        conn.execute(
-            "INSERT INTO orden_items (orden_id,producto_id,tienda_id,nombre_producto,cantidad,precio_unitario,es_precio_abierto) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (orden_id, producto_id, tienda_id, nombre, cantidad, precio, 1 if es_precio_abierto else 0)
-        )
-        item_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.commit(); conn.close()
+            
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO orden_items (orden_id, producto_id, tienda_id, nombre_producto, cantidad, precio_unitario, es_precio_abierto) VALUES (?,?,?,?,?,?,?)",
+        (orden_id, producto_id, tienda_id, nombre_producto, cantidad, precio_unitario, 1 if es_precio_abierto else 0)
+    )
+    conn.commit()
+    item_id = cur.lastrowid
+    conn.close()
     return item_id
+
+def actualizar_item_orden(item_id, nombre_producto, precio_unitario):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE orden_items SET nombre_producto=?, precio_unitario=? WHERE id=?",
+        (nombre_producto, precio_unitario, item_id)
+    )
+    conn.commit()
+    conn.close()
 
 def quitar_item_orden(item_id):
     conn = get_connection()
@@ -198,7 +200,7 @@ def obtener_items_comanda(orden_id):
         SELECT oi.id, oi.nombre_producto, oi.cantidad, oi.producto_id, oi.tienda_id, oi.precio_unitario, oi.es_precio_abierto
         FROM orden_items oi
         JOIN tiendas t ON t.id = oi.tienda_id
-        WHERE oi.orden_id=? AND t.es_barra=1 AND oi.comanda_impresa=0
+        WHERE oi.orden_id=? AND oi.comanda_impresa=0 AND oi.tienda_id=1
     """, (orden_id,)).fetchall()
     items = [dict(i) for i in items]
     if items:
@@ -208,7 +210,7 @@ def obtener_items_comanda(orden_id):
     conn.close()
     return items
 
-def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0, monto_tarjeta=0.0):
+def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0, monto_tarjeta=0.0, efectivo_recibido=0.0):
     conn = get_connection()
     # 1. Recuperar info de la orden específica
     orden = conn.execute("SELECT * FROM ordenes WHERE id=?", (orden_id,)).fetchone()
@@ -302,9 +304,13 @@ def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0
     label_completo = f"Mesa {lbl_mesa}"
     if nombre_c: label_completo += f" - {nombre_c}"
 
+    cambio = max(0.0, efectivo_recibido - total)
+
     return {
         "folio": folio, "venta_id": venta_id, "total": total,
         "items": items, "metodo_pago": metodo_pago,
+        "monto_efectivo": monto_efectivo, "monto_tarjeta": monto_tarjeta,
+        "efectivo_recibido": efectivo_recibido, "cambio": cambio,
         "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "mesa": label_completo
     }
@@ -335,7 +341,7 @@ def _generar_folio(conn):
     return f"VTA-{hoy}-{num:04d}"
 
 # ── GASTOS ──
-def registrar_gasto(usuario_id, tienda_id, concepto, monto):
+def registrar_gasto(usuario_id, tienda_id, concepto, monto, origen="Caja"):
     categoria = "General"
     if tienda_id:
         conn = get_connection()
@@ -343,8 +349,8 @@ def registrar_gasto(usuario_id, tienda_id, concepto, monto):
         conn.close()
         if row: categoria = row["categoria"]
     conn = get_connection()
-    conn.execute("INSERT INTO gastos (usuario_id,categoria,tienda_id,concepto,monto) VALUES (?,?,?,?,?)",
-                 (usuario_id, categoria, tienda_id, concepto, monto))
+    conn.execute("INSERT INTO gastos (usuario_id,categoria,tienda_id,concepto,monto,origen) VALUES (?,?,?,?,?,?)",
+                 (usuario_id, categoria, tienda_id, concepto, monto, origen))
     conn.commit(); conn.close()
 
 # ── CORTE ──
@@ -373,22 +379,35 @@ def obtener_resumen_dia(fecha=None):
         (fecha, desde)
     ).fetchone()
     gd = conn.execute(
-        "SELECT concepto,monto,categoria FROM gastos WHERE DATE(created_at)=? AND created_at > ? ORDER BY created_at",
+        "SELECT concepto,monto,categoria,origen FROM gastos WHERE DATE(created_at)=? AND created_at > ? ORDER BY created_at",
         (fecha, desde)
     ).fetchall()
-    # Solo gastos que salen de la caja física (excluye comisiones de tarjeta)
+    # Solo gastos que salen de la caja física (excluye comisiones de tarjeta y los que salen del banco)
     gc = conn.execute(
-        "SELECT COALESCE(SUM(monto),0) as gastos_caja FROM gastos WHERE DATE(created_at)=? AND created_at > ? AND concepto NOT LIKE 'Comisión Tarjeta%'",
+        "SELECT COALESCE(SUM(monto),0) as gastos_caja FROM gastos WHERE DATE(created_at)=? AND created_at > ? AND concepto NOT LIKE 'Comisión Tarjeta%' AND origen='Caja'",
         (fecha, desde)
     ).fetchone()
     inv = conn.execute(
         "SELECT COALESCE(SUM(vd.cantidad * vd.costo_unitario),0) as inversion FROM venta_detalle vd JOIN ventas v ON v.id=vd.venta_id WHERE DATE(v.created_at)=? AND v.created_at > ?",
         (fecha, desde)
     ).fetchone()
-    metodos = conn.execute(
-        "SELECT metodo_pago, SUM(total) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ? GROUP BY metodo_pago",
+    efectivo_row = conn.execute(
+        "SELECT COALESCE(SUM(monto_efectivo), 0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ?",
         (fecha, desde)
-    ).fetchall()
+    ).fetchone()
+    tarjeta_row = conn.execute(
+        "SELECT COALESCE(SUM(monto_tarjeta), 0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ?",
+        (fecha, desde)
+    ).fetchone()
+    transferencia_row = conn.execute(
+        "SELECT COALESCE(SUM(total), 0) as monto FROM ventas WHERE metodo_pago='Transferencia' AND DATE(created_at)=? AND created_at > ?",
+        (fecha, desde)
+    ).fetchone()
+    
+    metodos = []
+    if efectivo_row["monto"] > 0: metodos.append({"metodo_pago": "Efectivo", "monto": efectivo_row["monto"]})
+    if tarjeta_row["monto"] > 0: metodos.append({"metodo_pago": "Tarjeta", "monto": tarjeta_row["monto"]})
+    if transferencia_row["monto"] > 0: metodos.append({"metodo_pago": "Transferencia", "monto": transferencia_row["monto"]})
 
     conn.close()
     return {"fecha": fecha, "desde": desde, "total_ventas": rv["total_ventas"], "num_ventas": rv["num_ventas"],
@@ -397,7 +416,7 @@ def obtener_resumen_dia(fecha=None):
             "efectivo_esperado": rv["total_efectivo"] - gc["gastos_caja"],
             "inversion": inv["inversion"],
             "utilidad": rv["total_ventas"] - inv["inversion"] - rg["total_gastos"],
-            "metodos_pago": [dict(r) for r in metodos]}
+            "metodos_pago": metodos}
 
 def registrar_corte(usuario_id, efectivo_real, fondo_caja=0.0, desglose=None):
     import json
@@ -423,7 +442,7 @@ def generar_folio():
     conn.close()
     return f
 
-def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_tarjeta=0.0):
+def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_tarjeta=0.0, efectivo_recibido=0.0):
     conn = get_connection()
     folio = _generar_folio(conn)
     total = sum(i["precio_unitario"] * i["cantidad"] for i in items)
@@ -452,13 +471,14 @@ def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_ta
         if comision > 0:
             concepto_comision = f"Comisión Tarjeta 4% {folio}"
             cur.execute("""
-                INSERT INTO gastos (usuario_id, categoria, tienda_id, concepto, monto) 
-                VALUES (?, 'General', NULL, ?, ?)
+                INSERT INTO gastos (usuario_id, categoria, tienda_id, concepto, monto, origen) 
+                VALUES (?, 'General', NULL, ?, ?, 'Banco')
             """, (usuario_id, concepto_comision, comision))
     # --------------------------------------
             
     conn.commit(); conn.close()
-    return {"folio": folio, "venta_id": venta_id, "total": total, "items": items, "metodo_pago": metodo_pago, "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    cambio = max(0.0, efectivo_recibido - total)
+    return {"folio": folio, "venta_id": venta_id, "total": total, "items": items, "metodo_pago": metodo_pago, "monto_efectivo": monto_efectivo, "monto_tarjeta": monto_tarjeta, "efectivo_recibido": efectivo_recibido, "cambio": cambio, "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 def marcar_sincronizado(tabla, record_id):
     conn = get_connection()
