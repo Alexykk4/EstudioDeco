@@ -556,6 +556,7 @@ let tiendas=[], mesas=[], usuario=null, metodoPago='Efectivo';
 let currentView='mesas', selectedMesa=null, selectedOrden=null, currentOrden=null;
 let directCart=[];
 let currentProducts=[], currentTienda=null, searchFilter="", categoryFilter="";
+let allProductsGlobal=null; // caché de todos los productos de todas las tiendas
 let propinaPct=10; // porcentaje activo (0 = monto personalizado)
 
 function togglePropina(){
@@ -589,6 +590,7 @@ async function init(){
   tiendas=await api('/tiendas');
   await refreshMesas();
   renderTabs();
+  api('/catalog').then(d=>{ allProductsGlobal=d; }).catch(()=>{});
 }
 
 /* ── VIEWS ── */
@@ -932,17 +934,39 @@ function setCategoryFilter(k) {
 
 function filterProducts() {
   const sc=document.getElementById('productsScroll');
-  searchFilter = document.getElementById('searchInput').value.toLowerCase();
-  
-  let prodFiltrados = currentProducts.filter(p => p.nombre.toLowerCase().includes(searchFilter));
-  
+  searchFilter = document.getElementById('searchInput').value.toLowerCase().trim();
+
+  // Con query: buscar en TODOS los productos de TODAS las tiendas
+  if(searchFilter.length > 0) {
+    const pool = allProductsGlobal || currentProducts;
+    const resultados = pool.filter(p => p.nombre.toLowerCase().includes(searchFilter));
+    if(!resultados.length){ sc.innerHTML=`<div class="mack-center"><div class="mack-sub">No se encontraron productos</div></div>`; return; }
+
+    // Agrupar por tienda
+    const byTienda = {};
+    resultados.forEach(p => {
+      const tn = p.tienda_nombre || (tiendas.find(t=>t.id===p.tienda_id)||{nombre:'Otra'}).nombre;
+      if(!byTienda[tn]) byTienda[tn] = [];
+      byTienda[tn].push(p);
+    });
+
+    let html = '';
+    for(const [tiendaNombre, prods] of Object.entries(byTienda)) {
+      const tiendaObj = tiendas.find(t=>t.nombre===tiendaNombre) || {id:prods[0].tienda_id, nombre:tiendaNombre, precio_abierto:0, es_barra:0};
+      html += `<div style="padding:10px 10px 5px;font-weight:700;font-size:13px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;">📍 ${tiendaNombre}</div>`;
+      html += `<div class="products-grid" style="margin-bottom:12px;">${prods.map(p=>renderProd(p, tiendaObj)).join('')}</div>`;
+    }
+    sc.innerHTML = html;
+    return;
+  }
+
+  // Sin query: comportamiento normal (solo tienda activa + filtro de categoría)
+  let prodFiltrados = currentProducts;
   if(categoryFilter !== "") {
     prodFiltrados = prodFiltrados.filter(p => p.categoria_producto === categoryFilter);
   }
-  
   if(!prodFiltrados.length){ sc.innerHTML=`<div class="mack-center"><div class="mack-sub">No se encontraron productos</div></div>`; return; }
 
-  // Group by category
   const cats = {};
   prodFiltrados.forEach(p => {
     let cat = (p.categoria_producto || "Otros").trim();
@@ -968,7 +992,6 @@ function filterProducts() {
     html += `<div class="products-grid">${prods.map(p=>renderProd(p,currentTienda)).join('')}</div>`;
     html += `</div>`;
   }
-  
   sc.innerHTML = html;
 }
 
