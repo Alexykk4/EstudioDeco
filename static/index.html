@@ -1715,29 +1715,64 @@ async function showVentasHoyModal() {
   let ventas;
   try { ventas = await api('/ventas/hoy'); } catch(e) { toast('❌',e.message,'var(--red)'); return; }
 
+  const metIcon = m => m==='Efectivo'?'💵':m==='Tarjeta'?'💳':'📱';
+
   const rows = ventas.length ? ventas.map(v => {
     const hora = v.created_at ? v.created_at.slice(11,16) : '';
-    const metIcon = v.metodo_pago==='Efectivo'?'💵':v.metodo_pago==='Tarjeta'?'💳':'📱';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);border-bottom:1px solid var(--border-light);">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:700;">${v.folio}</div>
-        <div style="font-size:11px;color:var(--text-muted);">${hora} · ${v.cajero_nombre} · ${metIcon} ${v.metodo_pago}</div>
+
+    // Desglose de items
+    const itemsHtml = (v.items||[]).map(it => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border-light);">
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:12px;">${it.nombre_producto}</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:6px;">x${it.cantidad} · $${it.precio_unitario.toFixed(2)}</span>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--text-secondary);flex-shrink:0;">$${it.subtotal.toFixed(2)}</span>
+      </div>`).join('');
+
+    // Desglose de pago (mixto)
+    let pagoInfo = `${metIcon(v.metodo_pago)} ${v.metodo_pago}`;
+    if(v.metodo_pago==='Mixto'){
+      pagoInfo = `⚖️ Mixto: 💵$${v.monto_efectivo.toFixed(2)} + 💳$${v.monto_tarjeta.toFixed(2)}`;
+    } else if(v.monto_efectivo>0 && v.monto_tarjeta===0){
+      pagoInfo = `💵 Efectivo`;
+    } else if(v.monto_tarjeta>0 && v.monto_efectivo===0){
+      pagoInfo = `${metIcon(v.metodo_pago)} ${v.metodo_pago}`;
+    }
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;overflow:hidden;">
+      <!-- Cabecera de venta -->
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-warm);">
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;">${v.folio}</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">${hora} · ${v.cajero_nombre}</span>
+        </div>
+        <span style="font-size:11px;color:var(--text-secondary);margin-right:6px;">${pagoInfo}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:var(--sage-dark);">$${v.total.toFixed(2)}</span>
+        ${usuario.perfil==='Administrador'?`
+        <button class="btn-icon btn-edit" onclick="showEditVentaModal(${v.id},'${v.folio}',${v.total},'${v.metodo_pago}',${v.monto_efectivo},${v.monto_tarjeta})" title="Corregir pago" style="flex-shrink:0;">✏️</button>
+        <button class="btn-icon btn-del" onclick="confirmarAnularVenta(${v.id},'${v.folio}')" title="Anular venta" style="flex-shrink:0;">🗑️</button>`:''}
       </div>
-      <div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;color:var(--sage);">$${v.total.toFixed(2)}</div>
-      ${usuario.perfil==='Administrador'?`
-      <button class="btn-icon btn-edit" onclick="showEditVentaModal(${v.id}, '${v.folio}', ${v.total}, '${v.metodo_pago}', ${v.monto_efectivo}, ${v.monto_tarjeta})" title="Corregir pago">✏️</button>
-      <button class="btn-icon btn-del" onclick="confirmarAnularVenta(${v.id}, '${v.folio}')" title="Anular venta">🗑️</button>`:''}
+      <!-- Artículos vendidos -->
+      <div style="padding:8px 14px 10px;">${itemsHtml||'<span style="font-size:11px;color:var(--text-muted)">Sin artículos</span>'}</div>
     </div>`;
   }).join('') : '<div style="padding:30px;text-align:center;color:var(--text-muted);">Sin ventas hoy</div>';
 
-  const total = ventas.reduce((s,v)=>s+v.total, 0);
+  const totalDia = ventas.reduce((s,v)=>s+v.total, 0);
+  const totalEf  = ventas.reduce((s,v)=>s+v.monto_efectivo, 0);
+  const totalTar = ventas.reduce((s,v)=>s+v.monto_tarjeta, 0);
   showModal(`<div class="modal-body">
     <div class="modal-title">📋 Ventas de Hoy</div>
-    <div class="modal-sub">${ventas.length} venta${ventas.length!==1?'s':''} · Total: <strong>$${total.toFixed(2)}</strong></div>
-    <div style="max-height:420px;overflow-y:auto;">${rows}</div>
+    <div class="modal-sub">${ventas.length} venta${ventas.length!==1?'s':''}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
+      <div class="res-card"><div class="res-label">Total Día</div><div class="res-val" style="color:var(--sage-dark);font-size:16px;">$${totalDia.toFixed(2)}</div></div>
+      <div class="res-card"><div class="res-label">💵 Efectivo</div><div class="res-val v" style="font-size:16px;">$${totalEf.toFixed(2)}</div></div>
+      <div class="res-card"><div class="res-label">💳 Tarjeta/Trans.</div><div class="res-val" style="color:var(--gold);font-size:16px;">$${totalTar.toFixed(2)}</div></div>
+    </div>
+    <div style="max-height:440px;overflow-y:auto;">${rows}</div>
   </div>
   <div class="modal-footer"><div class="modal-btns" style="margin-top:0"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div>`);
-  const m=document.querySelector('#modals .modal'); m.style.width='600px'; m.style.maxWidth='98vw';
+  const m=document.querySelector('#modals .modal'); m.style.width='660px'; m.style.maxWidth='98vw';
 }
 
 function showEditVentaModal(vid, folio, total, metodo, montoEf, montoTar) {
