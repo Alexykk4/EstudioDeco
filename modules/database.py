@@ -35,6 +35,7 @@ def init_db():
             FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
         )""",
         "INSERT OR IGNORE INTO config (clave, valor) VALUES ('fondo_turno', '{\"monto\":0,\"fecha\":\"\"}')",
+        "UPDATE tiendas SET nombre='Mack&M' WHERE nombre='Mack'",
     ]
     for sql in migrations:
         try:
@@ -555,6 +556,52 @@ def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_ta
     conn.commit(); conn.close()
     cambio = max(0.0, efectivo_recibido - total)
     return {"folio": folio, "venta_id": venta_id, "total": total, "items": items, "metodo_pago": metodo_pago, "monto_efectivo": monto_efectivo, "monto_tarjeta": monto_tarjeta, "efectivo_recibido": efectivo_recibido, "cambio": cambio, "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+def obtener_ventas_dia(fecha=None):
+    if not fecha: fecha = date.today().strftime("%Y-%m-%d")
+    conn = get_connection()
+    ventas = conn.execute("""
+        SELECT v.*, u.nombre as cajero_nombre
+        FROM ventas v
+        JOIN usuarios u ON u.id = v.usuario_id
+        WHERE DATE(v.created_at) = ?
+        ORDER BY v.created_at DESC
+    """, (fecha,)).fetchall()
+    result = []
+    for v in ventas:
+        v_dict = dict(v)
+        items = conn.execute("""
+            SELECT vd.*, COALESCE(t.nombre,'Sin Tienda') as tienda_nombre
+            FROM venta_detalle vd
+            LEFT JOIN tiendas t ON t.id = vd.tienda_id
+            WHERE vd.venta_id = ?
+        """, (v["id"],)).fetchall()
+        v_dict["items"] = [dict(i) for i in items]
+        result.append(v_dict)
+    conn.close()
+    return result
+
+def corregir_venta(venta_id, metodo_pago, monto_efectivo, monto_tarjeta):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE ventas SET metodo_pago=?, monto_efectivo=?, monto_tarjeta=?, sincronizado=0 WHERE id=?",
+        (metodo_pago, monto_efectivo, monto_tarjeta, venta_id)
+    )
+    conn.commit(); conn.close()
+
+def anular_venta(venta_id):
+    conn = get_connection()
+    venta = conn.execute("SELECT folio FROM ventas WHERE id=?", (venta_id,)).fetchone()
+    items = conn.execute("SELECT * FROM venta_detalle WHERE venta_id=?", (venta_id,)).fetchall()
+    for item in items:
+        if item["producto_id"] and not item["es_precio_abierto"]:
+            conn.execute("UPDATE productos SET stock_local = stock_local + ? WHERE id=?",
+                         (item["cantidad"], item["producto_id"]))
+    if venta:
+        conn.execute("DELETE FROM gastos WHERE concepto LIKE ?", (f"Comisión Tarjeta 4% {venta['folio']}",))
+    conn.execute("DELETE FROM venta_detalle WHERE venta_id=?", (venta_id,))
+    conn.execute("DELETE FROM ventas WHERE id=?", (venta_id,))
+    conn.commit(); conn.close()
 
 def marcar_sincronizado(tabla, record_id):
     conn = get_connection()

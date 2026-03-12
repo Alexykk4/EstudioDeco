@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS tiendas (
 INSERT OR IGNORE INTO tiendas (nombre, categoria, precio_abierto, es_barra) VALUES
     ('Estación 304',  'Barra', 0, 1),
     ('Kokoro',       'Deco',  0, 0),
-    ('Mack',         'Deco',  0, 0),
+    ('Mack&M',       'Deco',  0, 0),
     ('Acuario',      'Deco',  0, 0),
     ('Estudio Deco', 'Deco',  0, 0),
     ('Sabro Dulce',   'Deco',  0, 0);
