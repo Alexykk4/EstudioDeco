@@ -295,9 +295,9 @@ def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0
     if abiertas_restantes == 0:
         cur.execute("UPDATE mesas SET estado='libre', nombre=CAST(numero AS TEXT) WHERE id=?", (mesa_id,))
         
-    # --- CALCULAR COMISIÓN TARJETA (4%) --- solo Tarjeta/Mixto, NO Transferencia
-    if monto_tarjeta > 0 and metodo_pago == 'Tarjeta':
-        comision = round(monto_tarjeta * 0.04, 2)
+    # --- CALCULAR COMISIÓN TARJETA (4%) --- solo método Tarjeta
+    if metodo_pago == 'Tarjeta':
+        comision = round(total * 0.04, 2)
         if comision > 0:
             concepto_comision = f"Comisión Tarjeta 4% {folio}"
             cur.execute("""
