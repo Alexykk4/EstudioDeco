@@ -18,9 +18,13 @@ SLOGAN = "Crea y decora en Estudio Deco"
 _MENSAJES_PIE = [
     "Hecho con amor en Estudio Deco",
     "Tu creatividad nos inspira",
-    "Gracias por crear con nosotros",
+    "Gracias por crear con nosotras",
     "Donde la creatividad cobra vida",
     "Nos vemos en la proxima creacion",
+    "Cafe & journal <3",
+    "Otro día, otra creación <3",
+    "Tu espacio creativo favorito <3",
+
 ]
 
 # ── Comandos ESC/POS ─────────────────────────────────────────────────────────
@@ -239,8 +243,22 @@ def _ticket_bytes(venta: dict, cajero: str) -> bytes:
     b += _txt(f'  ${venta["total"]:,.2f}  \n')
     b += NORMAL + BOLD_OFF
     b += _feed(1)
+    b += ALIGN_C
+    b += _txt(' <3    <3    <3    <3    <3 \n')
+    b += _feed(1)
     b += ALIGN_C + FONT_B
-    b += _txt(f'Forma de pago: {venta.get("metodo_pago", "")}\n')
+    mp = venta.get("metodo_pago", "")
+    b += _txt(f'Forma de pago: {mp}\n')
+    if mp == "Mixto":
+        ef = venta.get("monto_efectivo", 0)
+        tar = venta.get("monto_tarjeta", 0)
+        b += _txt(f'  Efectivo : ${ef:,.2f}\n')
+        b += _txt(f'  Tarjeta  : ${tar:,.2f}\n')
+    elif mp == "Efectivo" and venta.get("efectivo_recibido", 0) > 0:
+        recibido = venta.get("efectivo_recibido", 0)
+        cambio = venta.get("cambio", 0)
+        b += _txt(f'  Recibido : ${recibido:,.2f}\n')
+        b += _txt(f'  Cambio   : ${cambio:,.2f}\n')
     b += FONT_A
     b += _feed(1)
     b += _txt(_STARS + '\n')
@@ -259,9 +277,9 @@ def _ticket_bytes(venta: dict, cajero: str) -> bytes:
         b += ALIGN_C
         b += qr
         b += _feed(1)
-    b += ALIGN_C + BOLD_ON + FONT_B
-    b += _txt('@estudiodecomx\n'.center(ANCHO))
-    b += BOLD_OFF + FONT_A
+    b += ALIGN_C + BOLD_ON + DBL_HW
+    b += _txt('@estudiodecomx\n')
+    b += NORMAL + BOLD_OFF
     b += _feed(2)
 
     # ── Cierre ───────────────────────────────────────────────────────────────
@@ -371,7 +389,7 @@ def imprimir_corte_caja(resumen: dict, cajero: str) -> bool:
         b += _txt(f'Fecha   : {resumen["fecha"]}\n')
         b += _txt(f'Cajero  : {cajero}\n')
         b += _txt(f'Impreso : {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n')
-        b += _txt(_SEP_H + '\n')
+        b += _txt(_THIN_LINE + '\n')
         
         # Ventas
         b += BOLD_ON + _txt('INGRESOS\n') + BOLD_OFF
@@ -379,7 +397,7 @@ def imprimir_corte_caja(resumen: dict, cajero: str) -> bool:
         for t in resumen.get("ventas_por_tienda", []):
             b += _txt(f'  {t["tienda"][:16]:<16}: ${t["total"]:.2f}\n')
             
-        b += _txt(_SEP_H + '\n')
+        b += _txt(_THIN_LINE + '\n')
         
         # Gastos
         b += BOLD_ON + _txt('EGRESOS\n') + BOLD_OFF
@@ -388,7 +406,7 @@ def imprimir_corte_caja(resumen: dict, cajero: str) -> bool:
             for g in resumen["gastos_detalle"]:
                 b += _txt(f'  {g["concepto"][:16]:<16}: ${g["monto"]:.2f}\n')
                 
-        b += _txt(_SEP_H + '\n')
+        b += _txt(_THIN_LINE + '\n')
         
         # Utilidad
         b += BOLD_ON + _txt('RENDIMIENTO DEL DIA\n') + BOLD_OFF
@@ -400,7 +418,7 @@ def imprimir_corte_caja(resumen: dict, cajero: str) -> bool:
         b += _txt(f'--------------------------------\n')
         b += _txt(f'UTILIDAD BRUTA       : ${utilidad:.2f}\n')
         
-        b += _txt(_SEP_H + '\n')
+        b += _txt(_THIN_LINE + '\n')
         
         # Desglose de Caja
         b += BOLD_ON + _txt('DESGLOSE DE CAJA\n') + BOLD_OFF

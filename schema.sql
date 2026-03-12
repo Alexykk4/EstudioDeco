@@ -22,19 +22,26 @@ CREATE TABLE IF NOT EXISTS tiendas (
 );
 
 INSERT OR IGNORE INTO tiendas (nombre, categoria, precio_abierto, es_barra) VALUES
-    ('Cafetería Estación 304', 'Barra', 0, 1),
-    ('Kokoro',                 'Deco',  0, 0),
-    ('Mack',                   'Deco',  1, 0),
-    ('Acuario',                'Deco',  0, 0);
+    ('Estación 304',  'Barra', 0, 1),
+    ('Kokoro',       'Deco',  0, 0),
+    ('Mack',         'Deco',  0, 0),
+    ('Acuario',      'Deco',  0, 0),
+    ('Estudio Deco', 'Deco',  0, 0),
+    ('Sabro Dulce',   'Deco',  0, 0);
 
 CREATE TABLE IF NOT EXISTS productos (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     tienda_id     INTEGER NOT NULL,
+    codigo        TEXT DEFAULT '',
     nombre        TEXT NOT NULL,
     precio        REAL NOT NULL,
     costo         REAL NOT NULL DEFAULT 0.0,
     stock_local   INTEGER NOT NULL DEFAULT 0,
+    stock_minimo  INTEGER NOT NULL DEFAULT 0,
     sincronizado  INTEGER NOT NULL DEFAULT 0,
+    activo        INTEGER NOT NULL DEFAULT 1,
+    es_precio_abierto INTEGER NOT NULL DEFAULT 0,
+    categoria_producto TEXT NOT NULL DEFAULT '',
     created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     updated_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     FOREIGN KEY(tienda_id) REFERENCES tiendas(id)
@@ -112,6 +119,7 @@ CREATE TABLE IF NOT EXISTS gastos (
     tienda_id    INTEGER,
     concepto     TEXT NOT NULL,
     monto        REAL NOT NULL,
+    origen       TEXT NOT NULL DEFAULT 'Caja',
     sincronizado INTEGER NOT NULL DEFAULT 0,
     created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
@@ -147,7 +155,7 @@ INSERT OR IGNORE INTO usuarios (id, nombre, perfil, nip) VALUES
     (1,'Admin','Administrador','03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4');
 
 -- ── PRODUCTOS DE PRUEBA ──
--- Cafetería Estación 304 (tienda_id = 1)
+-- Estudio 304 (tienda_id = 1)
 INSERT OR IGNORE INTO productos (id, tienda_id, nombre, precio, stock_local, stock_minimo) VALUES
     (1,  1, 'Americano',        45.00, 50, 5),
     (2,  1, 'Latte',            55.00, 50, 5),
@@ -179,3 +187,4 @@ INSERT OR IGNORE INTO productos (id, tienda_id, nombre, precio, stock_local, sto
     (20, 4, 'Planta Acuática',  80.00, 12, 3),
     (21, 4, 'Grava Decorativa', 55.00, 20, 5),
     (22, 4, 'Filtro Pecera',   180.00,  8, 2);
+    

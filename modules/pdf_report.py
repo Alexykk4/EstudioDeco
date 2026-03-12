@@ -50,7 +50,8 @@ def generar_corte_pdf(resumen: dict, cajero: str) -> str:
     """
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     fecha = resumen["fecha"]
-    filename = f"Corte_{fecha}.pdf"
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    filename = f"Corte_{timestamp}.pdf"
     filepath = REPORTS_DIR / filename
 
     pdf = CortePDF()
@@ -107,19 +108,21 @@ def generar_corte_pdf(resumen: dict, cajero: str) -> str:
     pdf.set_fill_color(*AZUL_PASTEL)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(90, 8, "  Concepto", fill=True)
-    pdf.cell(50, 8, "Categoría", fill=True, align="C")
-    pdf.cell(50, 8, "Monto", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(75, 8, "  Concepto", fill=True)
+    pdf.cell(40, 8, "Categoría", fill=True, align="C")
+    pdf.cell(35, 8, "Origen", fill=True, align="C")
+    pdf.cell(40, 8, "Monto", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
 
     pdf.set_text_color(60, 60, 60)
-    pdf.set_font("Helvetica", "", 10)
+    pdf.set_font("Helvetica", "", 9)
     fill = False
     for g in resumen.get("gastos_detalle", []):
         if fill:
             pdf.set_fill_color(*GRIS_CLARO)
-        pdf.cell(90, 7, f"  {g['concepto'][:40]}", fill=fill)
-        pdf.cell(50, 7, g["categoria"], fill=fill, align="C")
-        pdf.cell(50, 7, f"${g['monto']:,.2f}  ", fill=fill, align="R",
+        pdf.cell(75, 7, f"  {g['concepto'][:35]}", fill=fill)
+        pdf.cell(40, 7, g["categoria"], fill=fill, align="C")
+        pdf.cell(35, 7, g.get("origen", "Caja"), fill=fill, align="C")
+        pdf.cell(40, 7, f"${g['monto']:,.2f}  ", fill=fill, align="R",
                  new_x="LMARGIN", new_y="NEXT")
         fill = not fill
 
@@ -130,10 +133,36 @@ def generar_corte_pdf(resumen: dict, cajero: str) -> str:
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_fill_color(220, 150, 150)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(140, 8, "  TOTAL GASTOS", fill=True)
-    pdf.cell(50, 8, f"${resumen['total_gastos']:,.2f}  ", fill=True, align="R",
+    pdf.cell(150, 8, "  TOTAL GASTOS", fill=True)
+    pdf.cell(40, 8, f"${resumen['total_gastos']:,.2f}  ", fill=True, align="R",
              new_x="LMARGIN", new_y="NEXT")
     pdf.ln(10)
+
+    # ── MÉTODOS DE PAGO ──
+    metodos = resumen.get("metodos_pago", [])
+    if metodos:
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(*MORADO_PASTEL)
+        pdf.cell(0, 8, "Ingresos por Método de Pago", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+
+        pdf.set_fill_color(*AZUL_PASTEL)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(120, 8, "  Método de Pago", fill=True)
+        pdf.cell(70, 8, "Monto", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_text_color(60, 60, 60)
+        pdf.set_font("Helvetica", "", 10)
+        fill = False
+        for m in metodos:
+            if fill:
+                pdf.set_fill_color(*GRIS_CLARO)
+            pdf.cell(120, 7, f"  {m['metodo_pago']}", fill=fill)
+            pdf.cell(70, 7, f"${m['monto']:,.2f}  ", fill=fill, align="R",
+                     new_x="LMARGIN", new_y="NEXT")
+            fill = not fill
+        pdf.ln(8)
 
     # ── DESGLOSE DE EFECTIVO ──
     desglose = resumen.get("desglose_billetes", {})
@@ -231,4 +260,12 @@ def generar_corte_pdf(resumen: dict, cajero: str) -> str:
 
     # Guardar
     pdf.output(str(filepath))
+    
+    # Abrir el PDF de manera automática para la vista del usuario
+    import os
+    try:
+        os.startfile(str(filepath))
+    except Exception as e:
+        print(f"No se pudo abrir automáticamente el PDF: {e}")
+        
     return str(filepath)

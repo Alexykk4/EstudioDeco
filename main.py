@@ -54,6 +54,9 @@ class App(ctk.CTk):
         self.usuario_actual = None          # {id, nombre, perfil}
         self.carrito: list[dict] = []       # items en el carrito
         self.tiendas = []
+        self.propina_activa = ctk.BooleanVar(value=False)
+        self.propina_opcion = ctk.StringVar(value="10%")
+        self.propina_custom_var = ctk.StringVar(value="")
 
         # ── Inicializar BD ──
         init_db()
@@ -166,67 +169,108 @@ class App(ctk.CTk):
             ).pack(pady=40)
             return
 
-        # Grid de 4 columnas
-        for i, prod in enumerate(productos):
-            row = i // 4
-            col = i % 4
+        # Agrupar por categoría
+        from collections import defaultdict
+        categorias = defaultdict(list)
+        for p in productos:
+            cat = p.get("categoria_producto")
+            cat_name = cat.strip().capitalize() if cat and cat.strip() else "Otros"
+            categorias[cat_name].append(p)
 
-            card = ctk.CTkFrame(scroll, fg_color=FONDO, corner_radius=12, width=180, height=110)
-            card.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
-            card.grid_propagate(False)
-            scroll.grid_columnconfigure(col, weight=1)
+        colors_by_cat = {
+            "Bebidas": "#E8EAF6",   # indigo claro
+            "Extras": "#FCE4EC",    # rosa claro
+            "Roles": "#FFF3E0",     # naranja claro
+            "Talleres": "#E0F7FA",  # cyan claro
+            "Individuales": "#F1F8E9" # verde claro
+        }
 
-            stock = prod["stock_local"]
-            stock_min = prod["stock_minimo"]
-            agotado = stock <= 0
-
-            # Nombre
+        for cat_name, prods in categorias.items():
+            # Header de Categoría
             ctk.CTkLabel(
-                card, text=prod["nombre"][:20],
-                font=ctk.CTkFont(size=13, weight="bold"),
-                text_color=TEXTO,
-                wraplength=160,
-            ).pack(pady=(8, 2))
+                scroll, text=cat_name,
+                font=ctk.CTkFont(size=16, weight="bold"),
+                text_color=MORADO_PASTEL
+            ).pack(anchor="w", padx=10, pady=(15, 5))
+            
+            # Contenedor de la categoría
+            bg_color = colors_by_cat.get(cat_name, "transparent")
+            cat_frame = ctk.CTkFrame(scroll, fg_color=bg_color, corner_radius=10)
+            cat_frame.pack(fill="x", padx=5, pady=5)
+            
+            # Grid layout for this category
+            for i in range(4):
+                cat_frame.grid_columnconfigure(i, weight=1)
 
-            # Precio
-            ctk.CTkLabel(
-                card, text=f"${prod['precio']:.2f}",
-                font=ctk.CTkFont(size=12),
-                text_color=MORADO_PASTEL,
-            ).pack()
+            for i, prod in enumerate(prods):
+                row = i // 4
+                col = i % 4
 
-            # Stock badge
-            if agotado:
-                badge_color = ROJO_ALERTA
-                badge_text = "AGOTADO"
-                badge_text_color = TEXTO_BLANCO
-            elif stock <= stock_min:
-                badge_color = AMARILLO_STOCK
-                badge_text = f"⚠ Stock: {stock}"
-                badge_text_color = TEXTO
-            else:
-                badge_color = VERDE
-                badge_text = f"Stock: {stock}"
-                badge_text_color = TEXTO_BLANCO
+                es_abierto = bool(prod.get("es_precio_abierto"))
 
-            ctk.CTkLabel(
-                card, text=badge_text,
-                font=ctk.CTkFont(size=10),
-                fg_color=badge_color, corner_radius=8,
-                text_color=badge_text_color,
-            ).pack(pady=2)
+                card = ctk.CTkFrame(cat_frame, fg_color=FONDO_CARD, corner_radius=12, width=180, height=110)
+                card.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
+                card.grid_propagate(False)
 
-            # Botón agregar
-            btn = ctk.CTkButton(
-                card, text="+ Agregar", height=28,
-                fg_color=MORADO_PASTEL if not agotado else "#CCCCCC",
-                hover_color="#7E57C2" if not agotado else "#CCCCCC",
-                text_color=TEXTO_BLANCO,
-                font=ctk.CTkFont(size=11),
-                command=lambda p=prod, t=tienda: self._agregar_al_carrito(p, t),
-                state="normal" if not agotado else "disabled",
-            )
-            btn.pack(pady=(2, 6))
+                stock = prod["stock_local"]
+                stock_min = prod["stock_minimo"]
+                agotado = (stock <= 0) and not es_abierto
+
+                # Nombre
+                ctk.CTkLabel(
+                    card, text=prod["nombre"][:20],
+                    font=ctk.CTkFont(size=13, weight="bold"),
+                    text_color=TEXTO,
+                    wraplength=160,
+                ).pack(pady=(8, 2))
+
+                # Precio
+                precio_txt = "Precio libre" if es_abierto else f"${prod['precio']:.2f}"
+                ctk.CTkLabel(
+                    card, text=precio_txt,
+                    font=ctk.CTkFont(size=12),
+                    text_color=MORADO_PASTEL,
+                ).pack()
+
+                # Stock badge (solo para productos normales)
+                if not es_abierto:
+                    if agotado:
+                        badge_color = ROJO_ALERTA
+                        badge_text = "AGOTADO"
+                        badge_text_color = TEXTO_BLANCO
+                    elif stock <= stock_min:
+                        badge_color = AMARILLO_STOCK
+                        badge_text = f"⚠ Stock: {stock}"
+                        badge_text_color = TEXTO
+                    else:
+                        badge_color = VERDE
+                        badge_text = f"Stock: {stock}"
+                        badge_text_color = TEXTO_BLANCO
+
+                    ctk.CTkLabel(
+                        card, text=badge_text,
+                        font=ctk.CTkFont(size=10),
+                        fg_color=badge_color, corner_radius=8,
+                        text_color=badge_text_color,
+                    ).pack(pady=2)
+
+                # Botón agregar
+                if es_abierto:
+                    cmd = lambda p=prod, t=tienda: self._modal_precio_abierto(t, nombre_sugerido=p["nombre"])
+                else:
+                    cmd = lambda p=prod, t=tienda: self._agregar_al_carrito(p, t)
+
+                btn = ctk.CTkButton(
+                    card, text="+ Agregar", height=28,
+                    fg_color=MORADO_PASTEL if not agotado else "#CCCCCC",
+                    hover_color="#7E57C2" if not agotado else "#CCCCCC",
+                    text_color=TEXTO_BLANCO,
+                    font=ctk.CTkFont(size=11),
+                    command=cmd,
+                    state="normal" if not agotado else "disabled",
+                )
+                btn.pack(pady=(2, 6))
+
 
     def _build_mack_tab(self, parent, tienda: dict):
         """Tab especial para Mack: botón de precio abierto."""
@@ -257,7 +301,7 @@ class App(ctk.CTk):
     #  CARRITO (panel derecho)
     # ══════════════════════════════════════════
     def _build_cart_panel(self):
-        self.cart_panel = ctk.CTkFrame(self, fg_color=FONDO_CARD, width=340, corner_radius=15)
+        self.cart_panel = ctk.CTkFrame(self, fg_color=FONDO_CARD, width=355, corner_radius=15)
         self.cart_panel.pack(fill="y", side="right", padx=10, pady=10)
         self.cart_panel.pack_propagate(False)
 
@@ -273,19 +317,78 @@ class App(ctk.CTk):
         )
         self.cart_scroll.pack(fill="both", expand=True, padx=8, pady=5)
 
-        # Total
+        # ── Subtotal + Propina + Total ──
+        totales_frame = ctk.CTkFrame(self.cart_panel, fg_color=FONDO, corner_radius=10)
+        totales_frame.pack(fill="x", padx=10, pady=(2, 0))
+
+        sub_row = ctk.CTkFrame(totales_frame, fg_color="transparent")
+        sub_row.pack(fill="x", padx=10, pady=(6, 0))
+        ctk.CTkLabel(sub_row, text="Subtotal:", font=ctk.CTkFont(size=12),
+                     text_color=TEXTO_CLARO).pack(side="left")
+        self.lbl_subtotal = ctk.CTkLabel(sub_row, text="$0.00",
+                                          font=ctk.CTkFont(size=12), text_color=TEXTO_CLARO)
+        self.lbl_subtotal.pack(side="right")
+
+        prop_row = ctk.CTkFrame(totales_frame, fg_color="transparent")
+        prop_row.pack(fill="x", padx=10, pady=0)
+        ctk.CTkLabel(prop_row, text="Propina:", font=ctk.CTkFont(size=12),
+                     text_color=TEXTO_CLARO).pack(side="left")
+        self.lbl_propina_monto = ctk.CTkLabel(prop_row, text="$0.00",
+                                               font=ctk.CTkFont(size=12), text_color=VERDE)
+        self.lbl_propina_monto.pack(side="right")
+
         self.lbl_total = ctk.CTkLabel(
             self.cart_panel, text="Total: $0.00",
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=MORADO_PASTEL,
         )
-        self.lbl_total.pack(pady=8)
+        self.lbl_total.pack(pady=(4, 2))
+
+        # ── Sección de propina ──
+        prop_frame = ctk.CTkFrame(self.cart_panel, fg_color=FONDO, corner_radius=10)
+        prop_frame.pack(fill="x", padx=10, pady=(0, 4))
+
+        check_row = ctk.CTkFrame(prop_frame, fg_color="transparent")
+        check_row.pack(fill="x", padx=8, pady=(6, 2))
+
+        ctk.CTkCheckBox(
+            check_row, text="🪙 Agregar propina",
+            variable=self.propina_activa,
+            fg_color=VERDE, hover_color="#66BB6A",
+            font=ctk.CTkFont(size=12),
+            command=self._toggle_propina,
+        ).pack(side="left")
+
+        self.propina_controls = ctk.CTkFrame(prop_frame, fg_color="transparent")
+        self.propina_controls.pack(fill="x", padx=8, pady=(0, 6))
+
+        self.combo_propina = ctk.CTkComboBox(
+            self.propina_controls,
+            values=["10%", "15%", "20%", "Personalizada"],
+            variable=self.propina_opcion,
+            width=130,
+            font=ctk.CTkFont(size=12),
+            command=lambda _: self._refrescar_carrito(),
+        )
+        self.combo_propina.pack(side="left", padx=(0, 6))
+
+        self.entry_propina_custom = ctk.CTkEntry(
+            self.propina_controls,
+            textvariable=self.propina_custom_var,
+            placeholder_text="$ monto",
+            width=100,
+            font=ctk.CTkFont(size=12),
+        )
+        self.entry_propina_custom.pack(side="left")
+        self.entry_propina_custom.bind("<KeyRelease>", lambda e: self._refrescar_carrito())
+        # Start hidden
+        self.propina_controls.pack_forget()
 
         # Método de pago
         self.metodo_var = ctk.StringVar(value="Efectivo")
         metodo_frame = ctk.CTkFrame(self.cart_panel, fg_color="transparent")
-        metodo_frame.pack(pady=5)
-        for m in ["Efectivo", "Tarjeta", "Transferencia"]:
+        metodo_frame.pack(pady=4)
+        for m in ["Efectivo", "Tarjeta", "Transferencia", "Mixto"]:
             ctk.CTkRadioButton(
                 metodo_frame, text=m, variable=self.metodo_var, value=m,
                 fg_color=MORADO_PASTEL, hover_color="#7E57C2",
@@ -294,7 +397,7 @@ class App(ctk.CTk):
 
         # Botones
         btn_frame = ctk.CTkFrame(self.cart_panel, fg_color="transparent")
-        btn_frame.pack(pady=(5, 15))
+        btn_frame.pack(pady=(4, 12))
 
         ctk.CTkButton(
             btn_frame, text="🗑 Vaciar", width=100,
@@ -311,6 +414,32 @@ class App(ctk.CTk):
             command=self._cobrar,
         ).pack(side="left", padx=5)
 
+    def _calcular_propina(self, subtotal: float) -> float:
+        """Calcula el monto de propina según la opción seleccionada."""
+        if not self.propina_activa.get():
+            return 0.0
+        opt = self.propina_opcion.get()
+        if opt == "10%":
+            return round(subtotal * 0.10, 2)
+        elif opt == "15%":
+            return round(subtotal * 0.15, 2)
+        elif opt == "20%":
+            return round(subtotal * 0.20, 2)
+        elif opt == "Personalizada":
+            try:
+                return max(0.0, float(self.propina_custom_var.get()))
+            except ValueError:
+                return 0.0
+        return 0.0
+
+    def _toggle_propina(self):
+        """Muestra u oculta controles de propina."""
+        if self.propina_activa.get():
+            self.propina_controls.pack(fill="x", padx=8, pady=(0, 6))
+        else:
+            self.propina_controls.pack_forget()
+        self._refrescar_carrito()
+
     def _refrescar_carrito(self):
         """Redibuja la lista del carrito."""
         for w in self.cart_scroll.winfo_children():
@@ -320,28 +449,52 @@ class App(ctk.CTk):
             row = ctk.CTkFrame(self.cart_scroll, fg_color=FONDO, corner_radius=8)
             row.pack(fill="x", pady=3, padx=2)
 
+            nombre_lbl = item["nombre"][:20]
             ctk.CTkLabel(
-                row, text=item["nombre"][:22],
+                row, text=nombre_lbl,
                 font=ctk.CTkFont(size=12),
                 text_color=TEXTO,
             ).pack(side="left", padx=8, pady=6)
 
-            sub = item["cantidad"] * item["precio_unitario"]
+            precio_final = item["precio_unitario"]
+            descuento_pct = item.get("descuento_pct", 0.0)
+            precio_original = item.get("precio_original", precio_final)
+
+            sub = item["cantidad"] * precio_final
+            sub_text = f"x{item['cantidad']}  ${sub:,.2f}"
+            if descuento_pct > 0:
+                sub_text += f"  (-{descuento_pct:.0f}%)"
+
             ctk.CTkLabel(
-                row, text=f"x{item['cantidad']}  ${sub:,.2f}",
+                row, text=sub_text,
                 font=ctk.CTkFont(size=12, weight="bold"),
-                text_color=MORADO_PASTEL,
-            ).pack(side="right", padx=(0, 5), pady=6)
+                text_color=VERDE if descuento_pct > 0 else MORADO_PASTEL,
+            ).pack(side="right", padx=(0, 4), pady=6)
 
             ctk.CTkButton(
-                row, text="✕", width=28, height=28,
+                row, text="✕", width=26, height=26,
                 fg_color=ROJO_ALERTA, hover_color="#EF5350",
                 text_color=TEXTO_BLANCO,
-                font=ctk.CTkFont(size=11),
+                font=ctk.CTkFont(size=10),
                 command=lambda i=idx: self._quitar_del_carrito(i),
-            ).pack(side="right", padx=5, pady=4)
+            ).pack(side="right", padx=2, pady=4)
 
-        total = sum(i["cantidad"] * i["precio_unitario"] for i in self.carrito)
+            ctk.CTkButton(
+                row, text="✏", width=26, height=26,
+                fg_color=AZUL_PASTEL, hover_color="#5C6BC0",
+                text_color=TEXTO_BLANCO,
+                font=ctk.CTkFont(size=11),
+                command=lambda i=idx: self._modal_editar_item(i),
+            ).pack(side="right", padx=2, pady=4)
+
+        subtotal = sum(i["cantidad"] * i["precio_unitario"] for i in self.carrito)
+        propina = self._calcular_propina(subtotal)
+        total = subtotal + propina
+
+        self.lbl_subtotal.configure(text=f"${subtotal:,.2f}")
+        self.lbl_propina_monto.configure(
+            text=f"${propina:,.2f}" if propina > 0 else "$0.00"
+        )
         self.lbl_total.configure(text=f"Total: ${total:,.2f}")
 
     # ══════════════════════════════════════════
@@ -360,43 +513,182 @@ class App(ctk.CTk):
                 f"⚠ '{producto['nombre']}' tiene solo {stock} unidades.",
             )
 
-        # Buscar si ya está en el carrito
-        for item in self.carrito:
-            if item.get("producto_id") == producto["id"]:
-                if item["cantidad"] + 1 > stock:
-                    messagebox.showwarning("Sin stock", "No hay suficiente stock.")
-                    return
-                item["cantidad"] += 1
-                self._refrescar_carrito()
-                return
+        # Buscar la cantidad total en carrito para no exceder stock
+        en_carrito = sum(1 for i in self.carrito if i.get("producto_id") == producto["id"])
+        if en_carrito + 1 > stock:
+            messagebox.showwarning("Sin stock", "No hay suficiente stock.")
+            return
+
+        nombre_final = producto["nombre"]
+        categoria = producto.get("categoria_producto", "").strip().capitalize()
+        if tienda["id"] == 1 and categoria != "Extras" and "(Frío)" not in nombre_final and "(Caliente)" not in nombre_final:
+            nombre_final += " (Frío)"
 
         self.carrito.append({
             "producto_id": producto["id"],
             "tienda_id": tienda["id"],
-            "nombre": producto["nombre"],
+            "nombre": nombre_final,
             "cantidad": 1,
             "precio_unitario": producto["precio"],
             "es_precio_abierto": False,
+            "categoria_producto": categoria
         })
         self._refrescar_carrito()
+        
+        # Auto-abrir modal para personalizar al agregar a carrito
+        self._modal_editar_item(len(self.carrito) - 1)
 
     def _quitar_del_carrito(self, idx: int):
         if 0 <= idx < len(self.carrito):
             self.carrito.pop(idx)
             self._refrescar_carrito()
 
+    def _modal_editar_item(self, idx: int):
+        """Modal para editar nombre, precio y descuento de un item del carrito."""
+        item = self.carrito[idx]
+        modal = ctk.CTkToplevel(self)
+        modal.title("Editar artículo")
+        modal.geometry("380x320")
+        modal.configure(fg_color=FONDO)
+        modal.grab_set()
+        modal.resizable(False, False)
+
+        ctk.CTkLabel(
+            modal, text="✏ Editar artículo",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=MORADO_PASTEL,
+        ).pack(pady=(20, 10))
+
+        nombre_actual = item.get("nombre", "")
+        clean_nombre = nombre_actual.replace(" (Frío)", "").replace(" (Caliente)", "")
+        is_c = "(Caliente)" in nombre_actual
+        is_f = "(Frío)" in nombre_actual
+        tienda_id = item.get("tienda_id")
+        
+        parts = clean_nombre.split(" - ", 1)
+        base_nombre = parts[0].strip()
+        cliente_nombre = parts[1].strip() if len(parts) > 1 else ""
+
+        ctk.CTkLabel(modal, text="Descripción:", text_color=TEXTO, anchor="w").pack(anchor="w", padx=50)
+        entry_nombre = ctk.CTkEntry(modal, width=280)
+        entry_nombre.insert(0, base_nombre)
+        entry_nombre.configure(state="disabled")
+        entry_nombre.pack(pady=(2, 8))
+
+        label_cliente = "Nombre en vaso / Cliente:" if tienda_id == 1 else "Nota / Cliente:"
+        ctk.CTkLabel(modal, text=label_cliente, text_color=TEXTO, anchor="w").pack(anchor="w", padx=50)
+        entry_cliente = ctk.CTkEntry(modal, width=280)
+        entry_cliente.insert(0, cliente_nombre)
+        entry_cliente.pack(pady=(2, 8))
+
+        combo_temp = None
+        categoria = item.get("categoria_producto", "")
+        if tienda_id == 1 and categoria != "Extras":
+            ctk.CTkLabel(modal, text="Temperatura:", text_color=TEXTO, anchor="w").pack(anchor="w", padx=50)
+            combo_temp = ctk.CTkComboBox(modal, values=[" (Frío)", " (Caliente)", ""])
+            if is_c:
+                combo_temp.set(" (Caliente)")
+            elif not is_f and not is_c:
+                combo_temp.set(" (Frío)") # Default a Frío, indicado por el usuario
+            elif is_f:
+                combo_temp.set(" (Frío)")
+            else:
+                combo_temp.set("")
+            combo_temp.pack(pady=(2, 8))
+
+        # Selector de Extras (solo para tienda 1)
+        combo_extras = None
+        extra_map = {}
+        if tienda_id == 1:
+            todos_productos = obtener_productos(1)
+            lista_extras = [p for p in todos_productos if p.get("categoria_producto", "").strip().lower() == "extras" and p.get("stock_local", 0) > 0]
+            if lista_extras:
+                ctk.CTkLabel(modal, text="Agregar Extra:", text_color=TEXTO, anchor="w").pack(anchor="w", padx=50)
+                nombres_extras = ["Ninguno"]
+                for p in lista_extras:
+                    nom = f"{p['nombre']} (+${p['precio']})"
+                    nombres_extras.append(nom)
+                    extra_map[nom] = p
+                combo_extras = ctk.CTkComboBox(modal, values=nombres_extras)
+                combo_extras.set("Ninguno")
+                combo_extras.pack(pady=(2, 8))
+
+        precio_orig = item.get("precio_original", item["precio_unitario"])
+        ctk.CTkLabel(modal, text=f"Precio unitario (original: ${precio_orig:,.2f}):",
+                     text_color=TEXTO, anchor="w").pack(anchor="w", padx=50)
+        entry_precio = ctk.CTkEntry(modal, width=280)
+        entry_precio.insert(0, str(precio_orig))
+        entry_precio.pack(pady=(2, 8))
+
+        ctk.CTkLabel(modal, text="Descuento %  (0 = sin descuento):",
+                     text_color=TEXTO, anchor="w").pack(anchor="w", padx=50)
+        entry_desc = ctk.CTkEntry(modal, width=280, placeholder_text="Ej: 10")
+        entry_desc.insert(0, str(item.get("descuento_pct", 0)))
+        entry_desc.pack(pady=(2, 8))
+
+        def guardar():
+            try:
+                nuevo_precio_base = float(entry_precio.get().replace(",", ""))
+                if nuevo_precio_base < 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Error", "Precio inválido.", parent=modal)
+                return
+            try:
+                descuento = float(entry_desc.get() or "0")
+                if not (0 <= descuento <= 100):
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Error", "Descuento debe ser entre 0 y 100.", parent=modal)
+                return
+            
+            nuevo_cliente = entry_cliente.get().strip()
+            nuevo_nombre = base_nombre + (f" - {nuevo_cliente}" if nuevo_cliente else "")
+            temp_val = combo_temp.get() if combo_temp else ""
+            precio_final = round(nuevo_precio_base * (1 - descuento / 100), 2)
+
+            self.carrito[idx]["nombre"] = nuevo_nombre + temp_val
+            self.carrito[idx]["precio_original"] = nuevo_precio_base
+            self.carrito[idx]["precio_unitario"] = precio_final
+            self.carrito[idx]["descuento_pct"] = descuento
+            
+            # Verificar si seleccionó un Extra
+            if combo_extras and combo_extras.get() != "Ninguno" and combo_extras.get() in extra_map:
+                p_extra = extra_map[combo_extras.get()]
+                self.carrito.append({
+                    "producto_id": p_extra["id"],
+                    "tienda_id": 1,
+                    "nombre": f"+ {p_extra['nombre']}",
+                    "cantidad": 1,
+                    "precio_unitario": p_extra["precio"],
+                    "es_precio_abierto": False,
+                    "categoria_producto": "Extras"
+                })
+
+            self._refrescar_carrito()
+            modal.destroy()
+
+        ctk.CTkButton(
+            modal, text="✓ Guardar cambios", width=200,
+            fg_color=MORADO_PASTEL, hover_color="#7E57C2",
+            text_color=TEXTO_BLANCO,
+            command=guardar,
+        ).pack(pady=10)
+
     def _vaciar_carrito(self):
         if self.carrito:
             if messagebox.askyesno("Confirmar", "¿Vaciar todo el carrito?"):
                 self.carrito.clear()
+                self.propina_activa.set(False)
+                self._toggle_propina()
                 self._refrescar_carrito()
 
     # ══════════════════════════════════════════
     #  MODAL: PRECIO ABIERTO (MACK)
     # ══════════════════════════════════════════
-    def _modal_precio_abierto(self, tienda: dict):
+    def _modal_precio_abierto(self, tienda: dict, nombre_sugerido: str = ""):
         modal = ctk.CTkToplevel(self)
-        modal.title("Mack – Precio Abierto")
+        modal.title("Precio Abierto")
         modal.geometry("380x260")
         modal.configure(fg_color=FONDO)
         modal.grab_set()
@@ -409,11 +701,13 @@ class App(ctk.CTk):
         ).pack(pady=(25, 5))
 
         ctk.CTkLabel(
-            modal, text="(Descripción opcional del artículo)",
+            modal, text="(Descripción del artículo)",
             font=ctk.CTkFont(size=11), text_color=TEXTO_CLARO,
         ).pack()
 
         entry_desc = ctk.CTkEntry(modal, width=280, placeholder_text="Ej: Bolsa de mano azul")
+        if nombre_sugerido:
+            entry_desc.insert(0, nombre_sugerido)
         entry_desc.pack(pady=8)
 
         entry_monto = ctk.CTkEntry(
@@ -431,7 +725,7 @@ class App(ctk.CTk):
                 messagebox.showerror("Error", "Ingresa un monto válido.", parent=modal)
                 return
 
-            desc = entry_desc.get().strip() or "Artículo Mack"
+            desc = entry_desc.get().strip() or nombre_sugerido or "Artículo"
             self.carrito.append({
                 "producto_id": None,
                 "tienda_id": tienda["id"],
@@ -449,6 +743,7 @@ class App(ctk.CTk):
             text_color=TEXTO_BLANCO,
             command=confirmar,
         ).pack(pady=15)
+
 
     # ══════════════════════════════════════════
     #  SEGURIDAD: NIP
@@ -536,18 +831,44 @@ class App(ctk.CTk):
             return
 
         try:
+            items_venta = list(self.carrito)
+
+            # Agregar propina como ítem si aplica
+            subtotal = sum(i["cantidad"] * i["precio_unitario"] for i in items_venta)
+            propina_monto = self._calcular_propina(subtotal)
+            if propina_monto > 0:
+                tienda_id_ref = items_venta[0]["tienda_id"] if items_venta else 1
+                items_venta.append({
+                    "producto_id": None,
+                    "tienda_id": tienda_id_ref,
+                    "nombre": f"Propina ({self.propina_opcion.get()})",
+                    "cantidad": 1,
+                    "precio_unitario": propina_monto,
+                    "es_precio_abierto": True,
+                })
+
+            if self.metodo_var.get() == "Mixto":
+                self._modal_cobro_mixto(items_venta)
+                return
+            elif self.metodo_var.get() == "Efectivo":
+                self._modal_efectivo_cambio(items_venta)
+                return
+
             venta = registrar_venta(
                 usuario_id=self.usuario_actual["id"],
                 metodo_pago=self.metodo_var.get(),
-                items=self.carrito,
+                items=items_venta,
+                efectivo_recibido=recibido
             )
 
             # Intentar imprimir
             cajero  = self.usuario_actual["nombre"]
             impreso = imprimir_ticket(venta, cajero)
 
-            # Limpiar carrito y refrescar stock
+            # Limpiar carrito, propina y refrescar stock
             self.carrito.clear()
+            self.propina_activa.set(False)
+            self._toggle_propina()
             self._refrescar_carrito()
             self._refrescar_todas_las_tabs()
 
@@ -556,6 +877,168 @@ class App(ctk.CTk):
 
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo registrar la venta:\n{e}")
+
+    def _modal_efectivo_cambio(self, items_venta):
+        total_a_pagar = sum(i["cantidad"] * i["precio_unitario"] for i in items_venta)
+
+        modal = ctk.CTkToplevel(self)
+        modal.title("Cobro en Efectivo")
+        modal.geometry("380x350")
+        modal.configure(fg_color=FONDO)
+        modal.grab_set()
+        modal.resizable(False, False)
+
+        ctk.CTkLabel(
+            modal, text="💵 Pago en Efectivo",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=MORADO_PASTEL,
+        ).pack(pady=(20, 10))
+
+        ctk.CTkLabel(
+            modal, text=f"Total a pagar: ${total_a_pagar:,.2f}",
+            font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXTO,
+        ).pack(pady=(0, 15))
+
+        frame = ctk.CTkFrame(modal, fg_color="transparent")
+        frame.pack(pady=5)
+
+        ctk.CTkLabel(frame, text="Efectivo Recibido:", text_color=TEXTO).grid(row=0, column=0, padx=10, pady=5, sticky="e")
+        recibido_var = ctk.StringVar(value="")
+        entry_recibido = ctk.CTkEntry(frame, textvariable=recibido_var, width=120, font=ctk.CTkFont(size=14))
+        entry_recibido.grid(row=0, column=1, padx=10, pady=5)
+        
+        lbl_cambio = ctk.CTkLabel(modal, text="Cambio: $0.00", font=ctk.CTkFont(size=20, weight="bold"), text_color=TEXTO_CLARO)
+        lbl_cambio.pack(pady=15)
+
+        def autocalculate(*_):
+            try:
+                recibido = float(recibido_var.get().replace(",", "") or 0)
+                cambio = recibido - total_a_pagar
+                if cambio >= 0:
+                    lbl_cambio.configure(text=f"Cambio: ${cambio:,.2f}", text_color=VERDE)
+                else:
+                    lbl_cambio.configure(text=f"Faltan: ${abs(cambio):,.2f}", text_color=ROJO_ALERTA)
+            except:
+                lbl_cambio.configure(text="Cambio: $0.00", text_color=TEXTO_CLARO)
+
+        recibido_var.trace_add("write", autocalculate)
+        entry_recibido.focus()
+
+        def confirmar():
+            try:
+                recibido = float(recibido_var.get().replace(",", "") or 0)
+                if recibido < total_a_pagar:
+                    messagebox.showerror("Error", "El efectivo recibido es menor al total.", parent=modal)
+                    return
+            except Exception:
+                messagebox.showerror("Error", "Monto inválido.", parent=modal)
+                return
+
+            venta = registrar_venta(
+                usuario_id=self.usuario_actual["id"],
+                metodo_pago="Efectivo",
+                items=items_venta,
+            )
+            cajero = self.usuario_actual["nombre"]
+            impreso = imprimir_ticket(venta, cajero)
+
+            self.carrito.clear()
+            self.propina_activa.set(False)
+            self._toggle_propina()
+            self._refrescar_carrito()
+            self._refrescar_todas_las_tabs()
+
+            modal.destroy()
+            self._mostrar_preview_ticket(venta, cajero, impreso)
+
+        ctk.CTkButton(
+            modal, text="✓ Cobrar", width=180,
+            fg_color=VERDE, hover_color="#66BB6A", text_color=TEXTO_BLANCO,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=confirmar,
+        ).pack(pady=10)
+
+    def _modal_cobro_mixto(self, items_venta):
+        total_a_pagar = sum(i["cantidad"] * i["precio_unitario"] for i in items_venta)
+
+        modal = ctk.CTkToplevel(self)
+        modal.title("Pago Mixto")
+        modal.geometry("380x320")
+        modal.configure(fg_color=FONDO)
+        modal.grab_set()
+        modal.resizable(False, False)
+
+        ctk.CTkLabel(
+            modal, text="⚖️ Pago Mixto",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=MORADO_PASTEL,
+        ).pack(pady=(20, 10))
+
+        ctk.CTkLabel(
+            modal, text=f"Total a pagar: ${total_a_pagar:,.2f}",
+            font=ctk.CTkFont(size=14, weight="bold"), text_color=TEXTO,
+        ).pack(pady=(0, 10))
+
+        frame = ctk.CTkFrame(modal, fg_color="transparent")
+        frame.pack(pady=5)
+
+        ctk.CTkLabel(frame, text="Efectivo:", text_color=TEXTO).grid(row=0, column=0, padx=10, pady=5, sticky="e")
+        efectivo_var = ctk.StringVar(value="")
+        entry_efectivo = ctk.CTkEntry(frame, textvariable=efectivo_var, width=120)
+        entry_efectivo.grid(row=0, column=1, padx=10, pady=5)
+
+        ctk.CTkLabel(frame, text="Tarjeta:", text_color=TEXTO).grid(row=1, column=0, padx=10, pady=5, sticky="e")
+        tarjeta_var = ctk.StringVar(value=f"{total_a_pagar:.2f}")
+        entry_tarjeta = ctk.CTkEntry(frame, textvariable=tarjeta_var, width=120)
+        entry_tarjeta.grid(row=1, column=1, padx=10, pady=5)
+
+        def autocalculate(*_):
+            try:
+                ef = float(efectivo_var.get().replace(",", "") or 0)
+                if ef > total_a_pagar: ef = total_a_pagar
+                tarjeta_var.set(f"{total_a_pagar - ef:.2f}")
+            except:
+                pass
+
+        efectivo_var.trace_add("write", autocalculate)
+
+        def confirmar():
+            try:
+                ef = float(efectivo_var.get().replace(",", "") or 0)
+                tar = float(tarjeta_var.get().replace(",", "") or 0)
+                if abs((ef + tar) - total_a_pagar) > 0.01:
+                    messagebox.showerror("Error", "La suma de efectivo y tarjeta no cuadra con el total.", parent=modal)
+                    return
+            except Exception:
+                messagebox.showerror("Error", "Montos inválidos.", parent=modal)
+                return
+
+            venta = registrar_venta(
+                usuario_id=self.usuario_actual["id"],
+                metodo_pago="Mixto",
+                items=items_venta,
+                monto_efectivo=ef,
+                monto_tarjeta=tar,
+            )
+            cajero = self.usuario_actual["nombre"]
+            impreso = imprimir_ticket(venta, cajero)
+
+            self.carrito.clear()
+            self.propina_activa.set(False)
+            self._toggle_propina()
+            self._refrescar_carrito()
+            self._refrescar_todas_las_tabs()
+
+            modal.destroy()
+            self._mostrar_preview_ticket(venta, cajero, impreso)
+
+        ctk.CTkButton(
+            modal, text="✓ Cobrar", width=180,
+            fg_color=VERDE, hover_color="#66BB6A", text_color=TEXTO_BLANCO,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=confirmar,
+        ).pack(pady=20)
+
 
     def _mostrar_preview_ticket(self, venta: dict, cajero: str, impreso: bool):
         """Modal que muestra el ticket impreso en pantalla con diseño elegante."""
