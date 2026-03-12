@@ -128,10 +128,10 @@ class SyncWorker:
             ])
 
         detalles = conn.execute(
-            f"""SELECT vd.*, v.folio, t.nombre as tienda
+            f"""SELECT vd.*, v.folio, COALESCE(t.nombre,'Sin Tienda') as tienda
                 FROM venta_detalle vd
                 JOIN ventas v ON v.id = vd.venta_id
-                JOIN tiendas t ON t.id = vd.tienda_id
+                LEFT JOIN tiendas t ON t.id = vd.tienda_id
                 WHERE vd.sincronizado = 0
                 AND vd.venta_id IN ({','.join('?' * len(venta_ids))})""",
             venta_ids,

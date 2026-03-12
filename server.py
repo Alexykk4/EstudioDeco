@@ -17,6 +17,7 @@ from modules.database import (
     obtener_ordenes_mesa, renombrar_orden, cancelar_orden_mesa,
     obtener_todos_los_productos, crear_producto, actualizar_producto, eliminar_producto,
     actualizar_item_orden, registrar_ingreso, set_fondo_apertura, get_fondo_apertura,
+    obtener_ventas_dia, corregir_venta, anular_venta,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf
@@ -81,6 +82,11 @@ class FondoReq(BaseModel):
 
 class ImprimirCorteReq(BaseModel):
     usuario_id: int
+
+class CorregirVentaReq(BaseModel):
+    metodo_pago: str
+    monto_efectivo: float = 0.0
+    monto_tarjeta: float = 0.0
 
 class ProductReq(BaseModel):
     tienda_id: int
@@ -360,6 +366,20 @@ async def api_corte(r: CorteReq):
     resumen = registrar_corte(r.usuario_id, r.efectivo_real, fondo_caja=r.fondo_caja, desglose=r.desglose)
     generar_corte_pdf(resumen, cajero)
     return {"resumen": resumen}
+
+# ── Ventas del día ──
+@app.get("/api/ventas/hoy")
+async def api_ventas_hoy(): return obtener_ventas_dia()
+
+@app.put("/api/ventas/{vid}")
+async def api_corregir_venta(vid: int, r: CorregirVentaReq):
+    corregir_venta(vid, r.metodo_pago, r.monto_efectivo, r.monto_tarjeta)
+    return {"ok": True}
+
+@app.delete("/api/ventas/{vid}")
+async def api_anular_venta(vid: int):
+    anular_venta(vid)
+    return {"ok": True}
 
 if __name__ == "__main__":
     print("\n  * Estudio Deco POS *")

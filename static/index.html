@@ -413,6 +413,7 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
     <button class="btn" style="background:#66BB6A;color:white;" onclick="showFondoModal()">🏦 Abrir Caja</button>
     <button class="btn" style="background:#26A69A;color:white;" onclick="showIngresoModal()">💰 Ingreso</button>
     <button class="btn btn-ghost" onclick="showGlobalSearch()">🔍 Buscar</button>
+    <button class="btn btn-ghost" onclick="showVentasHoyModal()">📋 Ventas</button>
     <button class="btn btn-ghost" onclick="showPreCorteModal()">👁 Pre-Corte</button>
     <button class="btn btn-gold" onclick="showCorteModal()">📊 Corte</button>
     <button class="btn btn-ghost" onclick="showGastoModal()">💸 Gasto</button>
@@ -1683,6 +1684,95 @@ function toast(icon,msg,bc){
   const t=document.createElement('div');t.className='toast';
   if(bc)t.style.borderLeftColor=bc;t.style.borderLeft=`3px solid ${bc||'var(--sage)'}`;
   t.innerHTML=`${icon} ${msg}`;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);
+}
+
+/* ── VENTAS DEL DÍA ── */
+async function showVentasHoyModal() {
+  if(!usuario) return showNipModal(showVentasHoyModal);
+  let ventas;
+  try { ventas = await api('/ventas/hoy'); } catch(e) { toast('❌',e.message,'var(--red)'); return; }
+
+  const rows = ventas.length ? ventas.map(v => {
+    const hora = v.created_at ? v.created_at.slice(11,16) : '';
+    const metIcon = v.metodo_pago==='Efectivo'?'💵':v.metodo_pago==='Tarjeta'?'💳':'📱';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);border-bottom:1px solid var(--border-light);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:700;">${v.folio}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${hora} · ${v.cajero_nombre} · ${metIcon} ${v.metodo_pago}</div>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;color:var(--sage);">$${v.total.toFixed(2)}</div>
+      ${usuario.perfil==='Administrador'?`
+      <button class="btn-icon btn-edit" onclick="showEditVentaModal(${v.id}, '${v.folio}', ${v.total}, '${v.metodo_pago}', ${v.monto_efectivo}, ${v.monto_tarjeta})" title="Corregir pago">✏️</button>
+      <button class="btn-icon btn-del" onclick="confirmarAnularVenta(${v.id}, '${v.folio}')" title="Anular venta">🗑️</button>`:''}
+    </div>`;
+  }).join('') : '<div style="padding:30px;text-align:center;color:var(--text-muted);">Sin ventas hoy</div>';
+
+  const total = ventas.reduce((s,v)=>s+v.total, 0);
+  showModal(`<div class="modal-body">
+    <div class="modal-title">📋 Ventas de Hoy</div>
+    <div class="modal-sub">${ventas.length} venta${ventas.length!==1?'s':''} · Total: <strong>$${total.toFixed(2)}</strong></div>
+    <div style="max-height:420px;overflow-y:auto;">${rows}</div>
+  </div>
+  <div class="modal-footer"><div class="modal-btns" style="margin-top:0"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div>`);
+  const m=document.querySelector('#modals .modal'); m.style.width='600px'; m.style.maxWidth='98vw';
+}
+
+function showEditVentaModal(vid, folio, total, metodo, montoEf, montoTar) {
+  if(usuario.perfil!=='Administrador'){toast('⚠️','Solo Administrador','var(--gold)');return;}
+  showModal(`<div class="modal-title">✏️ Corregir Venta</div>
+    <div class="modal-sub">Folio: ${folio} · Total: $${total.toFixed(2)}</div>
+    <div class="field"><label>Método de Pago</label>
+      <select id="cvMetodo" class="input" onchange="updateCvAmounts(${total})">
+        <option value="Efectivo" ${metodo==='Efectivo'?'selected':''}>💵 Efectivo</option>
+        <option value="Tarjeta" ${metodo==='Tarjeta'?'selected':''}>💳 Tarjeta</option>
+        <option value="Transferencia" ${metodo==='Transferencia'?'selected':''}>📱 Transferencia</option>
+        <option value="Mixto" ${metodo==='Mixto'?'selected':''}>⚖️ Mixto</option>
+      </select>
+    </div>
+    <div id="cvAmounts">
+      <div class="field"><label>Monto Efectivo</label><input type="number" id="cvEf" class="input" step="0.01" value="${montoEf}"></div>
+      <div class="field"><label>Monto Tarjeta / Transfer.</label><input type="number" id="cvTar" class="input" step="0.01" value="${montoTar}"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="showVentasHoyModal()">← Volver</button>
+      <button class="btn btn-sage" onclick="doCorregirVenta(${vid}, ${total})">Guardar</button>
+    </div>`);
+  updateCvAmounts(total);
+}
+
+function updateCvAmounts(total) {
+  const m = document.getElementById('cvMetodo')?.value;
+  const ef = document.getElementById('cvEf');
+  const tar = document.getElementById('cvTar');
+  if(!ef || !tar) return;
+  if(m==='Efectivo'){ef.value=total.toFixed(2);tar.value='0.00';}
+  else if(m==='Tarjeta'||m==='Transferencia'){ef.value='0.00';tar.value=total.toFixed(2);}
+}
+
+async function doCorregirVenta(vid, total) {
+  const metodo = document.getElementById('cvMetodo').value;
+  const ef = parseFloat(document.getElementById('cvEf').value)||0;
+  const tar = parseFloat(document.getElementById('cvTar').value)||0;
+  try {
+    await api(`/ventas/${vid}`, {method:'PUT', body:{metodo_pago:metodo, monto_efectivo:ef, monto_tarjeta:tar}});
+    toast('✅','Venta corregida'); showVentasHoyModal();
+  } catch(e) { toast('❌',e.message,'var(--red)'); }
+}
+
+function confirmarAnularVenta(vid, folio) {
+  showModal(`<div class="modal-title">🗑️ Anular Venta</div>
+    <div class="modal-sub">¿Anular el folio <strong>${folio}</strong>? Se repondrá el stock y se eliminará el registro.</div>
+    <div class="modal-btns" style="margin-top:20px;">
+      <button class="btn btn-ghost" onclick="showVentasHoyModal()">Cancelar</button>
+      <button class="btn" style="background:var(--red);color:white;" onclick="doAnularVenta(${vid})">Sí, Anular</button>
+    </div>`);
+}
+
+async function doAnularVenta(vid) {
+  try {
+    await api(`/ventas/${vid}`, {method:'DELETE'});
+    toast('✅','Venta anulada'); closeModal();
+  } catch(e) { toast('❌',e.message,'var(--red)'); }
 }
 
 /* ── BUSCADOR GLOBAL ── */
