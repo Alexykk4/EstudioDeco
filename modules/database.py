@@ -19,10 +19,24 @@ def init_db():
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
     # Migrations para bases de datos existentes
-    for sql in [
+    migrations = [
         "ALTER TABLE cortes_caja ADD COLUMN fondo_caja REAL NOT NULL DEFAULT 0.0",
         "ALTER TABLE cortes_caja ADD COLUMN desglose_billetes TEXT NOT NULL DEFAULT '{}'",
-    ]:
+        "ALTER TABLE venta_detalle ADD COLUMN sincronizado INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE gastos ADD COLUMN origen TEXT DEFAULT 'Caja'",
+        """CREATE TABLE IF NOT EXISTS ingresos (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario_id   INTEGER NOT NULL,
+            concepto     TEXT NOT NULL DEFAULT 'Ingreso',
+            monto        REAL NOT NULL,
+            metodo_pago  TEXT NOT NULL DEFAULT 'Efectivo',
+            sincronizado INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+        )""",
+        "INSERT OR IGNORE INTO config (clave, valor) VALUES ('fondo_turno', '{\"monto\":0,\"fecha\":\"\"}')",
+    ]
+    for sql in migrations:
         try:
             conn.execute(sql)
             conn.commit()
@@ -287,8 +301,8 @@ def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0
         if comision > 0:
             concepto_comision = f"Comisión Tarjeta 4% {folio}"
             cur.execute("""
-                INSERT INTO gastos (usuario_id, categoria, tienda_id, concepto, monto) 
-                VALUES (?, 'General', NULL, ?, ?)
+                INSERT INTO gastos (usuario_id, categoria, tienda_id, concepto, monto, origen)
+                VALUES (?, 'General', NULL, ?, ?, 'Banco')
             """, (usuario_id, concepto_comision, comision))
     # --------------------------------------
 
@@ -353,6 +367,36 @@ def registrar_gasto(usuario_id, tienda_id, concepto, monto, origen="Caja"):
                  (usuario_id, categoria, tienda_id, concepto, monto, origen))
     conn.commit(); conn.close()
 
+# ── INGRESOS ──
+def registrar_ingreso(usuario_id, concepto, monto, metodo_pago="Efectivo"):
+    conn = get_connection()
+    conn.execute("INSERT INTO ingresos (usuario_id, concepto, monto, metodo_pago) VALUES (?,?,?,?)",
+                 (usuario_id, concepto, monto, metodo_pago))
+    conn.commit(); conn.close()
+
+# ── FONDO DE APERTURA ──
+def set_fondo_apertura(monto):
+    import json
+    valor = json.dumps({"monto": float(monto), "fecha": date.today().strftime("%Y-%m-%d")})
+    conn = get_connection()
+    conn.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES ('fondo_turno', ?)", (valor,))
+    conn.commit(); conn.close()
+
+def get_fondo_apertura():
+    import json
+    conn = get_connection()
+    row = conn.execute("SELECT valor FROM config WHERE clave='fondo_turno'").fetchone()
+    conn.close()
+    if not row or not row["valor"]:
+        return 0.0
+    try:
+        data = json.loads(row["valor"])
+        if data.get("fecha") == date.today().strftime("%Y-%m-%d"):
+            return float(data.get("monto", 0))
+    except Exception:
+        pass
+    return 0.0
+
 # ── CORTE ──
 def obtener_resumen_dia(fecha=None):
     if not fecha: fecha = date.today().strftime("%Y-%m-%d")
@@ -403,20 +447,52 @@ def obtener_resumen_dia(fecha=None):
         "SELECT COALESCE(SUM(total), 0) as monto FROM ventas WHERE metodo_pago='Transferencia' AND DATE(created_at)=? AND created_at > ?",
         (fecha, desde)
     ).fetchone()
-    
+
+    # Ingresos del día (pagos recibidos fuera de ventas)
+    ing_row = conn.execute(
+        "SELECT COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN monto ELSE 0 END),0) as ef,"
+        " COALESCE(SUM(CASE WHEN metodo_pago='Tarjeta' THEN monto ELSE 0 END),0) as tar,"
+        " COALESCE(SUM(monto),0) as total"
+        " FROM ingresos WHERE DATE(created_at)=? AND created_at > ?",
+        (fecha, desde)
+    ).fetchone()
+    ing_det = conn.execute(
+        "SELECT concepto, monto, metodo_pago FROM ingresos WHERE DATE(created_at)=? AND created_at > ? ORDER BY created_at",
+        (fecha, desde)
+    ).fetchall()
+
     metodos = []
     if efectivo_row["monto"] > 0: metodos.append({"metodo_pago": "Efectivo", "monto": efectivo_row["monto"]})
     if tarjeta_row["monto"] > 0: metodos.append({"metodo_pago": "Tarjeta", "monto": tarjeta_row["monto"]})
     if transferencia_row["monto"] > 0: metodos.append({"metodo_pago": "Transferencia", "monto": transferencia_row["monto"]})
 
+    # Totales con ingresos incluidos
+    total_ef  = efectivo_row["monto"] + (ing_row["ef"] if ing_row else 0)
+    total_tar = tarjeta_row["monto"] + (ing_row["tar"] if ing_row else 0)
+    # Gastos se restan de tarjeta (no de efectivo)
+    efectivo_esperado = total_ef
+    tarjeta_esperado  = total_tar - rg["total_gastos"]
+    total_esperado    = efectivo_esperado + tarjeta_esperado
+
     conn.close()
-    return {"fecha": fecha, "desde": desde, "total_ventas": rv["total_ventas"], "num_ventas": rv["num_ventas"],
-            "ventas_por_tienda": [dict(r) for r in vt], "total_gastos": rg["total_gastos"],
-            "gastos_detalle": [dict(r) for r in gd],
-            "efectivo_esperado": rv["total_efectivo"] - gc["gastos_caja"],
-            "inversion": inv["inversion"],
-            "utilidad": rv["total_ventas"] - inv["inversion"] - rg["total_gastos"],
-            "metodos_pago": metodos}
+    return {
+        "fecha": fecha, "desde": desde,
+        "total_ventas": rv["total_ventas"], "num_ventas": rv["num_ventas"],
+        "ventas_por_tienda": [dict(r) for r in vt],
+        "total_gastos": rg["total_gastos"],
+        "gastos_detalle": [dict(r) for r in gd],
+        "total_ingresos": ing_row["total"] if ing_row else 0,
+        "ingresos_detalle": [dict(r) for r in ing_det],
+        "total_efectivo": total_ef,
+        "total_tarjeta": total_tar,
+        "efectivo_esperado": efectivo_esperado,
+        "tarjeta_esperado": tarjeta_esperado,
+        "total_esperado": total_esperado,
+        "inversion": inv["inversion"],
+        "utilidad": rv["total_ventas"] - inv["inversion"] - rg["total_gastos"],
+        "metodos_pago": metodos,
+        "fondo_apertura": get_fondo_apertura(),
+    }
 
 def registrar_corte(usuario_id, efectivo_real, fondo_caja=0.0, desglose=None):
     import json

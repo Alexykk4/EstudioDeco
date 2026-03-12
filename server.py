@@ -16,7 +16,7 @@ from modules.database import (
     quitar_item_orden, cerrar_mesa, obtener_items_comanda, get_connection,
     obtener_ordenes_mesa, renombrar_orden, cancelar_orden_mesa,
     obtener_todos_los_productos, crear_producto, actualizar_producto, eliminar_producto,
-    actualizar_item_orden
+    actualizar_item_orden, registrar_ingreso, set_fondo_apertura, get_fondo_apertura,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf
@@ -69,6 +69,15 @@ class CorteReq(BaseModel):
     efectivo_real: float
     fondo_caja: float = 0.0
     desglose: dict = {}
+
+class IngresoReq(BaseModel):
+    usuario_id: int
+    concepto: str = "Ingreso"
+    monto: float
+    metodo_pago: str = "Efectivo"
+
+class FondoReq(BaseModel):
+    monto: float
 
 class ImprimirCorteReq(BaseModel):
     usuario_id: int
@@ -210,16 +219,32 @@ async def api_cancelar_orden(oid: int):
 
 @app.post("/api/ordenes/{oid}/cerrar")
 async def api_cerrar(oid: int, r: CerrarMesaReq):
+    # Obtener items de comanda ANTES de cerrar (items de barra no impresos)
+    items_comanda = obtener_items_comanda(oid)
+
     venta = cerrar_mesa(oid, r.usuario_id, r.metodo_pago, r.monto_efectivo, r.monto_tarjeta, r.efectivo_recibido)
     if not venta: raise HTTPException(400, "No se pudo cerrar")
-    
+
     conn = get_connection()
     row = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (r.usuario_id,)).fetchone()
     conn.close()
-    
+
     cajero = row["nombre"] if row else "?"
     impreso = imprimir_ticket(venta, cajero)
-    
+
+    # Imprimir comanda automáticamente si hay items de barra
+    if items_comanda:
+        conn = get_connection()
+        o = conn.execute("""
+            SELECT o.nombre_cliente, m.numero
+            FROM ordenes o JOIN mesas m ON m.id = o.mesa_id WHERE o.id=?
+        """, (oid,)).fetchone()
+        conn.close()
+        label = f"MESA {o['numero']}" if o else f"ORDEN {oid}"
+        if o and o["nombre_cliente"]:
+            label += f" - {o['nombre_cliente']}"
+        imprimir_comanda(label, items_comanda)
+
     return {"venta": venta, "impreso": impreso, "cajero": cajero}
 
 # ── Ventas directas (sin mesa) ──
@@ -231,12 +256,32 @@ async def api_venta_directa(r: dict):
     conn.close()
     cajero = row["nombre"] if row else "?"
     impreso = imprimir_ticket(venta, cajero)
+    # Imprimir comanda automática para items de barra (tienda_id=1)
+    items_barra = [i for i in r["items"] if i.get("tienda_id") == 1]
+    if items_barra:
+        imprimir_comanda("VENTA DIRECTA", [{"nombre_producto": i["nombre"], "cantidad": i["cantidad"]} for i in items_barra])
     return {"venta": venta, "impreso": impreso, "cajero": cajero}
 
 # ── Gastos ──
 @app.post("/api/gastos")
 async def api_gasto(r: GastoReq):
-    registrar_gasto(r.usuario_id, r.tienda_id, r.concepto, r.monto)
+    registrar_gasto(r.usuario_id, r.tienda_id, r.concepto, r.monto, r.origen)
+    return {"ok": True}
+
+# ── Ingresos ──
+@app.post("/api/ingresos")
+async def api_ingreso(r: IngresoReq):
+    registrar_ingreso(r.usuario_id, r.concepto, r.monto, r.metodo_pago)
+    return {"ok": True}
+
+# ── Fondo de Apertura ──
+@app.get("/api/fondo")
+async def api_get_fondo():
+    return {"fondo": get_fondo_apertura()}
+
+@app.post("/api/fondo")
+async def api_set_fondo(r: FondoReq):
+    set_fondo_apertura(r.monto)
     return {"ok": True}
 
 # ── Corte ──

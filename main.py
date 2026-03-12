@@ -14,6 +14,7 @@ from modules.database import (
     init_db, listar_tiendas, obtener_productos, validar_nip,
     registrar_venta, registrar_gasto, obtener_resumen_dia,
     registrar_corte, obtener_stock,
+    registrar_ingreso, set_fondo_apertura, get_fondo_apertura,
 )
 from modules.printer import imprimir_ticket, preview_ticket_text
 from modules.pdf_report import generar_corte_pdf
@@ -113,6 +114,20 @@ class App(ctk.CTk):
             fg_color=MORADO_PASTEL, hover_color="#7E57C2",
             text_color=TEXTO_BLANCO,
             command=self._pedir_nip,
+        ).pack(side="left", padx=5)
+
+        ctk.CTkButton(
+            btn_frame, text="🏦 Abrir Caja", width=110,
+            fg_color=VERDE, hover_color="#66BB6A",
+            text_color=TEXTO_BLANCO,
+            command=self._abrir_caja_modal,
+        ).pack(side="left", padx=5)
+
+        ctk.CTkButton(
+            btn_frame, text="💰 Ingreso", width=100,
+            fg_color="#26A69A", hover_color="#00897B",
+            text_color=TEXTO_BLANCO,
+            command=self._registrar_ingreso_modal,
         ).pack(side="left", padx=5)
 
         ctk.CTkButton(
@@ -1186,6 +1201,111 @@ class App(ctk.CTk):
         ).pack(pady=20)
 
     # ══════════════════════════════════════════
+    #  ABRIR CAJA (Fondo inicial)
+    # ══════════════════════════════════════════
+    def _abrir_caja_modal(self):
+        if not self.usuario_actual:
+            self._pedir_nip(callback=self._abrir_caja_modal)
+            return
+
+        modal = ctk.CTkToplevel(self)
+        modal.title("Abrir Caja")
+        modal.geometry("380x220")
+        modal.configure(fg_color=FONDO)
+        modal.grab_set()
+        modal.resizable(False, False)
+
+        ctk.CTkLabel(
+            modal, text="🏦  Fondo de Caja Inicial",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=MORADO_PASTEL,
+        ).pack(pady=(20, 10))
+
+        ctk.CTkLabel(modal, text="Monto del fondo de apertura:", text_color=TEXTO).pack(anchor="w", padx=50)
+        entry_fondo = ctk.CTkEntry(modal, width=300, placeholder_text="$ 0.00")
+        entry_fondo.pack(pady=5)
+        fondo_actual = get_fondo_apertura()
+        if fondo_actual > 0:
+            entry_fondo.insert(0, str(fondo_actual))
+
+        def guardar():
+            try:
+                monto = float(entry_fondo.get().replace(",", "") or 0)
+                if monto < 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Error", "Monto inválido.", parent=modal)
+                return
+            set_fondo_apertura(monto)
+            messagebox.showinfo("Caja Abierta", f"Fondo registrado: ${monto:,.2f}", parent=modal)
+            modal.destroy()
+
+        ctk.CTkButton(
+            modal, text="✓ Guardar Fondo", width=200,
+            fg_color=VERDE, hover_color="#66BB6A",
+            text_color=TEXTO_BLANCO,
+            command=guardar,
+        ).pack(pady=20)
+
+    # ══════════════════════════════════════════
+    #  REGISTRAR INGRESO
+    # ══════════════════════════════════════════
+    def _registrar_ingreso_modal(self):
+        if not self.usuario_actual:
+            self._pedir_nip(callback=self._registrar_ingreso_modal)
+            return
+
+        modal = ctk.CTkToplevel(self)
+        modal.title("Registrar Ingreso")
+        modal.geometry("420x320")
+        modal.configure(fg_color=FONDO)
+        modal.grab_set()
+        modal.resizable(False, False)
+
+        ctk.CTkLabel(
+            modal, text="💰  Registrar Ingreso",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=MORADO_PASTEL,
+        ).pack(pady=(20, 10))
+
+        ctk.CTkLabel(modal, text="Concepto:", text_color=TEXTO).pack(anchor="w", padx=50)
+        entry_concepto = ctk.CTkEntry(modal, width=300, placeholder_text="Ej: Anticipo taller")
+        entry_concepto.pack(pady=5)
+
+        ctk.CTkLabel(modal, text="Monto:", text_color=TEXTO).pack(anchor="w", padx=50)
+        entry_monto = ctk.CTkEntry(modal, width=300, placeholder_text="$ 0.00")
+        entry_monto.pack(pady=5)
+
+        ctk.CTkLabel(modal, text="Método de pago:", text_color=TEXTO).pack(anchor="w", padx=50)
+        combo_metodo = ctk.CTkComboBox(modal, values=["Efectivo", "Tarjeta"], width=300)
+        combo_metodo.set("Efectivo")
+        combo_metodo.pack(pady=5)
+
+        def guardar():
+            concepto = entry_concepto.get().strip()
+            if not concepto:
+                messagebox.showerror("Error", "Ingresa un concepto.", parent=modal)
+                return
+            try:
+                monto = float(entry_monto.get())
+                if monto <= 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Error", "Monto inválido.", parent=modal)
+                return
+            metodo = combo_metodo.get()
+            registrar_ingreso(self.usuario_actual["id"], concepto, monto, metodo)
+            messagebox.showinfo("Ingreso registrado", f"${monto:,.2f} – {concepto} ({metodo})", parent=modal)
+            modal.destroy()
+
+        ctk.CTkButton(
+            modal, text="✓ Guardar Ingreso", width=200,
+            fg_color="#26A69A", hover_color="#00897B",
+            text_color=TEXTO_BLANCO,
+            command=guardar,
+        ).pack(pady=20)
+
+    # ══════════════════════════════════════════
     #  CORTE DE CAJA
     # ══════════════════════════════════════════
     def _hacer_corte(self):
@@ -1218,25 +1338,31 @@ class App(ctk.CTk):
 
         # ── Resumen del turno ──
         desde_str = resumen.get("desde", "")[-8:]  # HH:MM:SS
+        ef_total  = resumen.get("total_efectivo", resumen.get("efectivo_esperado", 0))
+        tar_total = resumen.get("total_tarjeta", 0)
+        tar_neto  = resumen.get("tarjeta_esperado", tar_total - resumen["total_gastos"])
+        total_gen = resumen.get("total_esperado", ef_total + tar_neto)
         ctk.CTkLabel(
             modal,
             text=(
                 f"Turno desde {desde_str}   "
                 f"Ventas: ${resumen['total_ventas']:,.2f}  ({resumen['num_ventas']} tickets)   "
-                f"Gastos: ${resumen['total_gastos']:,.2f}   "
-                f"Esperado: ${resumen['efectivo_esperado']:,.2f}"
+                f"Efectivo: ${ef_total:,.2f}   Tarjeta: ${tar_total:,.2f}   "
+                f"Gastos (tarjeta): -${resumen['total_gastos']:,.2f}   "
+                f"Total: ${total_gen:,.2f}"
             ),
             font=ctk.CTkFont(size=10), text_color=TEXTO_CLARO, wraplength=560,
         ).pack(pady=(0, 8))
 
-        # ── Fondo de caja ──
+        # ── Fondo de caja (pre-llenado desde apertura) ──
         fondo_frame = ctk.CTkFrame(modal, fg_color=FONDO_CARD, corner_radius=10)
         fondo_frame.pack(fill="x", padx=20, pady=(0, 8))
         ctk.CTkLabel(
             fondo_frame, text="🏦  Fondo de caja inicial:",
             font=ctk.CTkFont(size=12, weight="bold"), text_color=TEXTO,
         ).pack(side="left", padx=15, pady=8)
-        fondo_var = ctk.StringVar(value="0")
+        fondo_apertura = resumen.get("fondo_apertura", get_fondo_apertura())
+        fondo_var = ctk.StringVar(value=str(fondo_apertura))
         ctk.CTkEntry(
             fondo_frame, textvariable=fondo_var, width=130,
             font=ctk.CTkFont(size=13), justify="right",

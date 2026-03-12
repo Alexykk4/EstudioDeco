@@ -376,66 +376,89 @@ def imprimir_corte_caja(resumen: dict, cajero: str) -> bool:
     try:
         b = bytearray()
         b += INIT + CP437
-        
+
         # Header
         b += ALIGN_C + BOLD_ON + DBL_HW
         b += _txt('CORTE DE CAJA\n')
         b += NORMAL + BOLD_OFF + FONT_B
         b += _txt('ESTUDIO DECO\n\n')
         b += FONT_A
-        
+
         # Info
         b += ALIGN_L
         b += _txt(f'Fecha   : {resumen["fecha"]}\n')
         b += _txt(f'Cajero  : {cajero}\n')
         b += _txt(f'Impreso : {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n')
         b += _txt(_THIN_LINE + '\n')
-        
+
         # Ventas
         b += BOLD_ON + _txt('INGRESOS\n') + BOLD_OFF
         b += _txt(f'Total Ventas ({resumen["num_ventas"]} tkts): ${resumen["total_ventas"]:.2f}\n')
         for t in resumen.get("ventas_por_tienda", []):
             b += _txt(f'  {t["tienda"][:16]:<16}: ${t["total"]:.2f}\n')
-            
+
+        # Ingresos adicionales
+        if resumen.get("total_ingresos", 0) > 0:
+            b += _txt(f'Ingresos Extra       : ${resumen["total_ingresos"]:.2f}\n')
+            for i in resumen.get("ingresos_detalle", []):
+                b += _txt(f'  {i["concepto"][:14]:<14} ({i["metodo_pago"][:3]}): ${i["monto"]:.2f}\n')
+
         b += _txt(_THIN_LINE + '\n')
-        
+
         # Gastos
         b += BOLD_ON + _txt('EGRESOS\n') + BOLD_OFF
         b += _txt(f'Total Gastos         : ${resumen["total_gastos"]:.2f}\n')
         if resumen.get("gastos_detalle"):
             for g in resumen["gastos_detalle"]:
                 b += _txt(f'  {g["concepto"][:16]:<16}: ${g["monto"]:.2f}\n')
-                
+
         b += _txt(_THIN_LINE + '\n')
-        
+
         # Utilidad
         b += BOLD_ON + _txt('RENDIMIENTO DEL DIA\n') + BOLD_OFF
-        b += _txt(f'Ingresos Totales     : ${resumen["total_ventas"]:.2f}\n')
         inversion = resumen.get("inversion", 0)
         utilidad = resumen.get("utilidad", resumen["total_ventas"] - resumen["total_gastos"])
+        b += _txt(f'Ingresos Totales     : ${resumen["total_ventas"]:.2f}\n')
         b += _txt(f'- Inversion Prod.    : ${inversion:.2f}\n')
         b += _txt(f'- Gastos Operativos  : ${resumen["total_gastos"]:.2f}\n')
-        b += _txt(f'--------------------------------\n')
+        b += _txt('--------------------------------\n')
         b += _txt(f'UTILIDAD BRUTA       : ${utilidad:.2f}\n')
-        
+
         b += _txt(_THIN_LINE + '\n')
-        
-        # Desglose de Caja
+
+        # Desglose por método de pago (efectivo + tarjeta por separado)
         b += BOLD_ON + _txt('DESGLOSE DE CAJA\n') + BOLD_OFF
-        for m in resumen.get("metodos_pago", []):
-            b += _txt(f'{m["metodo_pago"][:20]:<20} : ${m["monto"]:.2f}\n')
-            
-        b += BOLD_ON + _txt(f'\nEFECTIVO ESPERADO EN CAJA:\n') + BOLD_OFF
-        b += DBL_HW + BOLD_ON + ALIGN_C + _txt(f'${resumen["efectivo_esperado"]:.2f}\n') + NORMAL + BOLD_OFF + ALIGN_L
-        
+        total_ef  = resumen.get("total_efectivo", resumen.get("efectivo_esperado", 0))
+        total_tar = resumen.get("total_tarjeta", 0)
+        total_gas = resumen.get("total_gastos", 0)
+        tar_neto  = resumen.get("tarjeta_esperado", total_tar - total_gas)
+        total_esp = resumen.get("total_esperado", total_ef + tar_neto)
+
+        b += _txt(f'{"Efectivo (ventas)":<22}: ${total_ef:.2f}\n')
+        b += _txt(f'{"Tarjeta/Transfer.":<22}: ${total_tar:.2f}\n')
+        b += _txt(f'{"Gastos (se rest. tarj.)":<22}: -${total_gas:.2f}\n')
+        b += _txt('--------------------------------\n')
+
+        # Efectivo en caja
+        b += BOLD_ON + _txt('EFECTIVO EN CAJA:\n') + BOLD_OFF
+        b += DBL_HW + BOLD_ON + ALIGN_C + _txt(f'${total_ef:.2f}\n') + NORMAL + BOLD_OFF + ALIGN_L
+
+        # Tarjeta neta
+        b += BOLD_ON + _txt('TARJETA (descontando gastos):\n') + BOLD_OFF
+        b += DBL_HW + BOLD_ON + ALIGN_C + _txt(f'${tar_neto:.2f}\n') + NORMAL + BOLD_OFF + ALIGN_L
+
+        # Total general
+        b += BOLD_ON + _txt('TOTAL GENERAL:\n') + BOLD_OFF
+        b += DBL_HW + BOLD_ON + ALIGN_C + _txt(f'${total_esp:.2f}\n') + NORMAL + BOLD_OFF + ALIGN_L
+
         b += _feed(2)
         b += ALIGN_C
         b += _txt('Firma del Cajero\n')
         b += _txt('_________________________\n')
         b += _txt(cajero + '\n')
-        
+
         b += _feed(4) + CUT
-        
+
         ok = _enviar(bytes(b))
         print(f"[PRINTER] Corte {'OK' if ok else 'FALLO'}")
         return ok
