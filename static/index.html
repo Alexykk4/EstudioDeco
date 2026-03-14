@@ -1696,13 +1696,14 @@ async function loadCatalog(){
 }
 
 function showCatalogModal(p=null){
+  const isPromo = p ? (tiendas.find(t=>t.id===p.tienda_id)?.nombre==='Promociones') : false;
   const opts = tiendas.map(t=>`<option value="${t.id}" ${p&&p.tienda_id===t.id?'selected':''}>${t.nombre}</option>`).join('');
   showModal(`<div class="modal-title">${p?'✏️ Editar':'📦 Nuevo'} Producto</div>
     <div class="resumen-grid" style="grid-template-columns:1fr 1fr; margin:0 0 10px 0;">
-      <div class="field" style="margin:0"><label>Tienda</label><select id="catTienda" class="input">${opts}</select></div>
+      <div class="field" style="margin:0"><label>Tienda</label><select id="catTienda" class="input" onchange="onCatTiendaChange()">${opts}</select></div>
       <div class="field" style="margin:0"><label>Categoría</label><select id="catCat" class="input"><option value="">Ninguna</option><option value="roles" ${p&&p.categoria_producto==='roles'?'selected':''}>Roles</option><option value="talleres" ${p&&p.categoria_producto==='talleres'?'selected':''}>Talleres</option><option value="individuales" ${p&&p.categoria_producto==='individuales'?'selected':''}>Individuales</option></select></div>
     </div>
-    <div class="field"><label>Nombre</label><input type="text" id="catNombre" class="input" value="${p?p.nombre:''}"></div>
+    <div class="field"><label>Nombre del paquete / producto</label><input type="text" id="catNombre" class="input" value="${p?p.nombre:''}"></div>
     <div class="resumen-grid" style="grid-template-columns:1fr 1fr; margin:0 0 10px 0;">
       <div class="field" style="margin:0"><label>Precio de Venta</label><input type="number" id="catPrecio" class="input" step="0.01" value="${p?p.precio:''}"></div>
       <div class="field" style="margin:0"><label>Costo (Inversión)</label><input type="number" id="catCosto" class="input" step="0.01" value="${p?(p.costo||0):''}"></div>
@@ -1716,10 +1717,28 @@ function showCatalogModal(p=null){
         <label for="catAbierto" style="margin:0;cursor:pointer;">Es producto de precio abierto (preguntar importe al vender)</label>
     </div>
     <div class="field" style="display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" id="catBundle" ${p&&p.es_bundle?'checked':''} style="width:16px;height:16px;accent-color:var(--terracotta);">
-        <label for="catBundle" style="margin:0;cursor:pointer;">📦 Es paquete/bundle (incluye artículos de otras tiendas)</label>
+        <input type="checkbox" id="catBundle" ${(p&&p.es_bundle)||isPromo?'checked':''} onchange="onCatBundleChange()" style="width:16px;height:16px;accent-color:var(--terracotta);">
+        <label for="catBundle" style="margin:0;cursor:pointer;">📦 Es paquete (incluye artículos de varias tiendas)</label>
+    </div>
+    <div id="bundleHint" style="display:${(p&&p.es_bundle)||isPromo?'block':'none'};background:var(--terracotta-light);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;color:#7B3F00;margin-top:6px;">
+      ${p&&p.es_bundle ? `✅ Paquete guardado. <strong>Guarda primero</strong> cualquier cambio de nombre/precio y luego edita los artículos con el botón <strong>📦</strong> en la tabla.`
+        : '⬆️ Guarda el paquete primero. Después podrás agregar los artículos que lo forman.'}
     </div>
     <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="saveProduct(${p?p.id:null})">Guardar</button></div>`);
+}
+
+function onCatTiendaChange(){
+  const sel = document.getElementById('catTienda');
+  const nombre = sel.options[sel.selectedIndex]?.text || '';
+  if(nombre === 'Promociones'){
+    document.getElementById('catBundle').checked = true;
+    onCatBundleChange();
+  }
+}
+function onCatBundleChange(){
+  const checked = document.getElementById('catBundle').checked;
+  const hint = document.getElementById('bundleHint');
+  if(hint) hint.style.display = checked ? 'block' : 'none';
 }
 
 async function saveProduct(id){
@@ -1890,6 +1909,8 @@ async function doAnularVenta(vid) {
 }
 
 /* ── BUNDLE / PAQUETES ── */
+let _bcAllProds = [];
+
 async function showBundleModal(bid, nombre, precioBundle) {
   let comps;
   try { comps = await api(`/bundle-components/${bid}`); } catch(e) { toast('❌',e.message,'var(--red)'); return; }
@@ -1908,9 +1929,12 @@ async function showBundleModal(bid, nombre, precioBundle) {
     </div>`).join('')
     : '<div style="padding:12px 0;color:var(--text-muted);font-size:13px;">Sin componentes aún</div>';
 
-  // Opciones de todos los productos para agregar
-  const allProds = allProductsGlobal || [];
-  const prodOpts = allProds.filter(p=>!p.es_bundle).map(p=>`<option value="${p.id}" data-precio="${p.precio}">${p.nombre} (${p.tienda_nombre}) — $${p.precio.toFixed(2)}</option>`).join('');
+  // Cache de productos no-bundle para filtrado dinámico
+  _bcAllProds = (allProductsGlobal || []).filter(p=>!p.es_bundle);
+
+  // Tiendas únicas
+  const tiendas = [...new Map(_bcAllProds.map(p=>[p.tienda_id, p.tienda_nombre])).entries()];
+  const tiendaOpts = tiendas.map(([id,nom])=>`<option value="${id}">${nom}</option>`).join('');
 
   showModal(`<div class="modal-body">
     <div class="modal-title">📦 ${nombre}</div>
@@ -1918,8 +1942,17 @@ async function showBundleModal(bid, nombre, precioBundle) {
     <div style="max-height:220px;overflow-y:auto;margin-bottom:14px;">${filas}</div>
     <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">+ Agregar componente</div>
-      <div class="field" style="margin-bottom:8px;"><label>Producto</label>
-        <select id="bcProd" class="input" onchange="autoBcPrecio()"><option value="">— Selecciona —</option>${prodOpts}</select>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <div class="field" style="margin:0;flex:1;"><label>Tienda</label>
+          <select id="bcTienda" class="input" onchange="filterBcTienda()">
+            <option value="">— Elige tienda —</option>${tiendaOpts}
+          </select>
+        </div>
+        <div class="field" style="margin:0;flex:2;"><label>Artículo</label>
+          <select id="bcProd" class="input" onchange="autoBcPrecio()" disabled>
+            <option value="">— Elige tienda primero —</option>
+          </select>
+        </div>
       </div>
       <div style="display:flex;gap:8px;">
         <div class="field" style="margin:0;flex:1;"><label>Cantidad</label><input type="number" id="bcQty" class="input" value="1" min="1" step="1"></div>
@@ -1932,6 +1965,17 @@ async function showBundleModal(bid, nombre, precioBundle) {
     <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
   </div></div>`);
   const m=document.querySelector('#modals .modal'); m.style.width='560px'; m.style.maxWidth='98vw';
+}
+
+function filterBcTienda(){
+  const tiendaId = parseInt(document.getElementById('bcTienda').value);
+  const prodSel = document.getElementById('bcProd');
+  document.getElementById('bcPrecio').value = '';
+  if(!tiendaId){ prodSel.innerHTML='<option value="">— Elige tienda primero —</option>'; prodSel.disabled=true; return; }
+  const opts = _bcAllProds.filter(p=>p.tienda_id===tiendaId)
+    .map(p=>`<option value="${p.id}" data-precio="${p.precio}">${p.nombre} — $${p.precio.toFixed(2)}</option>`).join('');
+  prodSel.innerHTML = `<option value="">— Selecciona artículo —</option>${opts}`;
+  prodSel.disabled = false;
 }
 
 function autoBcPrecio(){

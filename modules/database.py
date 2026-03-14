@@ -36,7 +36,9 @@ def init_db():
         )""",
         "INSERT OR IGNORE INTO config (clave, valor) VALUES ('fondo_turno', '{\"monto\":0,\"fecha\":\"\"}')",
         "UPDATE tiendas SET nombre='Mack&M' WHERE nombre='Mack'",
+        "ALTER TABLE productos ADD COLUMN es_precio_abierto INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE productos ADD COLUMN es_bundle INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE productos ADD COLUMN categoria_producto TEXT NOT NULL DEFAULT ''",
         """CREATE TABLE IF NOT EXISTS bundle_components (
             id                    INTEGER PRIMARY KEY AUTOINCREMENT,
             bundle_producto_id    INTEGER NOT NULL,
