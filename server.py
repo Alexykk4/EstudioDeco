@@ -18,6 +18,7 @@ from modules.database import (
     obtener_todos_los_productos, crear_producto, actualizar_producto, eliminar_producto,
     actualizar_item_orden, registrar_ingreso, set_fondo_apertura, get_fondo_apertura,
     obtener_ventas_dia, corregir_venta, anular_venta,
+    obtener_bundle_components, agregar_bundle_component, eliminar_bundle_component,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf
@@ -88,6 +89,11 @@ class CorregirVentaReq(BaseModel):
     monto_efectivo: float = 0.0
     monto_tarjeta: float = 0.0
 
+class BundleComponentReq(BaseModel):
+    componente_id: int
+    cantidad: int = 1
+    precio_asignado: float
+
 class ProductReq(BaseModel):
     tienda_id: int
     nombre: str
@@ -97,6 +103,7 @@ class ProductReq(BaseModel):
     stock_minimo: int
     codigo: str = ""
     es_precio_abierto: bool = False
+    es_bundle: int = 0
     categoria_producto: str = ""
 
 # ── Pages ──
@@ -123,12 +130,12 @@ async def api_get_catalog(): return obtener_todos_los_productos()
 
 @app.post("/api/catalog")
 async def api_post_catalog(r: ProductReq):
-    pid = crear_producto(r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo, 1 if r.es_precio_abierto else 0, r.categoria_producto)
+    pid = crear_producto(r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo, 1 if r.es_precio_abierto else 0, r.es_bundle, r.categoria_producto)
     return {"id": pid}
 
 @app.put("/api/catalog/{pid}")
 async def api_put_catalog(pid: int, r: ProductReq):
-    actualizar_producto(pid, r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo, 1 if r.es_precio_abierto else 0, r.categoria_producto)
+    actualizar_producto(pid, r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo, 1 if r.es_precio_abierto else 0, r.es_bundle, r.categoria_producto)
     return {"ok": True}
 
 @app.delete("/api/catalog/{pid}")
@@ -366,6 +373,20 @@ async def api_corte(r: CorteReq):
     resumen = registrar_corte(r.usuario_id, r.efectivo_real, fondo_caja=r.fondo_caja, desglose=r.desglose)
     generar_corte_pdf(resumen, cajero)
     return {"resumen": resumen}
+
+# ── Bundle / Promociones ──
+@app.get("/api/bundle-components/{bid}")
+async def api_get_bundle(bid: int): return obtener_bundle_components(bid)
+
+@app.post("/api/bundle-components/{bid}")
+async def api_add_bundle(bid: int, r: BundleComponentReq):
+    agregar_bundle_component(bid, r.componente_id, r.cantidad, r.precio_asignado)
+    return {"ok": True}
+
+@app.delete("/api/bundle-components/{cid}")
+async def api_del_bundle(cid: int):
+    eliminar_bundle_component(cid)
+    return {"ok": True}
 
 # ── Ventas del día ──
 @app.get("/api/ventas/hoy")
