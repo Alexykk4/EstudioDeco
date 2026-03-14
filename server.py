@@ -19,6 +19,7 @@ from modules.database import (
     actualizar_item_orden, registrar_ingreso, set_fondo_apertura, get_fondo_apertura,
     obtener_ventas_dia, corregir_venta, anular_venta,
     obtener_bundle_components, agregar_bundle_component, eliminar_bundle_component,
+    obtener_resumen_semana,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf
@@ -317,52 +318,8 @@ async def api_imprimir_corte(r: ImprimirCorteReq):
 async def api_resumen(): return obtener_resumen_dia()
 
 @app.get("/api/report/semanal")
-async def api_resumen_semanal():
-    from datetime import date, timedelta
-    conn = get_connection()
-    dias = []
-    total_semana = 0.0
-    total_efectivo = 0.0
-    total_tarjeta = 0.0
-    total_gastos_semana = 0.0
-
-    for i in range(6, -1, -1):
-        fecha = (date.today() - timedelta(days=i)).strftime("%Y-%m-%d")
-        rv = conn.execute(
-            "SELECT COALESCE(SUM(total),0) as tv, COALESCE(SUM(monto_efectivo),0) as te, COALESCE(SUM(monto_tarjeta),0) as tt, COUNT(*) as nv FROM ventas WHERE DATE(created_at)=?",
-            (fecha,)
-        ).fetchone()
-        rg = conn.execute(
-            "SELECT COALESCE(SUM(monto),0) as tg FROM gastos WHERE DATE(created_at)=?",
-            (fecha,)
-        ).fetchone()
-        por_tienda = conn.execute(
-            "SELECT t.nombre, COALESCE(SUM(vd.subtotal),0) as subtotal FROM venta_detalle vd JOIN ventas v ON v.id=vd.venta_id JOIN tiendas t ON t.id=vd.tienda_id WHERE DATE(v.created_at)=? GROUP BY t.nombre",
-            (fecha,)
-        ).fetchall()
-        total_semana += rv["tv"]
-        total_efectivo += rv["te"]
-        total_tarjeta += rv["tt"]
-        total_gastos_semana += rg["tg"]
-        dias.append({
-            "fecha": fecha,
-            "total_ventas": rv["tv"],
-            "num_ventas": rv["nv"],
-            "efectivo": rv["te"],
-            "tarjeta": rv["tt"],
-            "gastos": rg["tg"],
-            "por_tienda": [{"tienda": r["nombre"], "total": r["subtotal"]} for r in por_tienda],
-        })
-
-    conn.close()
-    return {
-        "dias": dias,
-        "total_semana": total_semana,
-        "total_efectivo": total_semana and total_efectivo,
-        "total_tarjeta": total_semana and total_tarjeta,
-        "total_gastos": total_gastos_semana,
-        "utilidad": total_semana - total_gastos_semana,
-    }
+async def api_resumen_semanal(desde: str = None, hasta: str = None):
+    return obtener_resumen_semana(desde, hasta)
 
 @app.post("/api/corte")
 async def api_corte(r: CorteReq):

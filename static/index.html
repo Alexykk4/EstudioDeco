@@ -416,6 +416,7 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
     <button class="btn btn-ghost" onclick="showVentasHoyModal()">📋 Ventas</button>
     <button class="btn btn-ghost" onclick="showPreCorteModal()">👁 Pre-Corte</button>
     <button class="btn btn-gold" onclick="showCorteModal()">📊 Corte</button>
+    <button class="btn" style="background:#5C6BC0;color:white;" onclick="showCorteSemanalModal(0)">📅 Semanal</button>
     <button class="btn btn-ghost" onclick="showGastoModal()">💸 Gasto</button>
   </header>
 
@@ -1596,12 +1597,30 @@ async function showCorteModal(){
   const fondoApertura=r.fondo_apertura||0;
   const desdeStr=r.desde?r.desde.slice(11,19):'00:00:00';
   const sabroCard=r.sabrodulce_roles>0?`<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:var(--radius-sm);padding:8px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:#6D4C41;">🥐 Pago Sabrodulce · ${r.sabrodulce_roles} roles</span><span style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#E65100;">$${(r.sabrodulce_pago||0).toFixed(2)}</span></div>`:'';
+
+  // Charts data
+  const segsPago=[
+    {label:'Efectivo',  value:r.total_efectivo||0,  color:'#4CAF50'},
+    {label:'Tarjeta',   value:r.total_tarjeta||0,   color:'#C9A84C'},
+    {label:'Transfer.', value:(r.metodos_pago||[]).find(m=>m.metodo_pago==='Transferencia')?.monto||0, color:'#26A69A'},
+  ].filter(s=>s.value>0);
+  const legendPago=segsPago.map(s=>`<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:10px;height:10px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0;"></span>${s.label}<br><strong style="font-size:12px;">$${s.value.toFixed(0)}</strong></div>`).join('');
+
+  const TIENDA_COLORS=['#7C9A7E','#C4755A','#C9A84C','#26A69A','#5C6BC0','#EC407A','#8D6E63'];
+  const barsTienda=(r.ventas_por_tienda||[]).map((t,i)=>({label:t.tienda, value:t.neto??t.total, color:TIENDA_COLORS[i%TIENDA_COLORS.length]}));
+
+  // Canceladas del día
+  const canceladasBadge=r.num_canceladas>0?`<span style="background:var(--red);color:white;border-radius:4px;padding:1px 7px;font-size:11px;margin-left:8px;">${r.num_canceladas} cancelada(s)</span>`:'';
+
   const BILLS=[1000,500,200,100,50,20], COINS=[10,5,2,1,0.5];
   const bRows=BILLS.map(d=>`<div class="denom-row"><span class="denom-label">$${d.toLocaleString()}</span><input type="number" id="b${d}" class="input denom-input" value="0" min="0" oninput="calcCorte(${esp})"></div>`).join('');
   const cRows=COINS.map(d=>`<div class="denom-row"><span class="denom-label">$${d%1?d:Math.trunc(d)}</span><input type="number" id="m${d}" class="input denom-input" value="0" min="0" oninput="calcCorte(${esp})"></div>`).join('');
   showModal(`<div class="modal-body">
-    <div class="modal-title">📊 Corte de Caja</div><div class="modal-sub">Turno desde ${desdeStr} · ${r.num_ventas} tickets</div>
-    <div class="resumen-grid" style="margin-bottom:12px;grid-template-columns:repeat(3,1fr);">
+    <div class="modal-title">📊 Corte de Caja</div>
+    <div class="modal-sub">Turno desde ${desdeStr} · ${r.num_ventas} ticket${r.num_ventas!==1?'s':''}${canceladasBadge}</div>
+
+    <!-- Tarjetas de totales -->
+    <div class="resumen-grid" style="margin-bottom:10px;grid-template-columns:repeat(3,1fr);">
       <div class="res-card"><div class="res-label">💵 Efectivo</div><div class="res-val v">$${(r.total_efectivo||0).toFixed(2)}</div></div>
       <div class="res-card"><div class="res-label">💳 Tarjeta</div><div class="res-val" style="color:var(--gold)">$${(r.total_tarjeta||0).toFixed(2)}</div></div>
       <div class="res-card"><div class="res-label">📦 Gastos</div><div class="res-val g">-$${r.total_gastos.toFixed(2)}</div></div>
@@ -1611,6 +1630,22 @@ async function showCorteModal(){
       <div class="res-card" style="background:#E3F2FD"><div class="res-label" style="color:#1565C0">Tarjeta Neta</div><div class="res-val" style="color:#1565C0">$${tarEsp.toFixed(2)}</div></div>
       <div class="res-card" style="background:var(--sage-light)"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${totalEsp.toFixed(2)}</div></div>
     </div>
+
+    <!-- Gráficas -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Métodos de pago</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${svgDonut(segsPago,100)}
+          <div style="display:flex;flex-direction:column;gap:6px;">${legendPago}</div>
+        </div>
+      </div>
+      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;overflow:hidden;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Ventas neto por tienda</div>
+        ${barsTienda.length ? svgBarsH(barsTienda, 140, 20, 6) : '<span style="font-size:11px;color:var(--text-muted)">Sin datos</span>'}
+      </div>
+    </div>
+
     ${sabroCard}
     <div class="field"><label>🏦 Fondo de caja inicial</label><input type="number" id="cFondo" class="input" value="${fondoApertura}" min="0" placeholder="0.00" oninput="calcCorte(${esp})"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
@@ -1633,7 +1668,7 @@ async function showCorteModal(){
     </div>
   </div>`);
   const m = document.querySelector('#modals .modal');
-  m.style.width = '640px';
+  m.style.width = '760px';
   m.style.maxWidth = '98vw';
 }
 async function printCorteDia(){
@@ -2132,6 +2167,166 @@ async function showPreCorteModal(){
     </div>
   </div>`);
   const m=document.querySelector('#modals .modal'); m.style.width='560px'; m.style.maxWidth='98vw';
+}
+
+/* ── SVG CHART HELPERS ── */
+function svgDonut(segments, size=130) {
+  const total = segments.reduce((s,x)=>s+x.value, 0);
+  if(!total) return `<svg width="${size}" height="${size}"><circle cx="${size/2}" cy="${size/2}" r="${size*0.35}" fill="none" stroke="#eee" stroke-width="${size*0.18}"/><text x="${size/2}" y="${size/2+4}" text-anchor="middle" font-size="11" fill="#aaa">Sin datos</text></svg>`;
+  const r=size*0.35, cx=size/2, cy=size/2, circ=2*Math.PI*r;
+  let offset=0, arcs='';
+  for(const seg of segments){
+    if(!seg.value) continue;
+    const dash=(seg.value/total)*circ;
+    arcs+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${size*0.19}" stroke-dasharray="${dash} ${circ-dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" opacity="0.92"/>`;
+    offset+=dash;
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f0f0f0" stroke-width="${size*0.19}"/>${arcs}<circle cx="${cx}" cy="${cy}" r="${r*0.56}" fill="white"/></svg>`;
+}
+
+function svgBarsH(items, barMaxW=170, barH=22, gap=7) {
+  if(!items.length) return '';
+  const max=Math.max(...items.map(i=>i.value),1), labelW=92, valueW=72;
+  const W=labelW+barMaxW+valueW, H=items.length*(barH+gap);
+  const bars=items.map((item,i)=>{
+    const y=i*(barH+gap), w=Math.max(3,(item.value/max)*barMaxW);
+    const lbl=item.label.length>13?item.label.slice(0,12)+'…':item.label;
+    const val='$'+(item.value||0).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0});
+    return `<text x="${labelW-5}" y="${y+barH*0.72}" text-anchor="end" font-size="11" fill="#555">${lbl}</text><rect x="${labelW}" y="${y+2}" width="${w}" height="${barH-4}" rx="5" fill="${item.color||'#7C9A7E'}" opacity="0.85"/><text x="${labelW+w+5}" y="${y+barH*0.72}" font-size="11" font-weight="700" fill="#333">${val}</text>`;
+  }).join('');
+  return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${bars}</svg>`;
+}
+
+function svgBarsV(items, maxH=90, barW=32, gap=8) {
+  if(!items.length) return '';
+  const maxVal=Math.max(...items.map(i=>i.value),1);
+  const W=items.length*(barW+gap), H=maxH+28;
+  const bars=items.map((item,i)=>{
+    const x=i*(barW+gap), bh=Math.max(2,(item.value/maxVal)*maxH), y=maxH-bh;
+    const lbl=item.label.length>3?item.label.slice(0,3):item.label;
+    const val=item.value>0?'$'+(item.value/1000).toFixed(1)+'k':'';
+    return `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="5" fill="${item.color||'#7C9A7E'}" opacity="0.85"/><text x="${x+barW/2}" y="${maxH+13}" text-anchor="middle" font-size="10" fill="#666">${lbl}</text>${item.value>0?`<text x="${x+barW/2}" y="${y-3}" text-anchor="middle" font-size="9" font-weight="700" fill="#444">${val}</text>`:''}`;
+  }).join('');
+  return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${bars}</svg>`;
+}
+
+/* ── CORTE SEMANAL ── */
+let _semanaOffset=0;
+async function showCorteSemanalModal(offset){
+  if(offset!==undefined) _semanaOffset=offset;
+  if(!usuario) return showNipModal(()=>showCorteSemanalModal());
+  if(usuario.perfil!=='Administrador'){toast('⚠️','Solo Administrador','var(--gold)');return;}
+
+  // Calcular rango de la semana (Lunes a Domingo)
+  const hoy=new Date(); hoy.setHours(12,0,0,0);
+  const lunes=new Date(hoy); lunes.setDate(hoy.getDate()-hoy.getDay()+1+_semanaOffset*7);
+  const domingo=new Date(lunes); domingo.setDate(lunes.getDate()+6);
+  const fmt=d=>d.toISOString().slice(0,10);
+  const desde=fmt(lunes), hasta=fmt(domingo);
+  const fmtLabel=d=>d.toLocaleDateString('es-MX',{day:'numeric',month:'short'});
+
+  let r;
+  try{ r=await api(`/report/semanal?desde=${desde}&hasta=${hasta}`); }
+  catch(e){toast('❌',e.message,'var(--red)');return;}
+
+  const DIAS_SEMANA=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  const TIENDA_COLORS=['#7C9A7E','#C4755A','#C9A84C','#26A69A','#5C6BC0','#EC407A','#8D6E63'];
+
+  // Donut métodos de pago
+  const segsPago=[
+    {label:'Efectivo', value:r.total_efectivo, color:'#4CAF50'},
+    {label:'Tarjeta',  value:r.total_tarjeta,  color:'#C9A84C'},
+    {label:'Transfer.',value:r.total_transferencia||0, color:'#26A69A'},
+  ].filter(s=>s.value>0);
+
+  // Barras verticales por día (lunes-domingo)
+  const diasMap={};
+  (r.diario||[]).forEach(d=>{diasMap[d.fecha]=d;});
+  const barsDia=[];
+  for(let i=0;i<7;i++){
+    const d=new Date(lunes); d.setDate(lunes.getDate()+i);
+    const key=fmt(d);
+    barsDia.push({label:DIAS_SEMANA[i], value:diasMap[key]?.total||0, color: d<=hoy?'#7C9A7E':'#ddd'});
+  }
+
+  // Tabla por tienda
+  const tiendaRows=(r.ventas_por_tienda||[]).map((t,i)=>`
+    <tr>
+      <td style="padding:7px 10px;font-size:12px;display:flex;align-items:center;gap:6px;">
+        <span style="width:10px;height:10px;border-radius:50%;background:${TIENDA_COLORS[i%TIENDA_COLORS.length]};flex-shrink:0;display:inline-block;"></span>
+        ${t.tienda}
+      </td>
+      <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;">$${t.total.toFixed(2)}</td>
+      <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;color:var(--red);">${t.comision>0?'-$'+t.comision.toFixed(2):'-'}</td>
+      <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;text-align:right;color:var(--sage-dark);">$${t.neto.toFixed(2)}</td>
+    </tr>`).join('');
+
+  const sabroCard=r.sabrodulce_roles>0?`
+    <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:var(--radius-sm);padding:10px 14px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:12px;color:#6D4C41;">🥐 Pago Sabrodulce · ${r.sabrodulce_roles} roles × $15</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#E65100;">$${r.sabrodulce_pago.toFixed(2)}</span>
+    </div>`:'';
+
+  const legend=segsPago.map(s=>`<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:10px;height:10px;border-radius:50%;background:${s.color};display:inline-block;"></span>${s.label}: <strong>$${s.value.toFixed(0)}</strong></div>`).join('');
+
+  showModal(`<div class="modal-body">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:18px;line-height:1;" onclick="showCorteSemanalModal(${_semanaOffset-1})">‹</button>
+      <div style="flex:1;text-align:center;">
+        <div class="modal-title" style="margin:0;">📅 Corte Semanal</div>
+        <div class="modal-sub" style="margin:0;">${fmtLabel(lunes)} – ${fmtLabel(domingo)} · ${r.num_ventas} ticket${r.num_ventas!==1?'s':''}${r.num_canceladas?' · '+r.num_canceladas+' cancelada(s)':''}</div>
+      </div>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:18px;line-height:1;" onclick="showCorteSemanalModal(${_semanaOffset+1})" ${_semanaOffset>=0?'disabled':''}>›</button>
+    </div>
+
+    <!-- Tarjetas resumen -->
+    <div class="resumen-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">
+      <div class="res-card"><div class="res-label">Total Semana</div><div class="res-val" style="color:var(--sage-dark);">$${r.total_ventas.toFixed(0)}</div></div>
+      <div class="res-card"><div class="res-label">💵 Efectivo</div><div class="res-val v">$${r.total_efectivo.toFixed(0)}</div></div>
+      <div class="res-card"><div class="res-label">💳 Tarjeta</div><div class="res-val" style="color:var(--gold);">$${r.total_tarjeta.toFixed(0)}</div></div>
+      <div class="res-card"><div class="res-label">📦 Gastos</div><div class="res-val g">-$${r.total_gastos.toFixed(0)}</div></div>
+    </div>
+
+    <!-- Gráfica semanal -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;align-items:start;">
+      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Ventas por día</div>
+        <div style="overflow-x:auto;">${svgBarsV(barsDia, 80, 28, 6)}</div>
+      </div>
+      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Métodos de pago</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${svgDonut(segsPago,90)}
+          <div style="display:flex;flex-direction:column;gap:5px;">${legend}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla por tienda -->
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Pago por tienda (neto tras comisión)</div>
+    <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:2px;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:var(--bg-warm);font-size:10px;text-transform:uppercase;color:var(--text-secondary);">
+          <th style="padding:6px 10px;text-align:left;font-weight:700;">Tienda</th>
+          <th style="padding:6px 10px;text-align:right;font-weight:700;">Bruto</th>
+          <th style="padding:6px 10px;text-align:right;font-weight:700;">Comisión</th>
+          <th style="padding:6px 10px;text-align:right;font-weight:700;">A PAGAR</th>
+        </tr></thead>
+        <tbody>${tiendaRows||'<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">Sin ventas en este período</td></tr>'}</tbody>
+        ${r.ventas_por_tienda?.length?`<tfoot><tr style="background:var(--sage-light);">
+          <td style="padding:7px 10px;font-size:12px;font-weight:700;">TOTAL</td>
+          <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;font-weight:700;">$${r.total_ventas.toFixed(2)}</td>
+          <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;color:var(--red);font-weight:700;">-$${(r.ventas_por_tienda.reduce((s,t)=>s+t.comision,0)).toFixed(2)}</td>
+          <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;text-align:right;color:var(--sage-dark);">$${(r.ventas_por_tienda.reduce((s,t)=>s+t.neto,0)).toFixed(2)}</td>
+        </tr></tfoot>`:''}
+      </table>
+    </div>
+    ${sabroCard}
+  </div>
+  <div class="modal-footer"><div class="modal-btns" style="margin-top:0">
+    <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+  </div></div>`);
+  const m=document.querySelector('#modals .modal'); m.style.width='700px'; m.style.maxWidth='98vw';
 }
 
 init();

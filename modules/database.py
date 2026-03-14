@@ -473,6 +473,10 @@ def obtener_resumen_dia(fecha=None):
         "SELECT COALESCE(SUM(total),0) as total_ventas, COALESCE(SUM(monto_efectivo),0) as total_efectivo, COUNT(*) as num_ventas FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
         (fecha, desde)
     ).fetchone()
+    canceladas_dia = conn.execute(
+        "SELECT COUNT(*) as n FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND cancelada=1",
+        (fecha, desde)
+    ).fetchone()
     vt = conn.execute(
         """SELECT COALESCE(t.nombre,'Sin Tienda') as tienda,
                   COALESCE(SUM(vd.subtotal),0) as total,
@@ -587,6 +591,103 @@ def obtener_resumen_dia(fecha=None):
         "fondo_apertura": get_fondo_apertura(),
         "sabrodulce_roles": sabro_roles,
         "sabrodulce_pago": sabro_pago,
+        "num_canceladas": canceladas_dia["n"] if canceladas_dia else 0,
+    }
+
+def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
+    from datetime import timedelta
+    hoy = date.today()
+    if not fecha_inicio:
+        fecha_inicio = (hoy - timedelta(days=hoy.weekday())).strftime("%Y-%m-%d")
+    if not fecha_fin:
+        fecha_fin = (hoy - timedelta(days=hoy.weekday()) + timedelta(days=6)).strftime("%Y-%m-%d")
+
+    conn = get_connection()
+
+    rv = conn.execute("""
+        SELECT COALESCE(SUM(total),0) as total_ventas,
+               COALESCE(SUM(monto_efectivo),0) as total_efectivo,
+               COALESCE(SUM(monto_tarjeta),0) as total_tarjeta,
+               COALESCE(SUM(CASE WHEN metodo_pago='Transferencia' THEN total ELSE 0 END),0) as total_transferencia,
+               COUNT(*) as num_ventas
+        FROM ventas
+        WHERE DATE(created_at) BETWEEN ? AND ? AND (cancelada IS NULL OR cancelada=0)
+    """, (fecha_inicio, fecha_fin)).fetchone()
+
+    canceladas_row = conn.execute(
+        "SELECT COUNT(*) as n FROM ventas WHERE DATE(created_at) BETWEEN ? AND ? AND cancelada=1",
+        (fecha_inicio, fecha_fin)
+    ).fetchone()
+
+    vt = conn.execute("""
+        SELECT COALESCE(t.nombre,'Sin Tienda') as tienda,
+               COALESCE(SUM(vd.subtotal),0) as total,
+               COALESCE(SUM(vd.subtotal * CASE
+                   WHEN v.metodo_pago='Tarjeta' THEN 0.04
+                   WHEN v.metodo_pago='Mixto' AND v.total>0 THEN (CAST(v.monto_tarjeta AS REAL)/v.total)*0.04
+                   ELSE 0 END), 0) as comision
+        FROM venta_detalle vd
+        JOIN ventas v ON v.id=vd.venta_id
+        LEFT JOIN tiendas t ON t.id=vd.tienda_id
+        WHERE DATE(v.created_at) BETWEEN ? AND ? AND (v.cancelada IS NULL OR v.cancelada=0)
+        GROUP BY COALESCE(t.nombre,'Sin Tienda')
+        ORDER BY total DESC
+    """, (fecha_inicio, fecha_fin)).fetchall()
+
+    diario = conn.execute("""
+        SELECT DATE(created_at) as fecha,
+               COALESCE(SUM(total),0) as total,
+               COALESCE(SUM(monto_efectivo),0) as efectivo,
+               COALESCE(SUM(monto_tarjeta),0) as tarjeta,
+               COUNT(*) as ventas
+        FROM ventas
+        WHERE DATE(created_at) BETWEEN ? AND ? AND (cancelada IS NULL OR cancelada=0)
+        GROUP BY DATE(created_at)
+        ORDER BY fecha
+    """, (fecha_inicio, fecha_fin)).fetchall()
+
+    gastos = conn.execute("""
+        SELECT COALESCE(SUM(monto),0) as total,
+               COALESCE(SUM(CASE WHEN origen='Banco' THEN monto ELSE 0 END),0) as banco
+        FROM gastos WHERE DATE(created_at) BETWEEN ? AND ?
+    """, (fecha_inicio, fecha_fin)).fetchone()
+
+    sabro = conn.execute("""
+        SELECT COALESCE(SUM(vd.cantidad),0) as roles
+        FROM venta_detalle vd
+        JOIN ventas v ON v.id=vd.venta_id
+        LEFT JOIN productos p ON p.id=vd.producto_id
+        LEFT JOIN tiendas t ON t.id=p.tienda_id
+        WHERE LOWER(COALESCE(t.nombre,'')) LIKE '%sabro%'
+          AND LOWER(COALESCE(p.categoria_producto,''))='roles'
+          AND DATE(v.created_at) BETWEEN ? AND ?
+          AND (v.cancelada IS NULL OR v.cancelada=0)
+    """, (fecha_inicio, fecha_fin)).fetchone()
+
+    ventas_por_tienda = []
+    for row in vt:
+        r = dict(row)
+        r['neto'] = round(r['total'] - r['comision'], 2)
+        r['comision'] = round(r['comision'], 2)
+        ventas_por_tienda.append(r)
+
+    sabro_roles = int(sabro['roles']) if sabro else 0
+    conn.close()
+    return {
+        'fecha_inicio': fecha_inicio,
+        'fecha_fin': fecha_fin,
+        'total_ventas': rv['total_ventas'],
+        'total_efectivo': rv['total_efectivo'],
+        'total_tarjeta': rv['total_tarjeta'],
+        'total_transferencia': rv['total_transferencia'],
+        'num_ventas': rv['num_ventas'],
+        'num_canceladas': canceladas_row['n'] if canceladas_row else 0,
+        'total_gastos': gastos['total'],
+        'total_gastos_banco': gastos['banco'],
+        'ventas_por_tienda': ventas_por_tienda,
+        'diario': [dict(d) for d in diario],
+        'sabrodulce_roles': sabro_roles,
+        'sabrodulce_pago': sabro_roles * 15.0,
     }
 
 def registrar_corte(usuario_id, efectivo_real, fondo_caja=0.0, desglose=None):
