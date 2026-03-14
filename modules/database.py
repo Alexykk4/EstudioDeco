@@ -634,7 +634,7 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         ORDER BY total DESC
     """, (fecha_inicio, fecha_fin)).fetchall()
 
-    diario = conn.execute("""
+    diario_rows = conn.execute("""
         SELECT DATE(created_at) as fecha,
                COALESCE(SUM(total),0) as total,
                COALESCE(SUM(monto_efectivo),0) as efectivo,
@@ -644,6 +644,25 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         WHERE DATE(created_at) BETWEEN ? AND ? AND (cancelada IS NULL OR cancelada=0)
         GROUP BY DATE(created_at)
         ORDER BY fecha
+    """, (fecha_inicio, fecha_fin)).fetchall()
+
+    # Por-tienda por día (para vista semanal existente)
+    dt_rows = conn.execute("""
+        SELECT DATE(v.created_at) as fecha,
+               COALESCE(t.nombre,'Sin Tienda') as tienda,
+               COALESCE(SUM(vd.subtotal),0) as total
+        FROM venta_detalle vd
+        JOIN ventas v ON v.id=vd.venta_id
+        LEFT JOIN tiendas t ON t.id=vd.tienda_id
+        WHERE DATE(v.created_at) BETWEEN ? AND ? AND (v.cancelada IS NULL OR v.cancelada=0)
+        GROUP BY DATE(v.created_at), COALESCE(t.nombre,'Sin Tienda')
+        ORDER BY fecha, total DESC
+    """, (fecha_inicio, fecha_fin)).fetchall()
+
+    gastos_rows = conn.execute("""
+        SELECT DATE(created_at) as fecha, COALESCE(SUM(monto),0) as gastos
+        FROM gastos WHERE DATE(created_at) BETWEEN ? AND ?
+        GROUP BY DATE(created_at)
     """, (fecha_inicio, fecha_fin)).fetchall()
 
     gastos = conn.execute("""
@@ -664,28 +683,49 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
           AND (v.cancelada IS NULL OR v.cancelada=0)
     """, (fecha_inicio, fecha_fin)).fetchone()
 
+    # Merge por-tienda and gastos into diario
+    tiendas_map = {}
+    for row in dt_rows:
+        tiendas_map.setdefault(row["fecha"], []).append({"tienda": row["tienda"], "total": row["total"]})
+    gastos_map = {row["fecha"]: row["gastos"] for row in gastos_rows}
+
+    diario = []
+    for row in diario_rows:
+        d = dict(row)
+        d["total_ventas"] = d["total"]   # alias for legacy loadSemanal
+        d["num_ventas"]   = d["ventas"]  # alias
+        d["por_tienda"]   = tiendas_map.get(d["fecha"], [])
+        d["gastos"]       = gastos_map.get(d["fecha"], 0)
+        diario.append(d)
+
     ventas_por_tienda = []
     for row in vt:
-        r = dict(row)
-        r['neto'] = round(r['total'] - r['comision'], 2)
-        r['comision'] = round(r['comision'], 2)
-        ventas_por_tienda.append(r)
+        r2 = dict(row)
+        r2['neto'] = round(r2['total'] - r2['comision'], 2)
+        r2['comision'] = round(r2['comision'], 2)
+        ventas_por_tienda.append(r2)
 
     sabro_roles = int(sabro['roles']) if sabro else 0
+    total_semana = rv['total_ventas']
     conn.close()
     return {
         'fecha_inicio': fecha_inicio,
         'fecha_fin': fecha_fin,
-        'total_ventas': rv['total_ventas'],
+        # Legacy fields for loadSemanal view
+        'total_semana': total_semana,
         'total_efectivo': rv['total_efectivo'],
         'total_tarjeta': rv['total_tarjeta'],
+        'total_gastos': gastos['total'],
+        'utilidad': total_semana - gastos['total'],
+        'dias': diario,
+        # New fields for Corte Semanal modal
+        'total_ventas': total_semana,
         'total_transferencia': rv['total_transferencia'],
         'num_ventas': rv['num_ventas'],
         'num_canceladas': canceladas_row['n'] if canceladas_row else 0,
-        'total_gastos': gastos['total'],
         'total_gastos_banco': gastos['banco'],
         'ventas_por_tienda': ventas_por_tienda,
-        'diario': [dict(d) for d in diario],
+        'diario': diario,
         'sabrodulce_roles': sabro_roles,
         'sabrodulce_pago': sabro_roles * 15.0,
     }
