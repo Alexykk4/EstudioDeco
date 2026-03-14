@@ -27,7 +27,8 @@ INSERT OR IGNORE INTO tiendas (nombre, categoria, precio_abierto, es_barra) VALU
     ('Mack&M',       'Deco',  0, 0),
     ('Acuario',      'Deco',  0, 0),
     ('Estudio Deco', 'Deco',  0, 0),
-    ('Sabro Dulce',   'Deco',  0, 0);
+    ('Sabro Dulce',   'Deco',  0, 0),
+    ('Promociones',  'Deco',  0, 0);
 
 CREATE TABLE IF NOT EXISTS productos (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,10 +42,21 @@ CREATE TABLE IF NOT EXISTS productos (
     sincronizado  INTEGER NOT NULL DEFAULT 0,
     activo        INTEGER NOT NULL DEFAULT 1,
     es_precio_abierto INTEGER NOT NULL DEFAULT 0,
+    es_bundle     INTEGER NOT NULL DEFAULT 0,
     categoria_producto TEXT NOT NULL DEFAULT '',
     created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     updated_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     FOREIGN KEY(tienda_id) REFERENCES tiendas(id)
+);
+
+CREATE TABLE IF NOT EXISTS bundle_components (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    bundle_producto_id     INTEGER NOT NULL,
+    componente_producto_id INTEGER NOT NULL,
+    cantidad               INTEGER NOT NULL DEFAULT 1,
+    precio_asignado        REAL    NOT NULL DEFAULT 0.0,
+    FOREIGN KEY (bundle_producto_id)     REFERENCES productos(id),
+    FOREIGN KEY (componente_producto_id) REFERENCES productos(id)
 );
 CREATE INDEX IF NOT EXISTS idx_productos_tienda ON productos(tienda_id);
 

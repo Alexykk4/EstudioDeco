@@ -522,13 +522,6 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
         <button class="pay-btn" data-m="Transferencia" onclick="selPay(this)">📱 Transfer</button>
         <button class="pay-btn" data-m="Mixto" onclick="selPay(this)">⚖️ Mixto</button>
       </div>
-      <div id="efectivoFields" class="hidden" style="margin-bottom:8px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-            <span>Efectivo Recibido:</span>
-            <input type="number" id="soloEfectivoIn" class="input" style="width:100px; text-align:right" oninput="calcEfectivo(this.value)" placeholder="$ 0.00">
-        </div>
-        <div style="text-align:right; font-weight:bold; font-size:14px; color:var(--text-muted);" id="efectivoCambio">Cambio: $0.00</div>
-      </div>
       <div id="mixtoFields" class="hidden" style="display:flex; gap:10px; margin-bottom:12px;">
         <div style="flex:1;">
           <label style="font-size:10px;color:var(--text-secondary);font-weight:700;text-transform:uppercase;">💵 Efectivo</label>
@@ -998,14 +991,17 @@ function filterProducts() {
 function renderProd(p,t){
   const out=p.stock_local<=0, low=!out&&p.stock_local<=p.stock_minimo;
   const isAbierto = p.es_precio_abierto;
-  let sc='stock-ok',st=`${p.stock_local}`;
+  const isBundle  = p.es_bundle;
+  let sc='stock-ok', st=`${p.stock_local}`;
   if(out){sc='stock-out';st='Agotado';}else if(low){sc='stock-low';st=`⚠ ${p.stock_local}`;}
-  if(isAbierto) st = "Abierto";
-  return `<div class="prod-card ${out&&!isAbierto?'disabled':''}" onclick="${out&&!isAbierto?'':`prepareAddItem(${JSON.stringify(p).replace(/"/g,'&quot;')},${JSON.stringify(t).replace(/"/g,'&quot;')})`}">
-    <div class="prod-name">${p.nombre}</div>
+  if(isAbierto) st='Abierto';
+  if(isBundle)  st='📦 Paquete';
+  const canAdd = !out || isAbierto || isBundle;
+  return `<div class="prod-card ${!canAdd?'disabled':''}" onclick="${canAdd?`prepareAddItem(${JSON.stringify(p).replace(/"/g,'&quot;')},${JSON.stringify(t).replace(/"/g,'&quot;')})`:''}" ${isBundle?'style="border-color:var(--terracotta);background:var(--terracotta-light);"':''}>
+    <div class="prod-name">${isBundle?'📦 ':''} ${p.nombre}</div>
     <div class="prod-price">${isAbierto ? 'Monto Abierto' : '$'+p.precio.toFixed(2)}</div>
-    <span class="stock-tag ${sc}">${st}</span>
-    ${out&&!isAbierto?'':`<button class="prod-add" onclick="event.stopPropagation();prepareAddItem(${JSON.stringify(p).replace(/"/g,'&quot;')},${JSON.stringify(t).replace(/"/g,'&quot;')})">+ Agregar</button>`}
+    <span class="stock-tag ${isBundle?'stock-low':sc}">${st}</span>
+    ${canAdd?`<button class="prod-add" onclick="event.stopPropagation();prepareAddItem(${JSON.stringify(p).replace(/"/g,'&quot;')},${JSON.stringify(t).replace(/"/g,'&quot;')})">+ Agregar</button>`:''}
   </div>`;
 }
 
@@ -1334,15 +1330,9 @@ function selPay(el){
   metodoPago=el.dataset.m;
   if(metodoPago==='Mixto'){
     document.getElementById('mixtoFields').classList.remove('hidden');
-    document.getElementById('efectivoFields').classList.add('hidden');
     calcMixto('efectivo');
-  } else if (metodoPago==='Efectivo') {
-    document.getElementById('mixtoFields').classList.add('hidden');
-    document.getElementById('efectivoFields').classList.remove('hidden');
-    calcEfectivo(document.getElementById('soloEfectivoIn').value);
   } else {
     document.getElementById('mixtoFields').classList.add('hidden');
-    document.getElementById('efectivoFields').classList.add('hidden');
   }
 }
 
@@ -1384,7 +1374,72 @@ async function cobrar(){
   const baseItems=getOrderItems();
   if(!baseItems.length) return;
 
-  // Agregar propina como ítem extra si aplica
+  // Para efectivo → mostrar modal de cambio primero
+  if(metodoPago==='Efectivo'){
+    showCashModal();
+    return;
+  }
+
+  await _procesarCobro(0);
+}
+
+function showCashModal(){
+  const total=getOrderTotal();
+  showModal(`<div class="modal-body">
+    <div class="modal-title">💵 Cobro en Efectivo</div>
+    <div style="text-align:center;padding:16px 0 8px;">
+      <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Total a cobrar</div>
+      <div style="font-size:52px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
+    </div>
+    <div class="field">
+      <label>Monto recibido del cliente</label>
+      <input type="number" id="cashIn" class="input" style="font-size:28px;text-align:center;font-family:'JetBrains Mono',monospace;padding:14px;" placeholder="0.00" step="0.01" oninput="updateCashChange(${total})" onkeydown="if(event.key==='Enter')confirmarCobroCash(${total})">
+    </div>
+    <div id="cashChangeBox" style="text-align:center;padding:20px 0;display:none;">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Cambio a entregar</div>
+      <div id="cashChangeAmt" style="font-size:64px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);line-height:1;"></div>
+    </div>
+    <div id="cashFaltaBox" style="text-align:center;padding:12px 0;display:none;">
+      <div id="cashFaltaAmt" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--red);"></div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <div class="modal-btns" style="margin-top:0">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button id="btnConfirmCash" class="btn btn-sage" onclick="confirmarCobroCash(${total})" disabled style="font-size:15px;padding:11px 28px;">✓ Confirmar Cobro</button>
+    </div>
+  </div>`);
+  const m=document.querySelector('#modals .modal'); m.style.width='440px'; m.style.maxWidth='98vw';
+  setTimeout(()=>document.getElementById('cashIn')?.focus(), 80);
+}
+
+function updateCashChange(total){
+  const recibido=parseFloat(document.getElementById('cashIn')?.value)||0;
+  const cambio=recibido-total;
+  const changeBox=document.getElementById('cashChangeBox');
+  const faltaBox=document.getElementById('cashFaltaBox');
+  const btn=document.getElementById('btnConfirmCash');
+  if(recibido<=0){
+    changeBox.style.display='none'; faltaBox.style.display='none'; btn.disabled=true; return;
+  }
+  if(cambio>=0){
+    document.getElementById('cashChangeAmt').textContent='$'+cambio.toLocaleString('es-MX',{minimumFractionDigits:2});
+    changeBox.style.display='block'; faltaBox.style.display='none'; btn.disabled=false;
+  } else {
+    document.getElementById('cashFaltaAmt').textContent='Faltan $'+Math.abs(cambio).toLocaleString('es-MX',{minimumFractionDigits:2});
+    faltaBox.style.display='block'; changeBox.style.display='none'; btn.disabled=true;
+  }
+}
+
+async function confirmarCobroCash(total){
+  const recibido=parseFloat(document.getElementById('cashIn')?.value)||0;
+  if(recibido<total) return;
+  closeModal();
+  await _procesarCobro(recibido);
+}
+
+async function _procesarCobro(efectivo_recibido){
+  const baseItems=getOrderItems();
   const subtotal=getOrderSubtotal();
   const propinaMonto=calcPropina(subtotal);
   let itemsConPropina=[...baseItems];
@@ -1394,21 +1449,17 @@ async function cobrar(){
     itemsConPropina.push({producto_id:null,tienda_id:tiendaRef,nombre:etiqueta,cantidad:1,precio_unitario:propinaMonto,es_precio_abierto:true});
   }
 
-  let ef=0.0,tar=0.0, efectivo_recibido=0.0;
+  let ef=0.0, tar=0.0;
   const total=getOrderTotal();
   if(metodoPago==='Mixto'){
     ef=parseFloat(document.getElementById('mixEfectivo').value)||0;
     tar=parseFloat(document.getElementById('mixTarjeta').value)||0;
     if(Math.abs((ef+tar)-total)>0.01){toast('⚠️','La suma mixta no cuadra','var(--gold)');return;}
-  } else if (metodoPago==='Efectivo') {
-    efectivo_recibido=parseFloat(document.getElementById('soloEfectivoIn').value)||0;
-    if(efectivo_recibido>0 && efectivo_recibido<total){toast('⚠️','El efectivo no cubre el total','var(--gold)');return;}
   }
 
   try{
     let data;
     if(selectedOrden){
-      // Para mesas: primero agregar propina como ítem a la orden, luego cerrar
       if(propinaMonto>0){
         const tiendaRef=baseItems[0]?.tienda_id||tiendas[0]?.id||1;
         const etiqueta=propinaPct>0?`Propina (${propinaPct}%)`:'Propina';
@@ -1417,12 +1468,11 @@ async function cobrar(){
           precio_unitario:propinaMonto, es_precio_abierto:true
         }});
       }
-      data=await api(`/ordenes/${selectedOrden.id}/cerrar`,{method:'POST',body:{usuario_id:usuario.id,metodo_pago:metodoPago,monto_efectivo:ef,monto_tarjeta:tar,efectivo_recibido:efectivo_recibido}});
+      data=await api(`/ordenes/${selectedOrden.id}/cerrar`,{method:'POST',body:{usuario_id:usuario.id,metodo_pago:metodoPago,monto_efectivo:ef,monto_tarjeta:tar,efectivo_recibido}});
     } else {
-      data=await api('/ventas',{method:'POST',body:{usuario_id:usuario.id,metodo_pago:metodoPago,items:itemsConPropina,monto_efectivo:ef,monto_tarjeta:tar,efectivo_recibido:efectivo_recibido}});
+      data=await api('/ventas',{method:'POST',body:{usuario_id:usuario.id,metodo_pago:metodoPago,items:itemsConPropina,monto_efectivo:ef,monto_tarjeta:tar,efectivo_recibido}});
       directCart=[];
     }
-    // Resetear propina
     document.getElementById('propinaCheck').checked=false;
     document.getElementById('propinaControls').classList.add('hidden');
     showReceiptModal(data);
@@ -1633,10 +1683,11 @@ async function loadCatalog(){
       <td style="font-family:'JetBrains Mono',monospace;color:var(--text-muted)">$${(p.costo||0).toFixed(2)}</td>
       <td>${p.stock_local}</td>
       <td style="color:var(--text-muted)">${p.stock_minimo}</td>
-      <td>${p.es_precio_abierto ? 'Sí' : 'No'}</td>
+      <td>${p.es_precio_abierto ? 'Sí' : (p.es_bundle ? '📦 Bundle' : 'No')}</td>
       <td>
         <div class="cat-actions">
           <button class="btn-icon btn-edit" onclick='showCatalogModal(${JSON.stringify(p).replace(/'/g,"&#39;")})'>✏️</button>
+          ${p.es_bundle ? `<button class="btn-icon" style="background:var(--sage-light);color:var(--sage);" onclick="showBundleModal(${p.id},'${p.nombre.replace(/'/g,"\\'")}',${p.precio})" title="Gestionar componentes">📦</button>` : ''}
           <button class="btn-icon btn-del" onclick="deleteProduct(${p.id}, '${p.nombre.replace(/'/g,"\\'")}')">🗑️</button>
         </div>
       </td>
@@ -1664,6 +1715,10 @@ function showCatalogModal(p=null){
         <input type="checkbox" id="catAbierto" ${p&&p.es_precio_abierto?'checked':''} style="width:16px;height:16px;accent-color:var(--sage);">
         <label for="catAbierto" style="margin:0;cursor:pointer;">Es producto de precio abierto (preguntar importe al vender)</label>
     </div>
+    <div class="field" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="catBundle" ${p&&p.es_bundle?'checked':''} style="width:16px;height:16px;accent-color:var(--terracotta);">
+        <label for="catBundle" style="margin:0;cursor:pointer;">📦 Es paquete/bundle (incluye artículos de otras tiendas)</label>
+    </div>
     <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="saveProduct(${p?p.id:null})">Guardar</button></div>`);
 }
 
@@ -1676,11 +1731,12 @@ async function saveProduct(id){
   const m = parseInt(document.getElementById('catMin').value) || 0;
   const cat = document.getElementById('catCat').value;
   const ab = document.getElementById('catAbierto').checked;
-  
+  const isBundle = document.getElementById('catBundle').checked;
+
   if(!n || isNaN(p) || isNaN(tid)) return toast('⚠️','Llena los datos principales');
-  
+
   try{
-    const body = {tienda_id:tid, nombre:n, precio:p, costo:c, stock_local:s, stock_minimo:m, codigo:"", es_precio_abierto:ab, categoria_producto:cat};
+    const body = {tienda_id:tid, nombre:n, precio:p, costo:c, stock_local:s, stock_minimo:m, codigo:"", es_precio_abierto:ab, es_bundle:isBundle?1:0, categoria_producto:cat};
     if(id){
       await api(`/catalog/${id}`, {method:'PUT', body});
       toast('✅','Producto actualizado');
@@ -1831,6 +1887,75 @@ async function doAnularVenta(vid) {
     await api(`/ventas/${vid}`, {method:'DELETE'});
     toast('✅','Venta anulada'); closeModal();
   } catch(e) { toast('❌',e.message,'var(--red)'); }
+}
+
+/* ── BUNDLE / PAQUETES ── */
+async function showBundleModal(bid, nombre, precioBundle) {
+  let comps;
+  try { comps = await api(`/bundle-components/${bid}`); } catch(e) { toast('❌',e.message,'var(--red)'); return; }
+
+  const sumaAsignada = comps.reduce((s,c)=>s+c.cantidad*c.precio_asignado, 0);
+  const diff = precioBundle - sumaAsignada;
+  const diffColor = Math.abs(diff)<0.01 ? 'var(--green-ok)' : 'var(--red)';
+
+  const filas = comps.length ? comps.map(c=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border-light);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;">${c.nombre}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${c.tienda_nombre} · x${c.cantidad} · precio asignado: $${c.precio_asignado.toFixed(2)}</div>
+      </div>
+      <button class="btn-icon btn-del" onclick="removeBundleComp(${c.id},${bid},'${nombre.replace(/'/g,"\\'")}',${precioBundle})" title="Quitar">✕</button>
+    </div>`).join('')
+    : '<div style="padding:12px 0;color:var(--text-muted);font-size:13px;">Sin componentes aún</div>';
+
+  // Opciones de todos los productos para agregar
+  const allProds = allProductsGlobal || [];
+  const prodOpts = allProds.filter(p=>!p.es_bundle).map(p=>`<option value="${p.id}" data-precio="${p.precio}">${p.nombre} (${p.tienda_nombre}) — $${p.precio.toFixed(2)}</option>`).join('');
+
+  showModal(`<div class="modal-body">
+    <div class="modal-title">📦 ${nombre}</div>
+    <div class="modal-sub">Precio del paquete: <strong>$${precioBundle.toFixed(2)}</strong> · Asignado a tiendas: <span style="color:${diffColor};font-weight:700;">$${sumaAsignada.toFixed(2)}</span>${Math.abs(diff)>0.01?` · <span style="color:var(--red);">Diferencia: $${diff.toFixed(2)}</span>`:' ✓'}</div>
+    <div style="max-height:220px;overflow-y:auto;margin-bottom:14px;">${filas}</div>
+    <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">+ Agregar componente</div>
+      <div class="field" style="margin-bottom:8px;"><label>Producto</label>
+        <select id="bcProd" class="input" onchange="autoBcPrecio()"><option value="">— Selecciona —</option>${prodOpts}</select>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <div class="field" style="margin:0;flex:1;"><label>Cantidad</label><input type="number" id="bcQty" class="input" value="1" min="1" step="1"></div>
+        <div class="field" style="margin:0;flex:1;"><label>Precio asignado ($)</label><input type="number" id="bcPrecio" class="input" step="0.01" placeholder="0.00"></div>
+      </div>
+      <button class="btn btn-sage" style="width:100%;margin-top:10px;justify-content:center;" onclick="addBundleComp(${bid},'${nombre.replace(/'/g,"\\'")}',${precioBundle})">+ Agregar</button>
+    </div>
+  </div>
+  <div class="modal-footer"><div class="modal-btns" style="margin-top:0">
+    <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+  </div></div>`);
+  const m=document.querySelector('#modals .modal'); m.style.width='560px'; m.style.maxWidth='98vw';
+}
+
+function autoBcPrecio(){
+  const sel=document.getElementById('bcProd');
+  const opt=sel.options[sel.selectedIndex];
+  if(opt&&opt.dataset.precio) document.getElementById('bcPrecio').value=parseFloat(opt.dataset.precio).toFixed(2);
+}
+
+async function addBundleComp(bid, nombre, precioBundle){
+  const cid=parseInt(document.getElementById('bcProd').value);
+  const qty=parseInt(document.getElementById('bcQty').value)||1;
+  const precio=parseFloat(document.getElementById('bcPrecio').value);
+  if(!cid||!precio||precio<=0) return toast('⚠️','Selecciona producto y precio','var(--gold)');
+  try{
+    await api(`/bundle-components/${bid}`,{method:'POST',body:{componente_id:cid,cantidad:qty,precio_asignado:precio}});
+    showBundleModal(bid, nombre, precioBundle);
+  }catch(e){ toast('❌',e.message,'var(--red)'); }
+}
+
+async function removeBundleComp(cid, bid, nombre, precioBundle){
+  try{
+    await api(`/bundle-components/${cid}`,{method:'DELETE'});
+    showBundleModal(bid, nombre, precioBundle);
+  }catch(e){ toast('❌',e.message,'var(--red)'); }
 }
 
 /* ── BUSCADOR GLOBAL ── */

@@ -36,6 +36,17 @@ def init_db():
         )""",
         "INSERT OR IGNORE INTO config (clave, valor) VALUES ('fondo_turno', '{\"monto\":0,\"fecha\":\"\"}')",
         "UPDATE tiendas SET nombre='Mack&M' WHERE nombre='Mack'",
+        "ALTER TABLE productos ADD COLUMN es_bundle INTEGER NOT NULL DEFAULT 0",
+        """CREATE TABLE IF NOT EXISTS bundle_components (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            bundle_producto_id    INTEGER NOT NULL,
+            componente_producto_id INTEGER NOT NULL,
+            cantidad              INTEGER NOT NULL DEFAULT 1,
+            precio_asignado       REAL    NOT NULL DEFAULT 0.0,
+            FOREIGN KEY (bundle_producto_id)     REFERENCES productos(id),
+            FOREIGN KEY (componente_producto_id) REFERENCES productos(id)
+        )""",
+        "INSERT OR IGNORE INTO tiendas (nombre, categoria, precio_abierto, es_barra) VALUES ('Promociones', 'Deco', 0, 0)",
     ]
     for sql in migrations:
         try:
@@ -98,23 +109,23 @@ def obtener_todos_los_productos():
     conn.close()
     return [dict(r) for r in rows]
 
-def crear_producto(tienda_id, nombre, precio, costo, stock_local, stock_minimo, codigo="", es_precio_abierto=0, categoria_producto=""):
+def crear_producto(tienda_id, nombre, precio, costo, stock_local, stock_minimo, codigo="", es_precio_abierto=0, es_bundle=0, categoria_producto=""):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO productos (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo, es_precio_abierto, categoria_producto) VALUES (?,?,?,?,?,?,?,?,?)",
-        (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo, es_precio_abierto, categoria_producto)
+        "INSERT INTO productos (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo, es_precio_abierto, es_bundle, categoria_producto) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo, es_precio_abierto, es_bundle, categoria_producto)
     )
     conn.commit()
     prod_id = cur.lastrowid
     conn.close()
     return prod_id
 
-def actualizar_producto(id, tienda_id, nombre, precio, costo, stock_local, stock_minimo, codigo="", es_precio_abierto=0, categoria_producto=""):
+def actualizar_producto(id, tienda_id, nombre, precio, costo, stock_local, stock_minimo, codigo="", es_precio_abierto=0, es_bundle=0, categoria_producto=""):
     conn = get_connection()
     conn.execute(
-        "UPDATE productos SET tienda_id=?, codigo=?, nombre=?, precio=?, costo=?, stock_local=?, stock_minimo=?, es_precio_abierto=?, categoria_producto=?, updated_at=datetime('now','localtime') WHERE id=?",
-        (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo, es_precio_abierto, categoria_producto, id)
+        "UPDATE productos SET tienda_id=?, codigo=?, nombre=?, precio=?, costo=?, stock_local=?, stock_minimo=?, es_precio_abierto=?, es_bundle=?, categoria_producto=?, updated_at=datetime('now','localtime') WHERE id=?",
+        (tienda_id, codigo, nombre, precio, costo, stock_local, stock_minimo, es_precio_abierto, es_bundle, categoria_producto, id)
     )
     conn.commit()
     conn.close()
@@ -269,23 +280,29 @@ def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0
 
     # ... move items to venta_detalle
     for item in items:
-        # Get actual cost of product
-        costo_u = 0.0
-        if item["producto_id"]:
-            row_prod = cur.execute("SELECT costo FROM productos WHERE id=?", (item["producto_id"],)).fetchone()
-            if row_prod: costo_u = row_prod["costo"]
-            
-        cur.execute("""
-            INSERT INTO venta_detalle (venta_id, producto_id, tienda_id, nombre_producto, cantidad, precio_unitario, costo_unitario, subtotal, es_precio_abierto)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (venta_id, item["producto_id"], item["tienda_id"], item["nombre_producto"],
-              item["cantidad"], item["precio_unitario"], costo_u, item["cantidad"]*item["precio_unitario"],
-              item["es_precio_abierto"]))
-              
-        # Restar stock
-        if not item["es_precio_abierto"] and item["producto_id"]:
-            cur.execute("UPDATE productos SET stock_local = stock_local - ? WHERE id=?",
-                        (item["cantidad"], item["producto_id"]))
+        pid = item["producto_id"]
+        # ¿Es bundle? → expandir en componentes
+        is_bundle = False
+        if pid:
+            br = cur.execute("SELECT es_bundle FROM productos WHERE id=?", (pid,)).fetchone()
+            is_bundle = br and br["es_bundle"]
+
+        if is_bundle:
+            _expandir_bundle(conn, cur, venta_id, pid, item["cantidad"])
+        else:
+            costo_u = 0.0
+            if pid:
+                row_prod = cur.execute("SELECT costo FROM productos WHERE id=?", (pid,)).fetchone()
+                if row_prod: costo_u = row_prod["costo"]
+            cur.execute("""
+                INSERT INTO venta_detalle (venta_id, producto_id, tienda_id, nombre_producto, cantidad, precio_unitario, costo_unitario, subtotal, es_precio_abierto)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (venta_id, pid, item["tienda_id"], item["nombre_producto"],
+                  item["cantidad"], item["precio_unitario"], costo_u,
+                  item["cantidad"]*item["precio_unitario"], item["es_precio_abierto"]))
+            if not item["es_precio_abierto"] and pid:
+                cur.execute("UPDATE productos SET stock_local = stock_local - ? WHERE id=?",
+                            (item["cantidad"], pid))
 
     # 4. Cerrar la orden actual
     cur.execute("UPDATE ordenes SET estado='cerrada' WHERE id=?", (orden_id,))
@@ -535,11 +552,20 @@ def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_ta
                 (folio, usuario_id, metodo_pago, monto_efectivo, monto_tarjeta, total, total))
     venta_id = cur.lastrowid
     for item in items:
-        sub = item["precio_unitario"] * item["cantidad"]
-        cur.execute("INSERT INTO venta_detalle (venta_id,producto_id,tienda_id,nombre_producto,cantidad,precio_unitario,subtotal,es_precio_abierto) VALUES (?,?,?,?,?,?,?,?)",
-                    (venta_id, item.get("producto_id"), item["tienda_id"], item["nombre"], item["cantidad"], item["precio_unitario"], sub, 1 if item.get("es_precio_abierto") else 0))
-        if item.get("producto_id") and not item.get("es_precio_abierto"):
-            cur.execute("UPDATE productos SET stock_local=stock_local-?, sincronizado=0 WHERE id=?", (item["cantidad"], item["producto_id"]))
+        pid = item.get("producto_id")
+        is_bundle = False
+        if pid:
+            br = cur.execute("SELECT es_bundle FROM productos WHERE id=?", (pid,)).fetchone()
+            is_bundle = br and br["es_bundle"]
+
+        if is_bundle:
+            _expandir_bundle(conn, cur, venta_id, pid, item["cantidad"])
+        else:
+            sub = item["precio_unitario"] * item["cantidad"]
+            cur.execute("INSERT INTO venta_detalle (venta_id,producto_id,tienda_id,nombre_producto,cantidad,precio_unitario,subtotal,es_precio_abierto) VALUES (?,?,?,?,?,?,?,?)",
+                        (venta_id, pid, item["tienda_id"], item["nombre"], item["cantidad"], item["precio_unitario"], sub, 1 if item.get("es_precio_abierto") else 0))
+            if pid and not item.get("es_precio_abierto"):
+                cur.execute("UPDATE productos SET stock_local=stock_local-?, sincronizado=0 WHERE id=?", (item["cantidad"], pid))
             
     # --- CALCULAR COMISIÓN TARJETA (4%) --- solo Tarjeta/Mixto, NO Transferencia
     if monto_tarjeta > 0 and metodo_pago == 'Tarjeta':
@@ -601,6 +627,55 @@ def anular_venta(venta_id):
     conn.execute("DELETE FROM venta_detalle WHERE venta_id=?", (venta_id,))
     conn.execute("DELETE FROM ventas WHERE id=?", (venta_id,))
     conn.commit(); conn.close()
+
+def obtener_bundle_components(bundle_id):
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT bc.id, bc.cantidad, bc.precio_asignado,
+               p.id as producto_id, p.nombre, p.precio, p.tienda_id,
+               t.nombre as tienda_nombre
+        FROM bundle_components bc
+        JOIN productos p ON p.id = bc.componente_producto_id
+        JOIN tiendas  t ON t.id = p.tienda_id
+        WHERE bc.bundle_producto_id = ?
+        ORDER BY bc.id
+    """, (bundle_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def agregar_bundle_component(bundle_id, componente_id, cantidad, precio_asignado):
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO bundle_components (bundle_producto_id, componente_producto_id, cantidad, precio_asignado) VALUES (?,?,?,?)",
+        (bundle_id, componente_id, cantidad, precio_asignado)
+    )
+    conn.commit(); conn.close()
+
+def eliminar_bundle_component(comp_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM bundle_components WHERE id=?", (comp_id,))
+    conn.commit(); conn.close()
+
+def _expandir_bundle(conn, cur, venta_id, producto_id, cantidad_bundle):
+    """Inserta venta_detalle para cada componente del bundle y resta su stock."""
+    comps = conn.execute("""
+        SELECT bc.componente_producto_id, bc.cantidad, bc.precio_asignado,
+               p.nombre, p.tienda_id, p.costo
+        FROM bundle_components bc
+        JOIN productos p ON p.id = bc.componente_producto_id
+        WHERE bc.bundle_producto_id = ?
+    """, (producto_id,)).fetchall()
+    for c in comps:
+        qty = c["cantidad"] * cantidad_bundle
+        sub = qty * c["precio_asignado"]
+        cur.execute("""
+            INSERT INTO venta_detalle
+              (venta_id, producto_id, tienda_id, nombre_producto, cantidad, precio_unitario, costo_unitario, subtotal, es_precio_abierto)
+            VALUES (?,?,?,?,?,?,?,?,0)
+        """, (venta_id, c["componente_producto_id"], c["tienda_id"],
+               c["nombre"], qty, c["precio_asignado"], c["costo"], sub))
+        cur.execute("UPDATE productos SET stock_local=stock_local-?, sincronizado=0 WHERE id=?",
+                    (qty, c["componente_producto_id"]))
 
 def marcar_sincronizado(tabla, record_id):
     conn = get_connection()
