@@ -50,6 +50,14 @@ def init_db():
         )""",
         "INSERT OR IGNORE INTO tiendas (nombre, categoria, precio_abierto, es_barra) VALUES ('Promociones', 'Deco', 0, 0)",
         "UPDATE productos SET categoria_producto='productos' WHERE categoria_producto='individuales'",
+        # Eliminar tienda "Mack" duplicada (renombrada a Mack&M pero pudo quedar duplicado)
+        "UPDATE venta_detalle SET tienda_id=(SELECT id FROM tiendas WHERE nombre='Mack&M' LIMIT 1) WHERE tienda_id=(SELECT id FROM tiendas WHERE nombre='Mack' LIMIT 1)",
+        "UPDATE orden_items SET tienda_id=(SELECT id FROM tiendas WHERE nombre='Mack&M' LIMIT 1) WHERE tienda_id=(SELECT id FROM tiendas WHERE nombre='Mack' LIMIT 1)",
+        "UPDATE productos SET tienda_id=(SELECT id FROM tiendas WHERE nombre='Mack&M' LIMIT 1) WHERE tienda_id=(SELECT id FROM tiendas WHERE nombre='Mack' LIMIT 1)",
+        "DELETE FROM tiendas WHERE nombre='Mack'",
+        # Registro de ventas canceladas
+        "ALTER TABLE ventas ADD COLUMN cancelada INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE ventas ADD COLUMN cancelada_at TEXT DEFAULT NULL",
     ]
     for sql in migrations:
         try:
@@ -462,13 +470,36 @@ def obtener_resumen_dia(fecha=None):
     desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
 
     rv = conn.execute(
-        "SELECT COALESCE(SUM(total),0) as total_ventas, COALESCE(SUM(monto_efectivo),0) as total_efectivo, COUNT(*) as num_ventas FROM ventas WHERE DATE(created_at)=? AND created_at > ?",
+        "SELECT COALESCE(SUM(total),0) as total_ventas, COALESCE(SUM(monto_efectivo),0) as total_efectivo, COUNT(*) as num_ventas FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
         (fecha, desde)
     ).fetchone()
     vt = conn.execute(
-        "SELECT t.nombre as tienda, COALESCE(SUM(vd.subtotal),0) as total FROM venta_detalle vd JOIN ventas v ON v.id=vd.venta_id JOIN tiendas t ON t.id=vd.tienda_id WHERE DATE(v.created_at)=? AND v.created_at > ? GROUP BY t.nombre",
+        """SELECT COALESCE(t.nombre,'Sin Tienda') as tienda,
+                  COALESCE(SUM(vd.subtotal),0) as total,
+                  COALESCE(SUM(vd.subtotal * CASE
+                      WHEN v.metodo_pago='Tarjeta' THEN 0.04
+                      WHEN v.metodo_pago='Mixto' AND v.total>0 THEN (CAST(v.monto_tarjeta AS REAL)/v.total)*0.04
+                      ELSE 0 END), 0) as comision
+           FROM venta_detalle vd
+           JOIN ventas v ON v.id=vd.venta_id
+           LEFT JOIN tiendas t ON t.id=vd.tienda_id
+           WHERE DATE(v.created_at)=? AND v.created_at>? AND (v.cancelada IS NULL OR v.cancelada=0)
+           GROUP BY COALESCE(t.nombre,'Sin Tienda')""",
         (fecha, desde)
     ).fetchall()
+    # Sabrodulce: roles vendidos × $15 de utilidad
+    sabro = conn.execute(
+        """SELECT COALESCE(SUM(vd.cantidad),0) as roles
+           FROM venta_detalle vd
+           JOIN ventas v ON v.id=vd.venta_id
+           LEFT JOIN productos p ON p.id=vd.producto_id
+           LEFT JOIN tiendas t ON t.id=p.tienda_id
+           WHERE LOWER(COALESCE(t.nombre,'')) LIKE '%sabro%'
+             AND LOWER(COALESCE(p.categoria_producto,''))='roles'
+             AND DATE(v.created_at)=? AND v.created_at>?
+             AND (v.cancelada IS NULL OR v.cancelada=0)""",
+        (fecha, desde)
+    ).fetchone()
     # Todos los gastos (para utilidad)
     rg = conn.execute(
         "SELECT COALESCE(SUM(monto),0) as total_gastos FROM gastos WHERE DATE(created_at)=? AND created_at > ?",
@@ -484,19 +515,19 @@ def obtener_resumen_dia(fecha=None):
         (fecha, desde)
     ).fetchone()
     inv = conn.execute(
-        "SELECT COALESCE(SUM(vd.cantidad * vd.costo_unitario),0) as inversion FROM venta_detalle vd JOIN ventas v ON v.id=vd.venta_id WHERE DATE(v.created_at)=? AND v.created_at > ?",
+        "SELECT COALESCE(SUM(vd.cantidad * vd.costo_unitario),0) as inversion FROM venta_detalle vd JOIN ventas v ON v.id=vd.venta_id WHERE DATE(v.created_at)=? AND v.created_at > ? AND (v.cancelada IS NULL OR v.cancelada=0)",
         (fecha, desde)
     ).fetchone()
     efectivo_row = conn.execute(
-        "SELECT COALESCE(SUM(monto_efectivo), 0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ?",
+        "SELECT COALESCE(SUM(monto_efectivo), 0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
         (fecha, desde)
     ).fetchone()
     tarjeta_row = conn.execute(
-        "SELECT COALESCE(SUM(monto_tarjeta), 0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ?",
+        "SELECT COALESCE(SUM(monto_tarjeta), 0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
         (fecha, desde)
     ).fetchone()
     transferencia_row = conn.execute(
-        "SELECT COALESCE(SUM(total), 0) as monto FROM ventas WHERE metodo_pago='Transferencia' AND DATE(created_at)=? AND created_at > ?",
+        "SELECT COALESCE(SUM(total), 0) as monto FROM ventas WHERE metodo_pago='Transferencia' AND DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
         (fecha, desde)
     ).fetchone()
 
@@ -526,11 +557,21 @@ def obtener_resumen_dia(fecha=None):
     tarjeta_esperado  = total_tar - rg["total_gastos"]
     total_esperado    = efectivo_esperado + tarjeta_esperado
 
+    sabro_roles = int(sabro["roles"]) if sabro else 0
+    sabro_pago  = sabro_roles * 15.0
+
+    ventas_por_tienda = []
+    for row in vt:
+        r = dict(row)
+        r["neto"] = round(r["total"] - r["comision"], 2)
+        r["comision"] = round(r["comision"], 2)
+        ventas_por_tienda.append(r)
+
     conn.close()
     return {
         "fecha": fecha, "desde": desde,
         "total_ventas": rv["total_ventas"], "num_ventas": rv["num_ventas"],
-        "ventas_por_tienda": [dict(r) for r in vt],
+        "ventas_por_tienda": ventas_por_tienda,
         "total_gastos": rg["total_gastos"],
         "gastos_detalle": [dict(r) for r in gd],
         "total_ingresos": ing_row["total"] if ing_row else 0,
@@ -544,6 +585,8 @@ def obtener_resumen_dia(fecha=None):
         "utilidad": rv["total_ventas"] - inv["inversion"] - rg["total_gastos"],
         "metodos_pago": metodos,
         "fondo_apertura": get_fondo_apertura(),
+        "sabrodulce_roles": sabro_roles,
+        "sabrodulce_pago": sabro_pago,
     }
 
 def registrar_corte(usuario_id, efectivo_real, fondo_caja=0.0, desglose=None):
@@ -621,11 +664,13 @@ def obtener_ventas_dia(fecha=None):
     if not fecha: fecha = date.today().strftime("%Y-%m-%d")
     conn = get_connection()
     ventas = conn.execute("""
-        SELECT v.*, u.nombre as cajero_nombre
+        SELECT v.*, u.nombre as cajero_nombre,
+               COALESCE(v.cancelada, 0) as cancelada,
+               v.cancelada_at
         FROM ventas v
         JOIN usuarios u ON u.id = v.usuario_id
         WHERE DATE(v.created_at) = ?
-        ORDER BY v.created_at DESC
+        ORDER BY v.cancelada ASC, v.created_at DESC
     """, (fecha,)).fetchall()
     result = []
     for v in ventas:
@@ -652,15 +697,19 @@ def corregir_venta(venta_id, metodo_pago, monto_efectivo, monto_tarjeta):
 def anular_venta(venta_id):
     conn = get_connection()
     venta = conn.execute("SELECT folio FROM ventas WHERE id=?", (venta_id,)).fetchone()
+    if not venta:
+        conn.close(); return
     items = conn.execute("SELECT * FROM venta_detalle WHERE venta_id=?", (venta_id,)).fetchall()
     for item in items:
         if item["producto_id"] and not item["es_precio_abierto"]:
             conn.execute("UPDATE productos SET stock_local = stock_local + ? WHERE id=?",
                          (item["cantidad"], item["producto_id"]))
-    if venta:
-        conn.execute("DELETE FROM gastos WHERE concepto LIKE ?", (f"Comisión Tarjeta 4% {venta['folio']}",))
-    conn.execute("DELETE FROM venta_detalle WHERE venta_id=?", (venta_id,))
-    conn.execute("DELETE FROM ventas WHERE id=?", (venta_id,))
+    conn.execute("DELETE FROM gastos WHERE concepto LIKE ?", (f"Comisión Tarjeta 4% {venta['folio']}",))
+    # Marcar como cancelada (no eliminar, para historial)
+    conn.execute(
+        "UPDATE ventas SET cancelada=1, cancelada_at=datetime('now','localtime'), sincronizado=0 WHERE id=?",
+        (venta_id,)
+    )
     conn.commit(); conn.close()
 
 def obtener_bundle_components(bundle_id):

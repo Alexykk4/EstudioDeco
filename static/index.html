@@ -1595,6 +1595,7 @@ async function showCorteModal(){
   const totalEsp=r.total_esperado||0;
   const fondoApertura=r.fondo_apertura||0;
   const desdeStr=r.desde?r.desde.slice(11,19):'00:00:00';
+  const sabroCard=r.sabrodulce_roles>0?`<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:var(--radius-sm);padding:8px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:#6D4C41;">🥐 Pago Sabrodulce · ${r.sabrodulce_roles} roles</span><span style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#E65100;">$${(r.sabrodulce_pago||0).toFixed(2)}</span></div>`:'';
   const BILLS=[1000,500,200,100,50,20], COINS=[10,5,2,1,0.5];
   const bRows=BILLS.map(d=>`<div class="denom-row"><span class="denom-label">$${d.toLocaleString()}</span><input type="number" id="b${d}" class="input denom-input" value="0" min="0" oninput="calcCorte(${esp})"></div>`).join('');
   const cRows=COINS.map(d=>`<div class="denom-row"><span class="denom-label">$${d%1?d:Math.trunc(d)}</span><input type="number" id="m${d}" class="input denom-input" value="0" min="0" oninput="calcCorte(${esp})"></div>`).join('');
@@ -1610,6 +1611,7 @@ async function showCorteModal(){
       <div class="res-card" style="background:#E3F2FD"><div class="res-label" style="color:#1565C0">Tarjeta Neta</div><div class="res-val" style="color:#1565C0">$${tarEsp.toFixed(2)}</div></div>
       <div class="res-card" style="background:var(--sage-light)"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${totalEsp.toFixed(2)}</div></div>
     </div>
+    ${sabroCard}
     <div class="field"><label>🏦 Fondo de caja inicial</label><input type="number" id="cFondo" class="input" value="${fondoApertura}" min="0" placeholder="0.00" oninput="calcCorte(${esp})"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
       <div><div style="font-size:10px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">💵 Billetes</div>${bRows}</div>
@@ -1797,59 +1799,67 @@ async function showVentasHoyModal() {
 
   const metIcon = m => m==='Efectivo'?'💵':m==='Tarjeta'?'💳':'📱';
 
-  const rows = ventas.length ? ventas.map(v => {
-    const hora = v.created_at ? v.created_at.slice(11,16) : '';
+  const activas   = ventas.filter(v => !v.cancelada);
+  const canceladas = ventas.filter(v =>  v.cancelada);
 
-    // Desglose de items
+  function renderVentaCard(v, isCancelled) {
+    const hora = v.created_at ? v.created_at.slice(11,16) : '';
     const itemsHtml = (v.items||[]).map(it => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border-light);">
         <div style="flex:1;min-width:0;">
-          <span style="font-size:12px;">${it.nombre_producto}</span>
+          <span style="font-size:12px;${isCancelled?'text-decoration:line-through;color:var(--text-muted);':''}">${it.nombre_producto}</span>
           <span style="font-size:11px;color:var(--text-muted);margin-left:6px;">x${it.cantidad} · $${it.precio_unitario.toFixed(2)}</span>
         </div>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--text-secondary);flex-shrink:0;">$${it.subtotal.toFixed(2)}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--text-muted);flex-shrink:0;">$${it.subtotal.toFixed(2)}</span>
       </div>`).join('');
 
-    // Desglose de pago (mixto)
     let pagoInfo = `${metIcon(v.metodo_pago)} ${v.metodo_pago}`;
-    if(v.metodo_pago==='Mixto'){
-      pagoInfo = `⚖️ Mixto: 💵$${v.monto_efectivo.toFixed(2)} + 💳$${v.monto_tarjeta.toFixed(2)}`;
-    } else if(v.monto_efectivo>0 && v.monto_tarjeta===0){
-      pagoInfo = `💵 Efectivo`;
-    } else if(v.monto_tarjeta>0 && v.monto_efectivo===0){
-      pagoInfo = `${metIcon(v.metodo_pago)} ${v.metodo_pago}`;
-    }
+    if(v.metodo_pago==='Mixto') pagoInfo = `⚖️ Mixto: 💵$${v.monto_efectivo.toFixed(2)} + 💳$${v.monto_tarjeta.toFixed(2)}`;
 
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;overflow:hidden;">
-      <!-- Cabecera de venta -->
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-warm);">
+    const bgHead = isCancelled ? '#FFF3F3' : 'var(--bg-warm)';
+    const borderColor = isCancelled ? 'var(--red)' : 'var(--border)';
+    const totalColor = isCancelled ? 'var(--red)' : 'var(--sage-dark)';
+
+    return `<div style="background:var(--surface);border:1px solid ${borderColor};border-radius:var(--radius-sm);margin-bottom:10px;overflow:hidden;${isCancelled?'opacity:0.75':''}">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${bgHead};">
         <div style="flex:1;min-width:0;">
-          <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;">${v.folio}</span>
+          <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;${isCancelled?'text-decoration:line-through;':''}">${v.folio}</span>
+          ${isCancelled?'<span style="font-size:10px;background:var(--red);color:white;border-radius:4px;padding:1px 6px;margin-left:6px;">CANCELADA</span>':''}
           <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">${hora} · ${v.cajero_nombre}</span>
         </div>
         <span style="font-size:11px;color:var(--text-secondary);margin-right:6px;">${pagoInfo}</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:var(--sage-dark);">$${v.total.toFixed(2)}</span>
-        ${usuario.perfil==='Administrador'?`
+        <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:${totalColor};">$${v.total.toFixed(2)}</span>
+        ${!isCancelled && usuario.perfil==='Administrador'?`
         <button class="btn-icon btn-edit" onclick="showEditVentaModal(${v.id},'${v.folio}',${v.total},'${v.metodo_pago}',${v.monto_efectivo},${v.monto_tarjeta})" title="Corregir pago" style="flex-shrink:0;">✏️</button>
         <button class="btn-icon btn-del" onclick="confirmarAnularVenta(${v.id},'${v.folio}')" title="Anular venta" style="flex-shrink:0;">🗑️</button>`:''}
       </div>
-      <!-- Artículos vendidos -->
       <div style="padding:8px 14px 10px;">${itemsHtml||'<span style="font-size:11px;color:var(--text-muted)">Sin artículos</span>'}</div>
     </div>`;
-  }).join('') : '<div style="padding:30px;text-align:center;color:var(--text-muted);">Sin ventas hoy</div>';
+  }
 
-  const totalDia = ventas.reduce((s,v)=>s+v.total, 0);
-  const totalEf  = ventas.reduce((s,v)=>s+v.monto_efectivo, 0);
-  const totalTar = ventas.reduce((s,v)=>s+v.monto_tarjeta, 0);
+  const rows = activas.length
+    ? activas.map(v=>renderVentaCard(v,false)).join('')
+    : '<div style="padding:30px;text-align:center;color:var(--text-muted);">Sin ventas hoy</div>';
+
+  const canceladasHtml = canceladas.length
+    ? `<div style="margin-top:16px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red);letter-spacing:.5px;margin-bottom:8px;">🗑️ Ventas Canceladas (${canceladas.length})</div>
+        ${canceladas.map(v=>renderVentaCard(v,true)).join('')}
+       </div>` : '';
+
+  const totalDia = activas.reduce((s,v)=>s+v.total, 0);
+  const totalEf  = activas.reduce((s,v)=>s+v.monto_efectivo, 0);
+  const totalTar = activas.reduce((s,v)=>s+v.monto_tarjeta, 0);
   showModal(`<div class="modal-body">
     <div class="modal-title">📋 Ventas de Hoy</div>
-    <div class="modal-sub">${ventas.length} venta${ventas.length!==1?'s':''}</div>
+    <div class="modal-sub">${activas.length} venta${activas.length!==1?'s':''}${canceladas.length?` · ${canceladas.length} cancelada${canceladas.length!==1?'s':''}`:''}
+</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
       <div class="res-card"><div class="res-label">Total Día</div><div class="res-val" style="color:var(--sage-dark);font-size:16px;">$${totalDia.toFixed(2)}</div></div>
       <div class="res-card"><div class="res-label">💵 Efectivo</div><div class="res-val v" style="font-size:16px;">$${totalEf.toFixed(2)}</div></div>
       <div class="res-card"><div class="res-label">💳 Tarjeta/Trans.</div><div class="res-val" style="color:var(--gold);font-size:16px;">$${totalTar.toFixed(2)}</div></div>
     </div>
-    <div style="max-height:440px;overflow-y:auto;">${rows}</div>
+    <div style="max-height:480px;overflow-y:auto;">${rows}${canceladasHtml}</div>
   </div>
   <div class="modal-footer"><div class="modal-btns" style="margin-top:0"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div>`);
   const m=document.querySelector('#modals .modal'); m.style.width='660px'; m.style.maxWidth='98vw';
@@ -2074,10 +2084,19 @@ async function showPreCorteModal(){
   try{ r=await api('/report/corte'); }catch(e){toast('❌',e.message,'var(--red)');return;}
   const desdeStr=r.desde?r.desde.slice(11,19):'00:00:00';
   const tiendaRows=r.ventas_por_tienda.map(t=>`
-    <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border-light);">
-      <span style="color:var(--text-secondary)">${t.tienda}</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-weight:600;">$${t.total.toFixed(2)}</span>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border-light);">
+      <span style="color:var(--text-secondary);flex:1;">${t.tienda}</span>
+      ${t.comision>0?`<span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--red);">-$${t.comision.toFixed(2)}</span>`:''}
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--sage-dark);">$${(t.neto??t.total).toFixed(2)}</span>
     </div>`).join('');
+  const sabro = r.sabrodulce_roles>0 ? `
+    <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:10px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#F9A825;margin-bottom:4px;">🥐 Pago Sabrodulce</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:var(--text-secondary);">${r.sabrodulce_roles} roles × $15.00</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#E65100;">$${r.sabrodulce_pago.toFixed(2)}</span>
+      </div>
+    </div>` : '';
   const gastosRows=r.gastos_detalle.map(g=>`
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-light);">
       <span style="color:var(--text-muted)">${g.concepto}</span>
@@ -2101,7 +2120,8 @@ async function showPreCorteModal(){
       <div class="res-card" style="background:#E3F2FD"><div class="res-label" style="color:#1565C0">Tarjeta Neta</div><div class="res-val" style="color:#1565C0">$${(r.tarjeta_esperado||0).toFixed(2)}</div></div>
       <div class="res-card" style="background:var(--sage-light)"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${(r.total_esperado||0).toFixed(2)}</div></div>
     </div>
-    ${tiendaRows?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Ventas por tienda</div>${tiendaRows}</div>`:''}
+    ${sabro}
+    ${tiendaRows?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">Ventas por tienda <span style="font-weight:400;opacity:.7">(neto tras comisión tarjeta)</span></div>${tiendaRows}</div>`:''}
     ${gastosRows?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Gastos del turno</div>${gastosRows}</div>`:''}
     ${ingRows?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Ingresos registrados</div>${ingRows}</div>`:''}
   </div>
