@@ -448,7 +448,7 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
           <button class="pay-btn active" id="btnCatAll" onclick="setCategoryFilter('')" style="padding:6px 12px">Todos</button>
           <button class="pay-btn" id="btnCatRoles" onclick="setCategoryFilter('roles')" style="padding:6px 12px">Roles</button>
           <button class="pay-btn" id="btnCatTalleres" onclick="setCategoryFilter('talleres')" style="padding:6px 12px">Talleres</button>
-          <button class="pay-btn" id="btnCatIndiv" onclick="setCategoryFilter('individuales')" style="padding:6px 12px">Individuales</button>
+          <button class="pay-btn" id="btnCatIndiv" onclick="setCategoryFilter('productos')" style="padding:6px 12px">Productos</button>
         </div>
       </div>
       
@@ -974,7 +974,7 @@ function filterProducts() {
     "Extras": "rgba(252, 228, 236, 0.5)",
     "Roles": "rgba(255, 243, 224, 0.5)",
     "Talleres": "rgba(224, 247, 250, 0.5)",
-    "Individuales": "rgba(241, 248, 233, 0.5)"
+    "Productos": "rgba(241, 248, 233, 0.5)"
   };
 
   let html = '';
@@ -1021,8 +1021,13 @@ function prepareAddItem(prod, tienda) {
 }
 
 async function doAddItemAbierto(prodId, tiendaId) {
-  const prod = currentProducts.find(p=>p.id === prodId);
-  const tienda = currentTienda;
+  let prod = currentProducts.find(p=>p.id === prodId);
+  let tienda = currentTienda;
+  if(!prod) {
+    // Product from a different tienda (found via global/inline search)
+    prod = (allProductsGlobal||[]).find(p=>p.id === prodId);
+    tienda = tiendas.find(t=>t.id === tiendaId) || tienda;
+  }
   if(!prod) return;
   const m=parseFloat(document.getElementById('paM').value);
   const d=document.getElementById('paD').value.trim()||prod.nombre;
@@ -1701,7 +1706,7 @@ function showCatalogModal(p=null){
   showModal(`<div class="modal-title">${p?'✏️ Editar':'📦 Nuevo'} Producto</div>
     <div class="resumen-grid" style="grid-template-columns:1fr 1fr; margin:0 0 10px 0;">
       <div class="field" style="margin:0"><label>Tienda</label><select id="catTienda" class="input" onchange="onCatTiendaChange()">${opts}</select></div>
-      <div class="field" style="margin:0"><label>Categoría</label><select id="catCat" class="input"><option value="">Ninguna</option><option value="roles" ${p&&p.categoria_producto==='roles'?'selected':''}>Roles</option><option value="talleres" ${p&&p.categoria_producto==='talleres'?'selected':''}>Talleres</option><option value="individuales" ${p&&p.categoria_producto==='individuales'?'selected':''}>Individuales</option></select></div>
+      <div class="field" style="margin:0"><label>Categoría</label><select id="catCat" class="input"><option value="">Ninguna</option><option value="roles" ${p&&p.categoria_producto==='roles'?'selected':''}>Roles</option><option value="talleres" ${p&&p.categoria_producto==='talleres'?'selected':''}>Talleres</option><option value="productos" ${p&&p.categoria_producto==='productos'?'selected':''}>Productos</option></select></div>
     </div>
     <div class="field"><label>Nombre del paquete / producto</label><input type="text" id="catNombre" class="input" value="${p?p.nombre:''}"></div>
     <div class="resumen-grid" style="grid-template-columns:1fr 1fr; margin:0 0 10px 0;">

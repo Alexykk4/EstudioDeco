@@ -49,6 +49,7 @@ def init_db():
             FOREIGN KEY (componente_producto_id) REFERENCES productos(id)
         )""",
         "INSERT OR IGNORE INTO tiendas (nombre, categoria, precio_abierto, es_barra) VALUES ('Promociones', 'Deco', 0, 0)",
+        "UPDATE productos SET categoria_producto='productos' WHERE categoria_producto='individuales'",
     ]
     for sql in migrations:
         try:
@@ -222,21 +223,53 @@ def quitar_item_orden(item_id):
     conn.commit(); conn.close()
 
 def obtener_items_comanda(orden_id):
-    """Get items from barra that haven't been printed as comanda yet."""
+    """Get items from barra (tienda 1) that haven't been printed as comanda yet.
+    Also expands bundle products that contain components from tienda 1."""
     conn = get_connection()
-    items = conn.execute("""
-        SELECT oi.id, oi.nombre_producto, oi.cantidad, oi.producto_id, oi.tienda_id, oi.precio_unitario, oi.es_precio_abierto
+
+    # 1. Regular barra items (tienda_id=1)
+    regular = conn.execute("""
+        SELECT oi.id, oi.nombre_producto, oi.cantidad, oi.producto_id
         FROM orden_items oi
-        JOIN tiendas t ON t.id = oi.tienda_id
         WHERE oi.orden_id=? AND oi.comanda_impresa=0 AND oi.tienda_id=1
     """, (orden_id,)).fetchall()
-    items = [dict(i) for i in items]
-    if items:
-        ids = [i["id"] for i in items]
-        conn.execute(f"UPDATE orden_items SET comanda_impresa=1 WHERE id IN ({','.join('?'*len(ids))})", ids)
+    regular = [dict(i) for i in regular]
+
+    # 2. Bundle items that have at least one component from tienda 1
+    bundles = conn.execute("""
+        SELECT DISTINCT oi.id, oi.nombre_producto, oi.cantidad, oi.producto_id
+        FROM orden_items oi
+        JOIN bundle_components bc ON bc.bundle_producto_id = oi.producto_id
+        JOIN productos p ON p.id = bc.componente_producto_id
+        WHERE oi.orden_id=? AND oi.comanda_impresa=0 AND p.tienda_id=1
+    """, (orden_id,)).fetchall()
+    bundles = [dict(b) for b in bundles]
+
+    # Expand bundles into their tienda-1 components for the comanda
+    comanda_items = list(regular)
+    for b in bundles:
+        comps = conn.execute("""
+            SELECT p.nombre, bc.cantidad AS cant_comp
+            FROM bundle_components bc
+            JOIN productos p ON p.id = bc.componente_producto_id
+            WHERE bc.bundle_producto_id=? AND p.tienda_id=1
+        """, (b["producto_id"],)).fetchall()
+        for c in comps:
+            comanda_items.append({
+                "nombre_producto": c["nombre"],
+                "cantidad": c["cant_comp"] * b["cantidad"],
+            })
+
+    # Mark all processed orden_items as printed
+    all_ids = [i["id"] for i in regular] + [b["id"] for b in bundles]
+    if all_ids:
+        conn.execute(
+            f"UPDATE orden_items SET comanda_impresa=1 WHERE id IN ({','.join('?'*len(all_ids))})",
+            all_ids
+        )
         conn.commit()
     conn.close()
-    return items
+    return comanda_items
 
 def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0, monto_tarjeta=0.0, efectivo_recibido=0.0):
     conn = get_connection()
