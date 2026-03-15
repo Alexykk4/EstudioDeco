@@ -15,9 +15,11 @@ from modules.database import (
     registrar_venta, registrar_gasto, obtener_resumen_dia,
     registrar_corte, obtener_stock,
     registrar_ingreso, set_fondo_apertura, get_fondo_apertura,
+    obtener_ventas_turno,
 )
 from modules.printer import imprimir_ticket, preview_ticket_text
 from modules.pdf_report import generar_corte_pdf
+from modules.email_sender import enviar_corte_email
 from modules.sync_sheets import sync_worker
 
 # ──────────────────────────────────────────────
@@ -1499,7 +1501,25 @@ class App(ctk.CTk):
                 self.usuario_actual["id"], efectivo_real,
                 fondo_caja=fondo, desglose=desglose,
             )
-            ruta_pdf = generar_corte_pdf(resultado, cajero)
+
+            # Obtener ventas del turno para incluir en el PDF
+            ventas = obtener_ventas_turno()
+            ruta_pdf = generar_corte_pdf(resultado, cajero, ventas_turno=ventas)
+
+            # Enviar PDF por correo en hilo separado
+            def _on_email_ok(msg_email):
+                self.after(0, lambda: messagebox.showinfo(
+                    "Email", f"📧 {msg_email}"))
+
+            def _on_email_error(msg_email):
+                self.after(0, lambda: messagebox.showwarning(
+                    "Email", f"⚠ {msg_email}"))
+
+            enviar_corte_email(
+                ruta_pdf, resultado, cajero,
+                callback_ok=_on_email_ok,
+                callback_error=_on_email_error,
+            )
 
             dif   = resultado["diferencia"]
             signo = "+" if dif >= 0 else ""
@@ -1510,7 +1530,8 @@ class App(ctk.CTk):
                 f"Efectivo real:       ${efectivo_real:,.2f}\n"
                 f"Esperado:            ${resultado['efectivo_esperado']:,.2f}\n"
                 f"Diferencia:          {signo}${dif:,.2f}\n\n"
-                f"PDF: {ruta_pdf}"
+                f"PDF: {ruta_pdf}\n"
+                f"📧 Enviando correo..."
             )
             messagebox.showinfo("Corte Completo", msg)
             modal.destroy()

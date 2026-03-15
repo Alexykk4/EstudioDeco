@@ -827,6 +827,59 @@ def obtener_ventas_dia(fecha=None):
     conn.close()
     return result
 
+def obtener_ventas_turno(fecha=None):
+    """Obtiene las ventas del turno actual (desde el último corte)."""
+    if not fecha: fecha = date.today().strftime("%Y-%m-%d")
+    conn = get_connection()
+    last_corte = conn.execute(
+        "SELECT created_at FROM cortes_caja WHERE fecha=? ORDER BY id DESC LIMIT 1",
+        (fecha,)
+    ).fetchone()
+    desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
+    ventas = conn.execute("""
+        SELECT v.*, u.nombre as cajero_nombre,
+               COALESCE(v.cancelada, 0) as cancelada
+        FROM ventas v
+        JOIN usuarios u ON u.id = v.usuario_id
+        WHERE DATE(v.created_at) = ? AND v.created_at > ?
+          AND (v.cancelada IS NULL OR v.cancelada=0)
+        ORDER BY v.created_at ASC
+    """, (fecha, desde)).fetchall()
+    result = []
+    for v in ventas:
+        v_dict = dict(v)
+        items = conn.execute("""
+            SELECT vd.*, COALESCE(t.nombre,'Sin Tienda') as tienda_nombre
+            FROM venta_detalle vd
+            LEFT JOIN tiendas t ON t.id = vd.tienda_id
+            WHERE vd.venta_id = ?
+        """, (v["id"],)).fetchall()
+        v_dict["items"] = [dict(i) for i in items]
+        result.append(v_dict)
+    conn.close()
+    return result
+
+def get_email_config():
+    """Lee la configuración de email desde la tabla config."""
+    conn = get_connection()
+    email_from = conn.execute("SELECT valor FROM config WHERE clave='email_from'").fetchone()
+    email_pass = conn.execute("SELECT valor FROM config WHERE clave='email_password'").fetchone()
+    email_dest = conn.execute("SELECT valor FROM config WHERE clave='email_destino'").fetchone()
+    conn.close()
+    return {
+        "email_from": email_from["valor"] if email_from else "",
+        "email_password": email_pass["valor"] if email_pass else "",
+        "email_destino": email_dest["valor"] if email_dest else "estudiodecomx@gmail.com",
+    }
+
+def set_email_config(email_from, password, destino="estudiodecomx@gmail.com"):
+    """Guarda la configuración de email en la tabla config."""
+    conn = get_connection()
+    conn.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES ('email_from', ?)", (email_from,))
+    conn.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES ('email_password', ?)", (password,))
+    conn.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES ('email_destino', ?)", (destino,))
+    conn.commit(); conn.close()
+
 def corregir_venta(venta_id, metodo_pago, monto_efectivo, monto_tarjeta):
     conn = get_connection()
     conn.execute(

@@ -43,9 +43,10 @@ class CortePDF(FPDF):
         self.cell(0, 10, f"Página {self.page_no()}", align="R")
 
 
-def generar_corte_pdf(resumen: dict, cajero: str) -> str:
+def generar_corte_pdf(resumen: dict, cajero: str, ventas_turno: list = None) -> str:
     """
     Genera un PDF con el resumen del corte de caja.
+    ventas_turno: lista de dicts de ventas individuales del turno (opcional).
     Retorna la ruta absoluta del archivo generado.
     """
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -98,6 +99,109 @@ def generar_corte_pdf(resumen: dict, cajero: str) -> str:
     pdf.cell(70, 8, f"${resumen['total_ventas']:,.2f}  ", fill=True, align="R",
              new_x="LMARGIN", new_y="NEXT")
     pdf.ln(8)
+
+    # ── DETALLE DE VENTAS DEL TURNO ──
+    if ventas_turno:
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(*MORADO_PASTEL)
+        pdf.cell(0, 8, "Detalle de Ventas del Turno", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+
+        # Encabezados
+        pdf.set_fill_color(*AZUL_PASTEL)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.cell(30, 8, "  Folio", fill=True)
+        pdf.cell(18, 8, "Hora", fill=True, align="C")
+        pdf.cell(26, 8, "Método", fill=True, align="C")
+        pdf.cell(28, 8, "Total", fill=True, align="R")
+        pdf.cell(28, 8, "Comisión", fill=True, align="R")
+        pdf.cell(28, 8, "Neto", fill=True, align="R")
+        pdf.cell(32, 8, "Productos", fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_text_color(60, 60, 60)
+        pdf.set_font("Helvetica", "", 8)
+        fill = False
+        total_comisiones = 0.0
+        total_neto = 0.0
+
+        for v in ventas_turno:
+            if fill:
+                pdf.set_fill_color(*GRIS_CLARO)
+
+            folio_short = v.get("folio", "")
+            if len(folio_short) > 12:
+                folio_short = folio_short[-8:]
+
+            hora = ""
+            created = v.get("created_at", "")
+            if created and len(created) >= 16:
+                hora = created[11:16]
+
+            metodo = v.get("metodo_pago", "Efectivo")
+            total_venta = v.get("total", 0)
+            monto_tarjeta = v.get("monto_tarjeta", 0)
+
+            # Calcular comisión según método de pago
+            if metodo == "Tarjeta":
+                comision = round(total_venta * 0.04, 2)
+            elif metodo == "Mixto" and total_venta > 0:
+                comision = round(monto_tarjeta * 0.04, 2)
+            else:
+                comision = 0.0
+
+            neto = total_venta - comision
+            total_comisiones += comision
+            total_neto += neto
+
+            # Resumen de productos
+            items = v.get("items", [])
+            num_items = sum(i.get("cantidad", 1) for i in items)
+            productos_txt = f"{num_items} art."
+
+            pdf.cell(30, 7, f"  {folio_short}", fill=fill)
+            pdf.cell(18, 7, hora, fill=fill, align="C")
+            pdf.cell(26, 7, metodo, fill=fill, align="C")
+            pdf.cell(28, 7, f"${total_venta:,.2f}", fill=fill, align="R")
+
+            if comision > 0:
+                pdf.set_text_color(200, 80, 80)
+                pdf.cell(28, 7, f"-${comision:,.2f}", fill=fill, align="R")
+                pdf.set_text_color(60, 60, 60)
+            else:
+                pdf.cell(28, 7, "—", fill=fill, align="R")
+
+            pdf.cell(28, 7, f"${neto:,.2f}", fill=fill, align="R")
+            pdf.cell(32, 7, productos_txt, fill=fill, align="C",
+                     new_x="LMARGIN", new_y="NEXT")
+
+            # Detallar items debajo
+            if items:
+                pdf.set_font("Helvetica", "I", 7)
+                pdf.set_text_color(120, 120, 120)
+                items_desc = ", ".join(
+                    f"{i.get('nombre_producto', i.get('nombre','?'))} x{i.get('cantidad',1)}"
+                    for i in items[:5]
+                )
+                if len(items) > 5:
+                    items_desc += f" (+{len(items)-5} más)"
+                pdf.cell(190, 5, f"    {items_desc}",
+                         new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 8)
+                pdf.set_text_color(60, 60, 60)
+
+            fill = not fill
+
+        # Totales del detalle
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_fill_color(*MORADO_PASTEL)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(74, 8, "  TOTALES", fill=True)
+        pdf.cell(28, 8, f"${resumen['total_ventas']:,.2f}", fill=True, align="R")
+        pdf.cell(28, 8, f"-${total_comisiones:,.2f}", fill=True, align="R")
+        pdf.cell(28, 8, f"${total_neto:,.2f}", fill=True, align="R")
+        pdf.cell(32, 8, "", fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(8)
 
     # ── GASTOS ──
     pdf.set_font("Helvetica", "B", 13)
@@ -269,3 +373,4 @@ def generar_corte_pdf(resumen: dict, cajero: str) -> str:
         print(f"No se pudo abrir automáticamente el PDF: {e}")
         
     return str(filepath)
+
