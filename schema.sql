@@ -173,7 +173,10 @@ INSERT OR IGNORE INTO config (clave, valor) VALUES
     ('nombre_negocio','Estudio Deco'),
     ('sheets_id',''),
     ('sync_intervalo_seg','60'),
-    ('fondo_turno','{"monto":0,"fecha":""}');
+    ('fondo_turno','{"monto":0,"fecha":""}'),
+    ('email_from',''),
+    ('email_password',''),
+    ('email_destino','estudiodecomx@gmail.com');
 
 INSERT OR IGNORE INTO usuarios (id, nombre, perfil, nip) VALUES
     (1,'Admin','Administrador','03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4');
