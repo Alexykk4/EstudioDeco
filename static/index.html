@@ -647,8 +647,12 @@ async function loadSemanal(){
   try {
     const data = await api('/report/semanal');
     // KPIs
-    const saldoAnt = data.saldo_anterior || 0;
-    const acumuladoTotal = saldoAnt + data.utilidad;
+    const saldoAnt    = data.saldo_anterior || 0;
+    const gastosCaja  = (data.total_gastos || 0) - (data.total_gastos_banco || 0);
+    const gastosBanco = data.total_gastos_banco || 0;
+    const efectivoNeto = (data.total_efectivo || 0) - gastosCaja;
+    const tarjetaNeto  = (data.total_tarjeta  || 0) - gastosBanco;
+    const acumuladoTotal = efectivoNeto + tarjetaNeto;
     document.getElementById('semanalKpis').innerHTML = `
       <div class="kpi-card">
         <div class="kpi-label">📦 Saldo Anterior</div>
@@ -656,15 +660,15 @@ async function loadSemanal(){
       </div>
       <div class="kpi-card">
         <div class="kpi-label">💰 Ventas Semana</div>
-        <div class="kpi-val purple">${$pesos(data.total_semana)}</div>
+        <div class="kpi-val purple">${$pesos(data.total_ventas || 0)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">💵 Efectivo</div>
-        <div class="kpi-val green">${$pesos(data.total_efectivo)}</div>
+        <div class="kpi-val green">${$pesos(efectivoNeto)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">💳 Tarjeta / Transfer</div>
-        <div class="kpi-val gold">${$pesos(data.total_tarjeta)}</div>
+        <div class="kpi-val gold">${$pesos(tarjetaNeto)}</div>
       </div>
       <div class="kpi-card" style="border:2px solid var(--sage);">
         <div class="kpi-label">✨ Acumulado Total</div>
@@ -1597,6 +1601,7 @@ async function doGasto(){
   if(!c||!m||m<=0)return;
   await api('/gastos',{method:'POST',body:{usuario_id:usuario.id,tienda_id:t?+t:null,concepto:c,monto:m,origen:o}});
   closeModal(); toast('✅',`Gasto: $${m.toFixed(2)} (${o})`);
+  if(!document.getElementById('semanalView').classList.contains('hidden')) loadSemanal();
 }
 
 async function showCorteModal(){
