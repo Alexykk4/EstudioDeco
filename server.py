@@ -17,12 +17,13 @@ from modules.database import (
     obtener_ordenes_mesa, renombrar_orden, cancelar_orden_mesa,
     obtener_todos_los_productos, crear_producto, actualizar_producto, eliminar_producto,
     actualizar_item_orden, registrar_ingreso, set_fondo_apertura, get_fondo_apertura,
-    obtener_ventas_dia, corregir_venta, anular_venta,
+    obtener_ventas_dia, obtener_ventas_turno, corregir_venta, anular_venta,
     obtener_bundle_components, agregar_bundle_component, eliminar_bundle_component,
     obtener_resumen_semana,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf
+from modules.email_sender import enviar_corte_email, enviar_notificacion_email
 from modules.sync_sheets import sync_worker
 
 init_db(); sync_worker.start()
@@ -280,12 +281,46 @@ async def api_venta_directa(r: dict):
 @app.post("/api/gastos")
 async def api_gasto(r: GastoReq):
     registrar_gasto(r.usuario_id, r.tienda_id, r.concepto, r.monto, r.origen)
+    # Obtener nombre del usuario
+    conn = get_connection()
+    u = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (r.usuario_id,)).fetchone()
+    t = conn.execute("SELECT nombre FROM tiendas WHERE id=?", (r.tienda_id,)).fetchone() if r.tienda_id else None
+    conn.close()
+    cajero = u["nombre"] if u else "?"
+    tienda_name = t["nombre"] if t else "General"
+    from datetime import datetime
+    ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
+    enviar_notificacion_email(
+        f"💸 Gasto Registrado – ${r.monto:.2f}",
+        f"GASTO REGISTRADO\n"
+        f"Fecha: {ahora}\n"
+        f"Cajero: {cajero}\n"
+        f"Tienda: {tienda_name}\n"
+        f"Concepto: {r.concepto}\n"
+        f"Monto: ${r.monto:,.2f}\n"
+        f"Origen: {r.origen}\n"
+    )
     return {"ok": True}
 
 # ── Ingresos ──
 @app.post("/api/ingresos")
 async def api_ingreso(r: IngresoReq):
     registrar_ingreso(r.usuario_id, r.concepto, r.monto, r.metodo_pago)
+    conn = get_connection()
+    u = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (r.usuario_id,)).fetchone()
+    conn.close()
+    cajero = u["nombre"] if u else "?"
+    from datetime import datetime
+    ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
+    enviar_notificacion_email(
+        f"💰 Ingreso Registrado – ${r.monto:.2f}",
+        f"INGRESO REGISTRADO\n"
+        f"Fecha: {ahora}\n"
+        f"Cajero: {cajero}\n"
+        f"Concepto: {r.concepto}\n"
+        f"Monto: ${r.monto:,.2f}\n"
+        f"Método: {r.metodo_pago}\n"
+    )
     return {"ok": True}
 
 # ── Fondo de Apertura ──
@@ -327,8 +362,19 @@ async def api_corte(r: CorteReq):
     row = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (r.usuario_id,)).fetchone()
     conn.close()
     cajero = row["nombre"] if row else "?"
+    ventas_turno = obtener_ventas_turno()
     resumen = registrar_corte(r.usuario_id, r.efectivo_real, fondo_caja=r.fondo_caja, desglose=r.desglose)
-    generar_corte_pdf(resumen, cajero)
+    pdf_path = generar_corte_pdf(resumen, cajero, ventas_turno=ventas_turno)
+    
+    # Enviar el corte por correo automáticamente
+    enviar_corte_email(
+        pdf_path=pdf_path,
+        resumen=resumen,
+        cajero=cajero,
+        callback_ok=lambda msg: print(f"Email enviado: {msg}"),
+        callback_error=lambda err: print(f"Error al enviar email: {err}")
+    )
+    
     return {"resumen": resumen}
 
 # ── Bundle / Promociones ──
@@ -358,6 +404,38 @@ async def api_corregir_venta(vid: int, r: CorregirVentaReq):
 async def api_anular_venta(vid: int):
     anular_venta(vid)
     return {"ok": True}
+
+@app.post("/api/ventas/{vid}/reimprimir")
+async def api_reimprimir_ticket(vid: int):
+    conn = get_connection()
+    v = conn.execute("SELECT * FROM ventas WHERE id=?", (vid,)).fetchone()
+    if not v:
+        conn.close()
+        raise HTTPException(404, "Venta no encontrada")
+    items = conn.execute("""
+        SELECT vd.*, COALESCE(t.nombre,'Sin Tienda') as tienda_nombre
+        FROM venta_detalle vd
+        LEFT JOIN tiendas t ON t.id = vd.tienda_id
+        WHERE vd.venta_id = ?
+    """, (vid,)).fetchall()
+    row = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (v["usuario_id"],)).fetchone()
+    mesa_row = conn.execute("SELECT numero FROM mesas WHERE id=?", (v["mesa_id"],)).fetchone() if v["mesa_id"] else None
+    conn.close()
+    cajero = row["nombre"] if row else "?"
+    venta_data = {
+        "folio": v["folio"],
+        "total": v["total"],
+        "metodo_pago": v["metodo_pago"],
+        "monto_efectivo": v["monto_efectivo"],
+        "monto_tarjeta": v["monto_tarjeta"],
+        "efectivo_recibido": 0,
+        "cambio": 0,
+        "fecha": v["created_at"],
+        "items": [dict(i) for i in items],
+        "mesa": f"Mesa {mesa_row['numero']}" if mesa_row else None,
+    }
+    ok = imprimir_ticket(venta_data, cajero)
+    return {"impreso": ok}
 
 if __name__ == "__main__":
     print("\n  * Estudio Deco POS *")

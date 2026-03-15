@@ -362,7 +362,7 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
 
 /* ── RESUMEN SEMANAL ── */
 .semanal-view { flex:1; display:flex; flex-direction:column; gap:16px; overflow:hidden; }
-.semanal-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; flex-shrink:0; }
+.semanal-kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; flex-shrink:0; }
 .kpi-card {
   background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
   padding:16px 18px; display:flex; flex-direction:column; gap:4px;
@@ -412,7 +412,6 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
     <button class="btn btn-sage" onclick="showNipModal()">🔑 Ingresar</button>
     <button class="btn" style="background:#66BB6A;color:white;" onclick="showFondoModal()">🏦 Abrir Caja</button>
     <button class="btn" style="background:#26A69A;color:white;" onclick="showIngresoModal()">💰 Ingreso</button>
-    <button class="btn btn-ghost" onclick="showGlobalSearch()">🔍 Buscar</button>
     <button class="btn btn-ghost" onclick="showVentasHoyModal()">📋 Ventas</button>
     <button class="btn btn-ghost" onclick="showPreCorteModal()">👁 Pre-Corte</button>
     <button class="btn btn-gold" onclick="showCorteModal()">📊 Corte</button>
@@ -648,7 +647,13 @@ async function loadSemanal(){
   try {
     const data = await api('/report/semanal');
     // KPIs
+    const saldoAnt = data.saldo_anterior || 0;
+    const acumuladoTotal = saldoAnt + data.utilidad;
     document.getElementById('semanalKpis').innerHTML = `
+      <div class="kpi-card">
+        <div class="kpi-label">📦 Saldo Anterior</div>
+        <div class="kpi-val ${saldoAnt>=0?'green':'red'}">${$pesos(saldoAnt)}</div>
+      </div>
       <div class="kpi-card">
         <div class="kpi-label">💰 Ventas Semana</div>
         <div class="kpi-val purple">${$pesos(data.total_semana)}</div>
@@ -661,9 +666,9 @@ async function loadSemanal(){
         <div class="kpi-label">💳 Tarjeta / Transfer</div>
         <div class="kpi-val gold">${$pesos(data.total_tarjeta)}</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">✨ Utilidad Bruta</div>
-        <div class="kpi-val ${data.utilidad>=0?'green':'red'}">${$pesos(data.utilidad)}</div>
+      <div class="kpi-card" style="border:2px solid var(--sage);">
+        <div class="kpi-label">✨ Acumulado Total</div>
+        <div class="kpi-val ${acumuladoTotal>=0?'green':'red'}">${$pesos(acumuladoTotal)}</div>
       </div>`;
 
     const maxDia = Math.max(...data.dias.map(d=>d.total_ventas), 1);
@@ -683,6 +688,9 @@ async function loadSemanal(){
       const gastosRow = dia.gastos > 0
         ? `<div class="semanal-gastos-row">💸 Gastos: ${$pesos(dia.gastos)}</div>` : '';
 
+      const ingresosRow = dia.ingresos > 0
+        ? `<div style="font-size:11px;color:var(--green-ok);font-weight:600;">💰 Ingresos: ${$pesos(dia.ingresos)}</div>` : '';
+
       const el = document.createElement('div');
       el.className = 'semanal-day';
       el.innerHTML = `
@@ -693,7 +701,7 @@ async function loadSemanal(){
           <div class="semanal-total">${$pesos(dia.total_ventas)}</div>
         </div>
         <div class="semanal-tiendas">${tiendaChips}</div>
-        ${gastosRow}`;
+        ${ingresosRow}${gastosRow}`;
       body.appendChild(el);
       // Animate bar
       setTimeout(()=>el.querySelector('.semanal-bar').style.width=pct+'%', 50);
@@ -1556,7 +1564,10 @@ async function doFondo(){
 
 function showIngresoModal(){
   if(!usuario)return showNipModal(showIngresoModal);
+  const ingresoTiendas = tiendas.filter(t => t.nombre === 'Estudio Deco' || t.nombre === 'Estación 304');
+  const ingOpts = ingresoTiendas.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('');
   showModal(`<div class="modal-simple"><div class="modal-title">💰 Registrar Ingreso</div><div class="modal-sub">Pago recibido fuera de ventas</div>
+    <div class="field"><label>Destino</label><select id="iT" class="input">${ingOpts}</select></div>
     <div class="field"><label>Concepto</label><input id="iC" class="input" placeholder="Ej: Anticipo taller, abono cliente"></div>
     <div class="field"><label>Monto</label><input type="number" id="iM" class="input" placeholder="0.00" step="0.01"></div>
     <div class="field"><label>Método de pago</label><select id="iP" class="input"><option value="Efectivo">💵 Efectivo</option><option value="Tarjeta">💳 Tarjeta / Transferencia</option></select></div>
@@ -1572,10 +1583,11 @@ async function doIngreso(){
 
 function showGastoModal(){
   if(!usuario)return showNipModal(showGastoModal);
-  const opts=tiendas.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('');
+  const gastoTiendas = tiendas.filter(t => t.nombre === 'Estudio Deco' || t.nombre === 'Estación 304');
+  const opts=gastoTiendas.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('');
   showModal(`<div class="modal-simple"><div class="modal-title">💸 Registrar Gasto</div><div class="modal-sub">Salida de dinero</div>
     <div class="field"><label>Origen de los fondos</label><select id="gO" class="input"><option value="Caja">Caja Fuerte / Efectivo</option><option value="Banco">Cuenta de Banco / Transferencia</option></select></div>
-    <div class="field"><label>Tienda (Opcional)</label><select id="gT" class="input"><option value="">General</option>${opts}</select></div>
+    <div class="field"><label>Tienda</label><select id="gT" class="input">${opts}</select></div>
     <div class="field"><label>Concepto</label><input id="gC" class="input" placeholder="Ej: Compra de leche"></div>
     <div class="field"><label>Monto</label><input type="number" id="gM" class="input" placeholder="0.00" step="0.01"></div>
     <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-terracotta" onclick="doGasto()">Guardar</button></div></div>`);
@@ -1864,6 +1876,7 @@ async function showVentasHoyModal() {
         </div>
         <span style="font-size:11px;color:var(--text-secondary);margin-right:6px;">${pagoInfo}</span>
         <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:${totalColor};">$${v.total.toFixed(2)}</span>
+        <button class="btn-icon" style="background:var(--sage-light);color:var(--sage);flex-shrink:0;" onclick="reimprimirTicket(${v.id})" title="Reimprimir ticket">🖨️</button>
         ${!isCancelled && usuario.perfil==='Administrador'?`
         <button class="btn-icon btn-edit" onclick="showEditVentaModal(${v.id},'${v.folio}',${v.total},'${v.metodo_pago}',${v.monto_efectivo},${v.monto_tarjeta})" title="Corregir pago" style="flex-shrink:0;">✏️</button>
         <button class="btn-icon btn-del" onclick="confirmarAnularVenta(${v.id},'${v.folio}')" title="Anular venta" style="flex-shrink:0;">🗑️</button>`:''}
@@ -1898,6 +1911,13 @@ async function showVentasHoyModal() {
   </div>
   <div class="modal-footer"><div class="modal-btns" style="margin-top:0"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div>`);
   const m=document.querySelector('#modals .modal'); m.style.width='660px'; m.style.maxWidth='98vw';
+}
+
+async function reimprimirTicket(vid) {
+  try {
+    const r = await api(`/ventas/${vid}/reimprimir`, {method:'POST'});
+    toast(r.impreso ? '✅' : '⚠️', r.impreso ? 'Ticket reimpreso' : 'Sin impresora', r.impreso ? 'var(--green-ok)' : 'var(--gold)');
+  } catch(e) { toast('❌', e.message, 'var(--red)'); }
 }
 
 function showEditVentaModal(vid, folio, total, metodo, montoEf, montoTar) {
