@@ -556,9 +556,11 @@ def obtener_resumen_dia(fecha=None):
     # Totales con ingresos incluidos
     total_ef  = efectivo_row["monto"] + (ing_row["ef"] if ing_row else 0)
     total_tar = tarjeta_row["monto"] + (ing_row["tar"] if ing_row else 0)
-    # Gastos se restan de tarjeta (no de efectivo)
-    efectivo_esperado = total_ef
-    tarjeta_esperado  = total_tar - rg["total_gastos"]
+    # Gastos de Caja se restan de efectivo, gastos de Banco se restan de tarjeta
+    gastos_caja  = gc["gastos_caja"] if gc else 0
+    gastos_banco = rg["total_gastos"] - gastos_caja
+    efectivo_esperado = total_ef - gastos_caja
+    tarjeta_esperado  = total_tar - gastos_banco
     total_esperado    = efectivo_esperado + tarjeta_esperado
 
     sabro_roles = int(sabro["roles"]) if sabro else 0
@@ -603,6 +605,21 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         fecha_fin = (hoy - timedelta(days=hoy.weekday()) + timedelta(days=6)).strftime("%Y-%m-%d")
 
     conn = get_connection()
+
+    # ── Saldo acumulado de semanas anteriores ──
+    prev_ventas = conn.execute("""
+        SELECT COALESCE(SUM(total),0) as total
+        FROM ventas WHERE DATE(created_at) < ? AND (cancelada IS NULL OR cancelada=0)
+    """, (fecha_inicio,)).fetchone()
+    prev_ingresos = conn.execute("""
+        SELECT COALESCE(SUM(monto),0) as total
+        FROM ingresos WHERE DATE(created_at) < ?
+    """, (fecha_inicio,)).fetchone()
+    prev_gastos = conn.execute("""
+        SELECT COALESCE(SUM(monto),0) as total
+        FROM gastos WHERE DATE(created_at) < ?
+    """, (fecha_inicio,)).fetchone()
+    saldo_anterior = (prev_ventas['total'] + prev_ingresos['total']) - prev_gastos['total']
 
     rv = conn.execute("""
         SELECT COALESCE(SUM(total),0) as total_ventas,
@@ -689,6 +706,28 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         tiendas_map.setdefault(row["fecha"], []).append({"tienda": row["tienda"], "total": row["total"]})
     gastos_map = {row["fecha"]: row["gastos"] for row in gastos_rows}
 
+    # ── Ingresos (pagos recibidos fuera de ventas) ──
+    ingresos_total_row = conn.execute("""
+        SELECT COALESCE(SUM(monto),0) as total,
+               COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN monto ELSE 0 END),0) as ef,
+               COALESCE(SUM(CASE WHEN metodo_pago='Tarjeta' THEN monto ELSE 0 END),0) as tar
+        FROM ingresos WHERE DATE(created_at) BETWEEN ? AND ?
+    """, (fecha_inicio, fecha_fin)).fetchone()
+
+    ingresos_diario_rows = conn.execute("""
+        SELECT DATE(created_at) as fecha, COALESCE(SUM(monto),0) as ingresos
+        FROM ingresos WHERE DATE(created_at) BETWEEN ? AND ?
+        GROUP BY DATE(created_at)
+    """, (fecha_inicio, fecha_fin)).fetchall()
+
+    ingresos_det = conn.execute("""
+        SELECT concepto, monto, metodo_pago, DATE(created_at) as fecha
+        FROM ingresos WHERE DATE(created_at) BETWEEN ? AND ?
+        ORDER BY created_at
+    """, (fecha_inicio, fecha_fin)).fetchall()
+
+    ingresos_map = {row["fecha"]: row["ingresos"] for row in ingresos_diario_rows}
+
     diario = []
     for row in diario_rows:
         d = dict(row)
@@ -696,6 +735,7 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         d["num_ventas"]   = d["ventas"]  # alias
         d["por_tienda"]   = tiendas_map.get(d["fecha"], [])
         d["gastos"]       = gastos_map.get(d["fecha"], 0)
+        d["ingresos"]     = ingresos_map.get(d["fecha"], 0)
         diario.append(d)
 
     ventas_por_tienda = []
@@ -707,16 +747,20 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
 
     sabro_roles = int(sabro['roles']) if sabro else 0
     total_semana = rv['total_ventas']
+    total_ingresos = ingresos_total_row['total'] if ingresos_total_row else 0
     conn.close()
     return {
         'fecha_inicio': fecha_inicio,
         'fecha_fin': fecha_fin,
+        'saldo_anterior': saldo_anterior,
         # Legacy fields for loadSemanal view
-        'total_semana': total_semana,
-        'total_efectivo': rv['total_efectivo'],
-        'total_tarjeta': rv['total_tarjeta'],
+        'total_semana': total_semana + total_ingresos,
+        'total_efectivo': rv['total_efectivo'] + (ingresos_total_row['ef'] if ingresos_total_row else 0),
+        'total_tarjeta': rv['total_tarjeta'] + (ingresos_total_row['tar'] if ingresos_total_row else 0),
         'total_gastos': gastos['total'],
-        'utilidad': total_semana - gastos['total'],
+        'total_ingresos': total_ingresos,
+        'ingresos_detalle': [dict(r) for r in ingresos_det],
+        'utilidad': total_semana + total_ingresos - gastos['total'],
         'dias': diario,
         # New fields for Corte Semanal modal
         'total_ventas': total_semana,
@@ -838,9 +882,11 @@ def obtener_ventas_turno(fecha=None):
     desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
     ventas = conn.execute("""
         SELECT v.*, u.nombre as cajero_nombre,
-               COALESCE(v.cancelada, 0) as cancelada
+               COALESCE(v.cancelada, 0) as cancelada,
+               m.numero as mesa_numero
         FROM ventas v
         JOIN usuarios u ON u.id = v.usuario_id
+        LEFT JOIN mesas m ON m.id = v.mesa_id
         WHERE DATE(v.created_at) = ? AND v.created_at > ?
           AND (v.cancelada IS NULL OR v.cancelada=0)
         ORDER BY v.created_at ASC

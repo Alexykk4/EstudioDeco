@@ -110,20 +110,27 @@ def generar_corte_pdf(resumen: dict, cajero: str, ventas_turno: list = None) -> 
         # Encabezados
         pdf.set_fill_color(*AZUL_PASTEL)
         pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "B", 8)
-        pdf.cell(30, 8, "  Folio", fill=True)
-        pdf.cell(18, 8, "Hora", fill=True, align="C")
-        pdf.cell(26, 8, "Método", fill=True, align="C")
-        pdf.cell(28, 8, "Total", fill=True, align="R")
-        pdf.cell(28, 8, "Comisión", fill=True, align="R")
-        pdf.cell(28, 8, "Neto", fill=True, align="R")
-        pdf.cell(32, 8, "Productos", fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "B", 7)
+        pdf.cell(18, 8, " FOLIO", fill=True)
+        pdf.cell(13, 8, "FECHA", fill=True, align="C")
+        pdf.cell(27, 8, "CUENTA", fill=True, align="C")
+        pdf.cell(16, 8, "IRC DESC.", fill=True, align="R")
+        pdf.cell(13, 8, "PROP.", fill=True, align="R")
+        pdf.cell(17, 8, "IMPORTE", fill=True, align="R")
+        pdf.cell(18, 8, "EFECTIVO", fill=True, align="R")
+        pdf.cell(18, 8, "TARJETA", fill=True, align="R")
+        pdf.cell(18, 8, "CXC", fill=True, align="R")
+        pdf.cell(32, 8, "MONTO MENOS COMISIÓN", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
 
         pdf.set_text_color(60, 60, 60)
-        pdf.set_font("Helvetica", "", 8)
+        pdf.set_font("Helvetica", "", 7)
         fill = False
-        total_comisiones = 0.0
-        total_neto = 0.0
+        
+        sum_importe = 0.0
+        sum_efectivo = 0.0
+        sum_tarjeta = 0.0
+        sum_cxc = 0.0
+        sum_neto = 0.0
 
         for v in ventas_turno:
             if fill:
@@ -138,9 +145,25 @@ def generar_corte_pdf(resumen: dict, cajero: str, ventas_turno: list = None) -> 
             if created and len(created) >= 16:
                 hora = created[11:16]
 
+            # Determine the account or table name
+            if v.get("mesa_numero"):
+                cuenta_str = f"Mesa {v['mesa_numero']}"
+            else:
+                cuenta_str = "Venta Directa"
+
             metodo = v.get("metodo_pago", "Efectivo")
             total_venta = v.get("total", 0)
             monto_tarjeta = v.get("monto_tarjeta", 0)
+            monto_efectivo = v.get("monto_efectivo", 0)
+
+            # Determine CXC / Efectivo / Tarjeta amounts based on method
+            val_efvo = monto_efectivo if metodo in ["Efectivo", "Mixto"] else 0.0
+            val_tarj = monto_tarjeta if metodo in ["Tarjeta", "Mixto"] else 0.0
+            val_cxc  = total_venta if metodo in ["Transferencia", "Transfer"] else 0.0
+
+            # Assuming 0 for these columns explicitly requested without DB support
+            val_irc = 0.0
+            val_prop = 0.0
 
             # Calcular comisión según método de pago
             if metodo == "Tarjeta":
@@ -151,31 +174,28 @@ def generar_corte_pdf(resumen: dict, cajero: str, ventas_turno: list = None) -> 
                 comision = 0.0
 
             neto = total_venta - comision
-            total_comisiones += comision
-            total_neto += neto
+            sum_importe += total_venta
+            sum_efectivo += val_efvo
+            sum_tarjeta += val_tarj
+            sum_cxc += val_cxc
+            sum_neto += neto
 
-            # Resumen de productos
-            items = v.get("items", [])
-            num_items = sum(i.get("cantidad", 1) for i in items)
-            productos_txt = f"{num_items} art."
-
-            pdf.cell(30, 7, f"  {folio_short}", fill=fill)
-            pdf.cell(18, 7, hora, fill=fill, align="C")
-            pdf.cell(26, 7, metodo, fill=fill, align="C")
-            pdf.cell(28, 7, f"${total_venta:,.2f}", fill=fill, align="R")
-
-            if comision > 0:
-                pdf.set_text_color(200, 80, 80)
-                pdf.cell(28, 7, f"-${comision:,.2f}", fill=fill, align="R")
-                pdf.set_text_color(60, 60, 60)
-            else:
-                pdf.cell(28, 7, "—", fill=fill, align="R")
-
-            pdf.cell(28, 7, f"${neto:,.2f}", fill=fill, align="R")
-            pdf.cell(32, 7, productos_txt, fill=fill, align="C",
-                     new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(18, 7, f" {folio_short}", fill=fill)
+            pdf.cell(13, 7, hora, fill=fill, align="C")
+            pdf.cell(27, 7, cuenta_str[:15], fill=fill, align="C")
+            
+            pdf.cell(16, 7, f"${val_irc:,.2f}", fill=fill, align="R")
+            pdf.cell(13, 7, f"${val_prop:,.2f}", fill=fill, align="R")
+            
+            pdf.cell(17, 7, f"${total_venta:,.2f}", fill=fill, align="R")
+            pdf.cell(18, 7, f"${val_efvo:,.2f}", fill=fill, align="R")
+            pdf.cell(18, 7, f"${val_tarj:,.2f}", fill=fill, align="R")
+            pdf.cell(18, 7, f"${val_cxc:,.2f}", fill=fill, align="R")
+            
+            pdf.cell(32, 7, f"${neto:,.2f}", fill=fill, align="R", new_x="LMARGIN", new_y="NEXT")
 
             # Detallar items debajo
+            items = v.get("items", [])
             if items:
                 pdf.set_font("Helvetica", "I", 7)
                 pdf.set_text_color(120, 120, 120)
@@ -187,20 +207,23 @@ def generar_corte_pdf(resumen: dict, cajero: str, ventas_turno: list = None) -> 
                     items_desc += f" (+{len(items)-5} más)"
                 pdf.cell(190, 5, f"    {items_desc}",
                          new_x="LMARGIN", new_y="NEXT")
-                pdf.set_font("Helvetica", "", 8)
+                pdf.set_font("Helvetica", "", 7)
                 pdf.set_text_color(60, 60, 60)
 
             fill = not fill
 
         # Totales del detalle
-        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_font("Helvetica", "B", 7)
         pdf.set_fill_color(*MORADO_PASTEL)
         pdf.set_text_color(255, 255, 255)
-        pdf.cell(74, 8, "  TOTALES", fill=True)
-        pdf.cell(28, 8, f"${resumen['total_ventas']:,.2f}", fill=True, align="R")
-        pdf.cell(28, 8, f"-${total_comisiones:,.2f}", fill=True, align="R")
-        pdf.cell(28, 8, f"${total_neto:,.2f}", fill=True, align="R")
-        pdf.cell(32, 8, "", fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(58, 8, "  TOTALES", fill=True)
+        pdf.cell(16, 8, "$0.00", fill=True, align="R")
+        pdf.cell(13, 8, "$0.00", fill=True, align="R")
+        pdf.cell(17, 8, f"${sum_importe:,.2f}", fill=True, align="R")
+        pdf.cell(18, 8, f"${sum_efectivo:,.2f}", fill=True, align="R")
+        pdf.cell(18, 8, f"${sum_tarjeta:,.2f}", fill=True, align="R")
+        pdf.cell(18, 8, f"${sum_cxc:,.2f}", fill=True, align="R")
+        pdf.cell(32, 8, f"${sum_neto:,.2f}", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(8)
 
     # ── GASTOS ──

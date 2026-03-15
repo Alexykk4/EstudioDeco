@@ -86,3 +86,42 @@ def enviar_corte_email(pdf_path: str, resumen: dict, cajero: str,
 
     hilo = threading.Thread(target=_enviar, daemon=True)
     hilo.start()
+
+
+def enviar_notificacion_email(asunto: str, cuerpo: str):
+    """
+    Envía un email de notificación simple (sin adjuntos) en un hilo separado.
+    Usado para notificar ingresos y gastos.
+    """
+    def _enviar():
+        try:
+            from modules.database import get_email_config
+            config = get_email_config()
+
+            email_from = config.get("email_from", "").strip()
+            email_pass = config.get("email_password", "").strip()
+            email_dest = config.get("email_destino", "").strip()
+
+            if not email_from or not email_pass:
+                print("[EMAIL] No hay credenciales configuradas, omitiendo notificación.")
+                return
+
+            if not email_dest:
+                email_dest = "estudiodecomx@gmail.com"
+
+            msg = MIMEMultipart()
+            msg["From"] = email_from
+            msg["To"] = email_dest
+            msg["Subject"] = asunto
+            msg.attach(MIMEText(cuerpo, "plain"))
+
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(email_from, email_pass)
+                server.sendmail(email_from, email_dest, msg.as_string())
+
+            print(f"[EMAIL] Notificación enviada: {asunto}")
+        except Exception as e:
+            print(f"[EMAIL] Error notificación: {e}")
+
+    hilo = threading.Thread(target=_enviar, daemon=True)
+    hilo.start()
