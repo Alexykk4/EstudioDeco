@@ -2430,22 +2430,26 @@ async function showCorteSemanalModal(offset){
           return tiendas.map((nombre,i)=>{
             const items = r.detalle_por_tienda[nombre];
             const totalTienda = items.reduce((s,x)=>s+x.total,0);
+            const costoTienda = items.reduce((s,x)=>s+x.costo_total,0);
             return `<div id="stienda-${i}" style="display:${i===0?'block':'none'}">
               <table style="width:100%;border-collapse:collapse;">
                 <thead><tr style="font-size:10px;text-transform:uppercase;color:var(--text-secondary);">
                   <th style="padding:4px 8px;text-align:left;font-weight:700;">Producto</th>
                   <th style="padding:4px 8px;text-align:right;font-weight:700;">Cant.</th>
+                  <th style="padding:4px 8px;text-align:right;font-weight:700;">Costo</th>
                   <th style="padding:4px 8px;text-align:right;font-weight:700;">Total</th>
                 </tr></thead>
                 <tbody>
                   ${items.map(p=>`<tr style="border-top:1px solid var(--border-light);">
                     <td style="padding:5px 8px;font-size:12px;">${p.producto}</td>
                     <td style="padding:5px 8px;font-size:12px;text-align:right;color:var(--text-secondary);">${p.cantidad}</td>
+                    <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text-secondary);">$${p.costo_total.toFixed(2)}</td>
                     <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;">$${p.total.toFixed(2)}</td>
                   </tr>`).join('')}
                 </tbody>
                 <tfoot><tr style="background:var(--sage-light);">
                   <td colspan="2" style="padding:6px 8px;font-size:12px;font-weight:700;">TOTAL SEMANA</td>
+                  <td style="padding:6px 8px;font-size:12px;font-weight:700;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text-secondary);">$${costoTienda.toFixed(2)}</td>
                   <td style="padding:6px 8px;font-size:14px;font-weight:800;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">$${totalTienda.toFixed(2)}</td>
                 </tr></tfoot>
               </table>

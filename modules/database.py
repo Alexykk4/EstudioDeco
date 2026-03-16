@@ -719,9 +719,11 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         SELECT COALESCE(t.nombre,'Sin Tienda') as tienda,
                vd.nombre_producto as producto,
                COALESCE(SUM(vd.cantidad),0) as cantidad,
-               COALESCE(SUM(vd.subtotal),0) as total
+               COALESCE(SUM(vd.subtotal),0) as total,
+               COALESCE(SUM(vd.cantidad * COALESCE(NULLIF(vd.costo_unitario,0), p.costo, 0)), 0) as costo_total
         FROM venta_detalle vd
         JOIN ventas v ON v.id=vd.venta_id
+        LEFT JOIN productos p ON p.id=vd.producto_id
         LEFT JOIN tiendas t ON t.id=vd.tienda_id
         WHERE DATE(v.created_at) BETWEEN ? AND ? AND (v.cancelada IS NULL OR v.cancelada=0)
         GROUP BY COALESCE(t.nombre,'Sin Tienda'), vd.nombre_producto
@@ -736,7 +738,8 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         detalle_por_tienda[tienda].append({
             'producto': row['producto'],
             'cantidad': int(row['cantidad']),
-            'total': round(row['total'], 2)
+            'total': round(row['total'], 2),
+            'costo_total': round(row['costo_total'], 2)
         })
 
     # Merge por-tienda and gastos into diario
