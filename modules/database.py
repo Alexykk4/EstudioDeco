@@ -508,7 +508,7 @@ def obtener_resumen_dia(fecha=None):
     # Sabrodulce: roles vendidos; pago = sum(cantidad * (precio - 15))
     sabro = conn.execute(
         """SELECT COALESCE(SUM(vd.cantidad),0) as roles,
-                  COALESCE(SUM(vd.cantidad * (vd.precio_unitario - 15.0)), 0) as pago_total
+                  COALESCE(SUM(vd.cantidad * vd.costo_unitario), 0) as pago_total
            FROM venta_detalle vd
            JOIN ventas v ON v.id=vd.venta_id
            LEFT JOIN productos p ON p.id=vd.producto_id
