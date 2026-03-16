@@ -508,7 +508,7 @@ def obtener_resumen_dia(fecha=None):
     # Sabrodulce: roles vendidos; pago = sum(cantidad * (precio - 15))
     sabro = conn.execute(
         """SELECT COALESCE(SUM(vd.cantidad),0) as roles,
-                  COALESCE(SUM(vd.cantidad * (vd.precio_unitario - 15.0)), 0) as pago_total
+                  COALESCE(SUM(vd.cantidad * vd.costo_unitario), 0) as pago_total
            FROM venta_detalle vd
            JOIN ventas v ON v.id=vd.venta_id
            LEFT JOIN productos p ON p.id=vd.producto_id
@@ -868,8 +868,12 @@ def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_ta
             _expandir_bundle(conn, cur, venta_id, pid, item["cantidad"])
         else:
             sub = item["precio_unitario"] * item["cantidad"]
-            cur.execute("INSERT INTO venta_detalle (venta_id,producto_id,tienda_id,nombre_producto,cantidad,precio_unitario,subtotal,es_precio_abierto) VALUES (?,?,?,?,?,?,?,?)",
-                        (venta_id, pid, item["tienda_id"], item["nombre"], item["cantidad"], item["precio_unitario"], sub, 1 if item.get("es_precio_abierto") else 0))
+            costo = 0.0
+            if pid:
+                cr = cur.execute("SELECT costo FROM productos WHERE id=?", (pid,)).fetchone()
+                if cr: costo = cr["costo"] or 0.0
+            cur.execute("INSERT INTO venta_detalle (venta_id,producto_id,tienda_id,nombre_producto,cantidad,precio_unitario,costo_unitario,subtotal,es_precio_abierto) VALUES (?,?,?,?,?,?,?,?,?)",
+                        (venta_id, pid, item["tienda_id"], item["nombre"], item["cantidad"], item["precio_unitario"], costo, sub, 1 if item.get("es_precio_abierto") else 0))
             if pid and not item.get("es_precio_abierto"):
                 cur.execute("UPDATE productos SET stock_local=stock_local-?, sincronizado=0 WHERE id=?", (item["cantidad"], pid))
             
