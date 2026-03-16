@@ -514,7 +514,7 @@ def obtener_resumen_dia(fecha=None):
            LEFT JOIN productos p ON p.id=vd.producto_id
            LEFT JOIN tiendas t ON t.id=p.tienda_id
            WHERE LOWER(COALESCE(t.nombre,'')) LIKE '%sabro%'
-             AND LOWER(COALESCE(p.categoria_producto,''))='roles'
+
              AND DATE(v.created_at)=? AND v.created_at>?
              AND (v.cancelada IS NULL OR v.cancelada=0)""",
         (fecha, desde)
@@ -705,13 +705,12 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
 
     sabro = conn.execute("""
         SELECT COALESCE(SUM(vd.cantidad),0) as roles,
-               COALESCE(SUM(vd.cantidad * (vd.precio_unitario - 15.0)), 0) as pago_total
+               COALESCE(SUM(vd.cantidad * vd.costo_unitario), 0) as pago_total
         FROM venta_detalle vd
         JOIN ventas v ON v.id=vd.venta_id
         LEFT JOIN productos p ON p.id=vd.producto_id
         LEFT JOIN tiendas t ON t.id=p.tienda_id
         WHERE LOWER(COALESCE(t.nombre,'')) LIKE '%sabro%'
-          AND LOWER(COALESCE(p.categoria_producto,''))='roles'
           AND DATE(v.created_at) BETWEEN ? AND ?
           AND (v.cancelada IS NULL OR v.cancelada=0)
     """, (fecha_inicio, fecha_fin)).fetchone()
