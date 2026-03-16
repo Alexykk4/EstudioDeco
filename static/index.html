@@ -2283,60 +2283,160 @@ async function showEstadisticasModal() {
   let data;
   try { data = await api('/estadisticas'); } catch(e) { toast('❌', e.message, 'var(--red)'); return; }
 
-  let _tab = 'mes';
+  const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const fmtMes = m => { const [y,mn]=m.split('-'); return MESES[+mn-1]+"'"+y.slice(2); };
 
-  function renderTabla(tab) {
-    const rows = tab === 'mes' ? data.por_mes : data.por_año;
-    const labelKey = tab === 'mes' ? 'mes' : 'año';
-    const fmtLabel = l => tab === 'mes' ? (()=>{
-      const [y,m]=l.split('-');
-      return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m-1]+' '+y;
-    })() : l;
-    if(!rows.length) return '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">Sin datos</div>';
-    return `<table style="width:100%;border-collapse:collapse;font-size:12px;">
-      <thead><tr style="background:var(--bg-warm);font-size:10px;text-transform:uppercase;color:var(--text-secondary);">
-        <th style="padding:7px 10px;text-align:left;">${tab==='mes'?'Mes':'Año'}</th>
-        <th style="padding:7px 10px;text-align:right;">Ventas</th>
-        <th style="padding:7px 10px;text-align:right;"># Tickets</th>
-        <th style="padding:7px 10px;text-align:right;">Ingresos</th>
-        <th style="padding:7px 10px;text-align:right;color:var(--red);">Gastos</th>
-        <th style="padding:7px 10px;text-align:right;color:var(--sage-dark);">Balance</th>
-      </tr></thead>
-      <tbody>
-        ${rows.map((r,i)=>{
-          const balance = r.ventas + r.ingresos - r.gastos;
+  // Grouped bar chart (2 series)
+  function svgGrouped(items, s1, s2, maxH=110, bW=12, gap=10) {
+    if(!items.length) return '';
+    const maxV = Math.max(...items.flatMap(it=>[it[s1.k]||0, it[s2.k]||0]), 1);
+    const gW = bW*2+3+gap, W = items.length*gW, H = maxH+28;
+    const bars = items.map((it,i) => {
+      const gx = i*gW;
+      const h1 = Math.max(2,(it[s1.k]||0)/maxV*maxH), h2 = Math.max(2,(it[s2.k]||0)/maxV*maxH);
+      return `<rect x="${gx}" y="${maxH-h1}" width="${bW}" height="${h1}" rx="3" fill="${s1.c}" opacity="0.85"/>
+              <rect x="${gx+bW+3}" y="${maxH-h2}" width="${bW}" height="${h2}" rx="3" fill="${s2.c}" opacity="0.85"/>
+              <text x="${gx+bW}" y="${maxH+13}" text-anchor="middle" font-size="8" fill="#888">${it.label}</text>`;
+    }).join('');
+    return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${bars}</svg>`;
+  }
+
+  // Line/area chart (single or multi series)
+  function svgLineArea(items, series, maxH=110) {
+    if(items.length < 2) return '';
+    const W = Math.max(items.length * 38, 300), H = maxH + 28;
+    const allV = items.flatMap(it => series.map(s => it[s.k]||0));
+    const maxV = Math.max(...allV, 1), minV = Math.min(...allV, 0);
+    const range = maxV - minV || 1;
+    const xStep = (W-20) / (items.length-1);
+    const paths = series.map(s => {
+      const pts = items.map((it,i) => [10+i*xStep, maxH-((it[s.k]-minV)/range)*maxH]);
+      const d = pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+      const area = `M${pts[0][0]},${maxH} `+pts.map(p=>`L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')+` L${pts[pts.length-1][0]},${maxH} Z`;
+      const dots = pts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="${s.c}"/>
+        ${i%Math.ceil(items.length/8)===0?`<text x="${p[0].toFixed(1)}" y="${(p[1]-8).toFixed(1)}" text-anchor="middle" font-size="8" fill="${s.c}" font-weight="700">$${((items[i][s.k]||0)/1000).toFixed(0)}k</text>`:''}`).join('');
+      return `<path d="${area}" fill="${s.c}" opacity="0.12"/>
+              <path d="${d}" fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+              ${dots}`;
+    }).join('');
+    const zy = minV < 0 ? maxH-(0-minV)/range*maxH : null;
+    const zeroline = zy!==null ? `<line x1="10" y1="${zy.toFixed(1)}" x2="${W-10}" y2="${zy.toFixed(1)}" stroke="#ddd" stroke-width="1" stroke-dasharray="4,3"/>` : '';
+    const xlabels = items.map((it,i)=> i%Math.ceil(items.length/8)===0 ? `<text x="${(10+i*xStep).toFixed(1)}" y="${H-4}" text-anchor="middle" font-size="8" fill="#aaa">${it.label}</text>` : '').join('');
+    return `<svg width="${W}" height="${H}" style="display:block;overflow:visible;min-width:${W}px">${zeroline}${paths}${xlabels}</svg>`;
+  }
+
+  function renderContent(tab) {
+    const rows = tab==='mes' ? data.por_mes : data.por_año;
+    const lk = tab==='mes' ? 'mes' : 'año';
+    const fmt = l => tab==='mes' ? fmtMes(l) : l;
+    if(!rows.length) return '<div style="padding:40px;text-align:center;color:var(--text-muted);">Sin datos registrados</div>';
+
+    const items = rows.map(r => ({...r, label:fmt(r[lk]), balance:r.ventas+r.ingresos-r.gastos}));
+    let acc=0; const accItems = items.map(r => ({...r, acumulado:(acc+=r.balance)}));
+
+    const totV=rows.reduce((s,r)=>s+r.ventas,0), totG=rows.reduce((s,r)=>s+r.gastos,0),
+          totI=rows.reduce((s,r)=>s+r.ingresos,0), totB=totV+totI-totG;
+    const bColor = totB>=0?'var(--sage-dark)':'#C62828';
+    const fmt$ = v => '$'+v.toLocaleString('es-MX',{minimumFractionDigits:0});
+
+    const kpis = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+      <div style="background:#E8F5E9;border-radius:var(--radius-sm);padding:12px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#2E7D32;margin-bottom:4px;">Ventas</div>
+        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#2E7D32;">${fmt$(totV)}</div>
+      </div>
+      <div style="background:#E3F2FD;border-radius:var(--radius-sm);padding:12px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#1565C0;margin-bottom:4px;">Ingresos</div>
+        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#1565C0;">${fmt$(totI)}</div>
+      </div>
+      <div style="background:#FFEBEE;border-radius:var(--radius-sm);padding:12px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#C62828;margin-bottom:4px;">Gastos</div>
+        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#C62828;">${fmt$(totG)}</div>
+      </div>
+      <div style="background:${totB>=0?'var(--sage-light)':'#FFEBEE'};border-radius:var(--radius-sm);padding:12px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${bColor};margin-bottom:4px;">Balance</div>
+        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${bColor};">${fmt$(totB)}</div>
+      </div>
+    </div>`;
+
+    const bW = tab==='mes'?20:36, gp = tab==='mes'?6:16;
+    const chart1 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">📊 Ventas por ${tab}</div>
+      <div style="overflow-x:auto;">${svgBarsV(items.map(r=>({label:r.label,value:r.ventas,color:'#7C9A7E'})),120,bW,gp)}</div>
+    </div>`;
+
+    const chart2 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">📉 Ventas vs Gastos</div>
+      <div style="display:flex;gap:14px;margin-bottom:8px;font-size:11px;">
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#7C9A7E;display:inline-block;"></span>Ventas</span>
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#EF9A9A;display:inline-block;"></span>Gastos</span>
+      </div>
+      <div style="overflow-x:auto;">${svgGrouped(items,{k:'ventas',c:'#7C9A7E'},{k:'gastos',c:'#EF9A9A'},120,tab==='mes'?13:28,tab==='mes'?7:16)}</div>
+    </div>`;
+
+    const chart3 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">📈 Balance acumulado</div>
+      <div style="overflow-x:auto;">${svgLineArea(accItems,[{k:'acumulado',c:'#5C6BC0'}])}</div>
+    </div>`;
+
+    const chart4 = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">🍩 Distribución total</div>
+        <div style="display:flex;align-items:center;gap:14px;justify-content:center;">
+          ${svgDonut([{label:'Ventas',value:totV,color:'#7C9A7E'},{label:'Ingresos',value:totI,color:'#64B5F6'},{label:'Gastos',value:totG,color:'#EF9A9A'}].filter(s=>s.value>0),100)}
+          <div style="display:flex;flex-direction:column;gap:7px;">
+            ${[{label:'Ventas',v:totV,c:'#7C9A7E'},{label:'Ingresos',v:totI,c:'#64B5F6'},{label:'Gastos',v:totG,c:'#EF9A9A'}].map(s=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;"><span style="width:10px;height:10px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.label}: <strong>${fmt$(s.v)}</strong></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">📆 Ventas + Ingresos vs Gastos</div>
+        <div style="overflow-x:auto;">${svgLineArea(items,[{k:'ventas',c:'#7C9A7E'},{k:'gastos',c:'#EF9A9A'}],100)}</div>
+      </div>
+    </div>`;
+
+    const table = `<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Detalle</div>
+    <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:var(--bg-warm);font-size:10px;text-transform:uppercase;color:var(--text-secondary);">
+          <th style="padding:7px 10px;text-align:left;">${tab==='mes'?'Mes':'Año'}</th>
+          <th style="padding:7px 10px;text-align:right;">Ventas</th>
+          <th style="padding:7px 10px;text-align:right;"># Tickets</th>
+          <th style="padding:7px 10px;text-align:right;">Ingresos</th>
+          <th style="padding:7px 10px;text-align:right;color:var(--red);">Gastos</th>
+          <th style="padding:7px 10px;text-align:right;">Balance</th>
+        </tr></thead>
+        <tbody>${rows.map((r,i)=>{
+          const b=r.ventas+r.ingresos-r.gastos;
           return `<tr style="border-top:1px solid var(--border-light);${i%2===1?'background:var(--bg-warm);':''}">
-            <td style="padding:7px 10px;font-weight:600;">${fmtLabel(r[labelKey])}</td>
-            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;">$${r.ventas.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+            <td style="padding:7px 10px;font-weight:600;">${fmt(r[lk])}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;">${fmt$(r.ventas)}</td>
             <td style="padding:7px 10px;text-align:right;color:var(--text-secondary);">${r.num_ventas}</td>
-            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:#2E7D32;">$${r.ingresos.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--red);">$${r.gastos.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:800;color:${balance>=0?'var(--sage-dark)':'var(--red)'};">$${balance.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:#2E7D32;">${fmt$(r.ingresos)}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--red);">${fmt$(r.gastos)}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:800;color:${b>=0?'var(--sage-dark)':'var(--red)'};">${fmt$(b)}</td>
           </tr>`;
-        }).join('')}
-      </tbody>
-    </table>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+
+    return kpis + chart1 + chart2 + chart3 + chart4 + table;
   }
 
   function renderModal(tab) {
-    const btnStyle = (t) => t===tab
-      ? 'background:var(--sage-dark);color:#fff;border:none;'
-      : 'background:var(--bg-warm);color:var(--text-secondary);border:1px solid var(--border);';
+    const bs = t => t===tab ? 'background:var(--sage-dark);color:#fff;border:none;' : 'background:var(--bg-warm);color:var(--text-secondary);border:1px solid var(--border);';
     showModal(`<div class="modal-header">
       <div class="modal-title">📈 Estadísticas</div>
-      <div class="modal-sub">Ventas, ingresos y gastos históricos</div>
+      <div class="modal-sub">Análisis histórico de ventas, ingresos y gastos</div>
     </div>
     <div class="modal-body">
-      <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button onclick="window._statsTab('mes')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${btnStyle('mes')}">Por mes</button>
-        <button onclick="window._statsTab('año')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${btnStyle('año')}">Por año</button>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button onclick="window._statsTab('mes')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('mes')}">Por mes</button>
+        <button onclick="window._statsTab('año')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('año')}">Por año</button>
       </div>
-      <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
-        ${renderTabla(tab)}
-      </div>
+      ${renderContent(tab)}
     </div>
     <div class="modal-footer"><div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div>`);
-    const m=document.querySelector('#modals .modal'); m.style.width='720px'; m.style.maxWidth='98vw';
+    const m=document.querySelector('#modals .modal'); m.style.width='880px'; m.style.maxWidth='99vw';
   }
 
   window._statsTab = (tab) => renderModal(tab);
