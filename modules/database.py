@@ -1173,5 +1173,49 @@ def obtener_estadisticas():
             'gastos': round(gastos_año_map.get(a, 0), 2),
         })
 
+    # Ventas por tienda por mes
+    tienda_mes_rows = conn.execute("""
+        SELECT strftime('%Y-%m', v.created_at) as mes,
+               COALESCE(t.nombre, 'Sin Tienda') as tienda,
+               COALESCE(SUM(vd.subtotal), 0) as total
+        FROM venta_detalle vd
+        JOIN ventas v ON v.id = vd.venta_id
+        LEFT JOIN tiendas t ON t.id = vd.tienda_id
+        WHERE (v.cancelada IS NULL OR v.cancelada = 0)
+        GROUP BY mes, tienda ORDER BY mes, total DESC
+    """).fetchall()
+
+    # Ventas por tienda por año
+    tienda_año_rows = conn.execute("""
+        SELECT strftime('%Y', v.created_at) as año,
+               COALESCE(t.nombre, 'Sin Tienda') as tienda,
+               COALESCE(SUM(vd.subtotal), 0) as total
+        FROM venta_detalle vd
+        JOIN ventas v ON v.id = vd.venta_id
+        LEFT JOIN tiendas t ON t.id = vd.tienda_id
+        WHERE (v.cancelada IS NULL OR v.cancelada = 0)
+        GROUP BY año, tienda ORDER BY año, total DESC
+    """).fetchall()
+
+    # Build {mes: {tienda: total}} maps
+    tienda_mes_map = {}
+    tiendas_set = set()
+    for r in tienda_mes_rows:
+        tienda_mes_map.setdefault(r['mes'], {})[r['tienda']] = round(r['total'], 2)
+        tiendas_set.add(r['tienda'])
+
+    tienda_año_map = {}
+    for r in tienda_año_rows:
+        tienda_año_map.setdefault(r['año'], {})[r['tienda']] = round(r['total'], 2)
+        tiendas_set.add(r['tienda'])
+
+    tiendas = sorted(tiendas_set)
+
+    # Enrich por_mes and por_año with per-store data
+    for row in por_mes:
+        row['por_tienda'] = {t: tienda_mes_map.get(row['mes'], {}).get(t, 0) for t in tiendas}
+    for row in por_año:
+        row['por_tienda'] = {t: tienda_año_map.get(row['año'], {}).get(t, 0) for t in tiendas}
+
     conn.close()
-    return {'por_mes': por_mes, 'por_año': por_año}
+    return {'por_mes': por_mes, 'por_año': por_año, 'tiendas': tiendas}

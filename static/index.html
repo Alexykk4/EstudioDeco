@@ -2335,11 +2335,10 @@ async function showEstadisticasModal() {
     let acc=0; const accItems = items.map(r => ({...r, acumulado:(acc+=r.balance)}));
 
     const totV=rows.reduce((s,r)=>s+r.ventas,0), totG=rows.reduce((s,r)=>s+r.gastos,0),
-          totI=rows.reduce((s,r)=>s+r.ingresos,0), totB=totV+totI-totG;
-    const bColor = totB>=0?'var(--sage-dark)':'#C62828';
+          totI=rows.reduce((s,r)=>s+r.ingresos,0);
     const fmt$ = v => '$'+v.toLocaleString('es-MX',{minimumFractionDigits:0});
 
-    const kpis = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+    const kpis = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
       <div style="background:#E8F5E9;border-radius:var(--radius-sm);padding:12px;text-align:center;">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#2E7D32;margin-bottom:4px;">Ventas</div>
         <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#2E7D32;">${fmt$(totV)}</div>
@@ -2351,10 +2350,6 @@ async function showEstadisticasModal() {
       <div style="background:#FFEBEE;border-radius:var(--radius-sm);padding:12px;text-align:center;">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#C62828;margin-bottom:4px;">Gastos</div>
         <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#C62828;">${fmt$(totG)}</div>
-      </div>
-      <div style="background:${totB>=0?'var(--sage-light)':'#FFEBEE'};border-radius:var(--radius-sm);padding:12px;text-align:center;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${bColor};margin-bottom:4px;">Balance</div>
-        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${bColor};">${fmt$(totB)}</div>
       </div>
     </div>`;
 
@@ -2373,10 +2368,41 @@ async function showEstadisticasModal() {
       <div style="overflow-x:auto;">${svgGrouped(items,{k:'ventas',c:'#7C9A7E'},{k:'gastos',c:'#EF9A9A'},120,tab==='mes'?13:28,tab==='mes'?7:16)}</div>
     </div>`;
 
-    const chart3 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">📈 Balance acumulado</div>
-      <div style="overflow-x:auto;">${svgLineArea(accItems,[{k:'acumulado',c:'#5C6BC0'}])}</div>
-    </div>`;
+    // Gráfica ventas por tienda
+    const TCOLORS = ['#7C9A7E','#C4755A','#C9A84C','#26A69A','#5C6BC0','#EC407A','#8D6E63','#546E7A'];
+    const tiendas = data.tiendas || [];
+    const tiendaSeries = tiendas.map((t,i) => ({k:t, c:TCOLORS[i%TCOLORS.length]}));
+    const tiendaItems = items.map(r => {
+      const obj = {label:r.label};
+      tiendas.forEach(t => { obj[t] = r.por_tienda?.[t] || 0; });
+      return obj;
+    });
+
+    // Multi-bar chart for N tiendas
+    function svgMultiN(its, series, maxH=120) {
+      if(!its.length||!series.length) return '';
+      const bW=10, pad=2, gp=8;
+      const gW = series.length*(bW+pad)+gp;
+      const W = its.length*gW, H = maxH+28;
+      const maxV = Math.max(...its.flatMap(it=>series.map(s=>it[s.k]||0)),1);
+      const bars = its.map((it,gi) => {
+        const gx = gi*gW;
+        const bs = series.map((s,si) => {
+          const v = it[s.k]||0, h = Math.max(2,v/maxV*maxH), y = maxH-h;
+          return `<rect x="${gx+si*(bW+pad)}" y="${y}" width="${bW}" height="${h}" rx="2" fill="${s.c}" opacity="0.85"/>`;
+        }).join('');
+        return bs + `<text x="${gx+series.length*(bW+pad)/2}" y="${maxH+13}" text-anchor="middle" font-size="8" fill="#888">${it.label}</text>`;
+      }).join('');
+      return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${bars}</svg>`;
+    }
+
+    const chart3 = tiendas.length ? `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">🏪 Ventas por tienda</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;font-size:11px;">
+        ${tiendaSeries.map(s=>`<span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.k}</span>`).join('')}
+      </div>
+      <div style="overflow-x:auto;">${svgMultiN(tiendaItems,tiendaSeries,120)}</div>
+    </div>` : '';
 
     const chart4 = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
       <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;">
@@ -2389,7 +2415,7 @@ async function showEstadisticasModal() {
         </div>
       </div>
       <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">📆 Ventas + Ingresos vs Gastos</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">📈 Ventas vs Gastos (línea)</div>
         <div style="overflow-x:auto;">${svgLineArea(items,[{k:'ventas',c:'#7C9A7E'},{k:'gastos',c:'#EF9A9A'}],100)}</div>
       </div>
     </div>`;
