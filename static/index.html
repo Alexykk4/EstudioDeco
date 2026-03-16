@@ -2335,8 +2335,10 @@ async function showCorteSemanalModal(offset){
     const esSabro = t.tienda.toLowerCase().includes('sabro');
     const yaPagada = tid && tiendaYaPagada(tid);
 
-    // Sabrodulce: pago = costo de productos (sin restar comisión de tarjeta)
-    let montoSugerido = esSabro ? (r.sabrodulce_pago || t.total) : t.neto;
+    // Sabrodulce: pago = sumatoria de costos de la tabla ventas por tienda
+    const sabroDetalle = esSabro ? Object.entries(r.detalle_por_tienda||{}).find(([k])=>k.toLowerCase().includes('sabro')) : null;
+    const sabroCostoTotal = sabroDetalle ? sabroDetalle[1].reduce((s,x)=>s+x.costo_total,0) : 0;
+    let montoSugerido = esSabro ? (sabroCostoTotal || t.total) : t.neto;
 
     let pagarBtn = '';
     if(!esEstudio && !esPromo && tid) {
