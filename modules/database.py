@@ -505,9 +505,10 @@ def obtener_resumen_dia(fecha=None):
            GROUP BY COALESCE(t.nombre,'Sin Tienda')""",
         (fecha, desde)
     ).fetchall()
-    # Sabrodulce: roles vendidos × $15 de utilidad
+    # Sabrodulce: roles vendidos; pago = sum(cantidad * (precio - 15))
     sabro = conn.execute(
-        """SELECT COALESCE(SUM(vd.cantidad),0) as roles
+        """SELECT COALESCE(SUM(vd.cantidad),0) as roles,
+                  COALESCE(SUM(vd.cantidad * (vd.precio_unitario - 15.0)), 0) as pago_total
            FROM venta_detalle vd
            JOIN ventas v ON v.id=vd.venta_id
            LEFT JOIN productos p ON p.id=vd.producto_id
@@ -578,7 +579,7 @@ def obtener_resumen_dia(fecha=None):
     total_esperado    = efectivo_esperado + tarjeta_esperado
 
     sabro_roles = int(sabro["roles"]) if sabro else 0
-    sabro_pago  = sabro_roles * 15.0
+    sabro_pago  = round(sabro["pago_total"], 2) if sabro else 0.0
 
     ventas_por_tienda = []
     for row in vt:
@@ -703,7 +704,8 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
     """, (fecha_inicio, fecha_fin)).fetchone()
 
     sabro = conn.execute("""
-        SELECT COALESCE(SUM(vd.cantidad),0) as roles
+        SELECT COALESCE(SUM(vd.cantidad),0) as roles,
+               COALESCE(SUM(vd.cantidad * (vd.precio_unitario - 15.0)), 0) as pago_total
         FROM venta_detalle vd
         JOIN ventas v ON v.id=vd.venta_id
         LEFT JOIN productos p ON p.id=vd.producto_id
@@ -760,6 +762,7 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         ventas_por_tienda.append(r2)
 
     sabro_roles = int(sabro['roles']) if sabro else 0
+    sabro_pago_semana = round(sabro['pago_total'], 2) if sabro else 0.0
     total_semana = rv['total_ventas']
     total_ingresos = ingresos_total_row['total'] if ingresos_total_row else 0
 
@@ -774,22 +777,15 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
     pagos_semana = [dict(r) for r in pagos_rows]
 
     # ── Balances por tienda ──
-    # Estudio Deco: ventas propias + ingresos - gastos - pagos enviados a otras tiendas
-    estudio_ventas = 0
-    estacion_ventas = 0
-    for t_row in vt:
-        if 'estudio' in t_row['tienda'].lower():
-            estudio_ventas = t_row['total']
-        elif 'estaci' in t_row['tienda'].lower():
-            estacion_ventas = t_row['total']
-
-    # Pagos enviados desde Estudio Deco a tiendas
-    total_pagos_enviados = sum(p['monto'] for p in pagos_semana)
+    # 304 = sus ventas propias + transferencias internas recibidas
+    # Estudio Deco = acumulado total - balance 304
+    estacion_ventas = sum(
+        t_row['total'] for t_row in vt if 'estaci' in t_row['tienda'].lower()
+    )
     total_pagos_internos = sum(p['monto'] for p in pagos_semana if p.get('es_interno'))
-    total_pagos_externos = total_pagos_enviados - total_pagos_internos
-
-    balance_estudio = estudio_ventas + total_ingresos - gastos['total'] - total_pagos_externos
+    acumulado_semana = total_semana + total_ingresos - gastos['total']
     balance_estacion = estacion_ventas + total_pagos_internos
+    balance_estudio = acumulado_semana - balance_estacion
 
     conn.close()
     return {
@@ -814,7 +810,7 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         'ventas_por_tienda': ventas_por_tienda,
         'diario': diario,
         'sabrodulce_roles': sabro_roles,
-        'sabrodulce_pago': sabro_roles * 15.0,
+        'sabrodulce_pago': sabro_pago_semana,
         # Balances y pagos
         'balance_estudio_deco': balance_estudio,
         'balance_estacion_304': balance_estacion,
