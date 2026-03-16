@@ -2450,18 +2450,16 @@ async function showEstadisticasModal() {
 
   function renderModal(tab) {
     const bs = t => t===tab ? 'background:var(--sage-dark);color:#fff;border:none;' : 'background:var(--bg-warm);color:var(--text-secondary);border:1px solid var(--border);';
-    showModal(`<div class="modal-header">
+    showModal(`<div class="modal-body">
       <div class="modal-title">📈 Estadísticas</div>
       <div class="modal-sub">Análisis histórico de ventas, ingresos y gastos</div>
-    </div>
-    <div class="modal-body">
       <div style="display:flex;gap:8px;margin-bottom:16px;">
         <button onclick="window._statsTab('mes')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('mes')}">Por mes</button>
         <button onclick="window._statsTab('año')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('año')}">Por año</button>
       </div>
       ${renderContent(tab)}
-    </div>
-    <div class="modal-footer"><div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div>`);
+      <div style="padding-top:12px;margin-top:4px;"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>
+    </div>`);
     const m=document.querySelector('#modals .modal'); m.style.width='880px'; m.style.maxWidth='99vw';
   }
 
