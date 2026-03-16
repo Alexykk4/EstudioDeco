@@ -2335,11 +2335,8 @@ async function showCorteSemanalModal(offset){
     const esSabro = t.tienda.toLowerCase().includes('sabro');
     const yaPagada = tid && tiendaYaPagada(tid);
 
-    // For Sabrodulce: pago = sum(cantidad * (precio - 15)), ya calculado en backend
-    let montoSugerido = t.neto;
-    if(esSabro && r.sabrodulce_pago) {
-      montoSugerido = r.sabrodulce_pago;
-    }
+    // Sabrodulce: pago = costo de productos (sin restar comisión de tarjeta)
+    let montoSugerido = esSabro ? (r.sabrodulce_pago || t.total) : t.neto;
 
     let pagarBtn = '';
     if(!esEstudio && !esPromo && tid) {
