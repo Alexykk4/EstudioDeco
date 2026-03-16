@@ -20,6 +20,7 @@ from modules.database import (
     obtener_ventas_dia, obtener_ventas_turno, corregir_venta, anular_venta,
     obtener_bundle_components, agregar_bundle_component, eliminar_bundle_component,
     obtener_resumen_semana, registrar_pago_tienda, obtener_pagos_semana,
+    obtener_estadisticas,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf
@@ -365,6 +366,9 @@ async def api_resumen(): return obtener_resumen_dia()
 @app.get("/api/report/semanal")
 async def api_resumen_semanal(desde: str = None, hasta: str = None):
     return obtener_resumen_semana(desde, hasta)
+
+@app.get("/api/estadisticas")
+async def api_estadisticas(): return obtener_estadisticas()
 
 @app.post("/api/pagos-tienda")
 async def api_pago_tienda(r: PagoTiendaReq):

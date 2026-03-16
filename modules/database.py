@@ -1101,3 +1101,77 @@ def obtener_pagos_semana(semana_inicio, semana_fin):
     """, (semana_inicio, semana_fin)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+def obtener_estadisticas():
+    conn = get_connection()
+
+    # Por mes (todos los meses disponibles)
+    meses = conn.execute("""
+        SELECT strftime('%Y-%m', created_at) as mes,
+               COALESCE(SUM(total),0) as ventas,
+               COUNT(*) as num_ventas
+        FROM ventas WHERE (cancelada IS NULL OR cancelada=0)
+        GROUP BY mes ORDER BY mes
+    """).fetchall()
+
+    ingresos_mes = conn.execute("""
+        SELECT strftime('%Y-%m', created_at) as mes,
+               COALESCE(SUM(monto),0) as ingresos
+        FROM ingresos GROUP BY mes ORDER BY mes
+    """).fetchall()
+    ingresos_map = {r['mes']: r['ingresos'] for r in ingresos_mes}
+
+    gastos_mes = conn.execute("""
+        SELECT strftime('%Y-%m', created_at) as mes,
+               COALESCE(SUM(monto),0) as gastos
+        FROM gastos GROUP BY mes ORDER BY mes
+    """).fetchall()
+    gastos_map = {r['mes']: r['gastos'] for r in gastos_mes}
+
+    por_mes = []
+    for row in meses:
+        m = row['mes']
+        por_mes.append({
+            'mes': m,
+            'ventas': round(row['ventas'], 2),
+            'num_ventas': int(row['num_ventas']),
+            'ingresos': round(ingresos_map.get(m, 0), 2),
+            'gastos': round(gastos_map.get(m, 0), 2),
+        })
+
+    # Por año
+    años = conn.execute("""
+        SELECT strftime('%Y', created_at) as año,
+               COALESCE(SUM(total),0) as ventas,
+               COUNT(*) as num_ventas
+        FROM ventas WHERE (cancelada IS NULL OR cancelada=0)
+        GROUP BY año ORDER BY año
+    """).fetchall()
+
+    ingresos_año = conn.execute("""
+        SELECT strftime('%Y', created_at) as año,
+               COALESCE(SUM(monto),0) as ingresos
+        FROM ingresos GROUP BY año
+    """).fetchall()
+    ingresos_año_map = {r['año']: r['ingresos'] for r in ingresos_año}
+
+    gastos_año = conn.execute("""
+        SELECT strftime('%Y', created_at) as año,
+               COALESCE(SUM(monto),0) as gastos
+        FROM gastos GROUP BY año
+    """).fetchall()
+    gastos_año_map = {r['año']: r['gastos'] for r in gastos_año}
+
+    por_año = []
+    for row in años:
+        a = row['año']
+        por_año.append({
+            'año': a,
+            'ventas': round(row['ventas'], 2),
+            'num_ventas': int(row['num_ventas']),
+            'ingresos': round(ingresos_año_map.get(a, 0), 2),
+            'gastos': round(gastos_año_map.get(a, 0), 2),
+        })
+
+    conn.close()
+    return {'por_mes': por_mes, 'por_año': por_año}
