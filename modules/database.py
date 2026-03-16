@@ -714,6 +714,31 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
           AND (v.cancelada IS NULL OR v.cancelada=0)
     """, (fecha_inicio, fecha_fin)).fetchone()
 
+    # Detalle de productos vendidos por tienda
+    detalle_rows = conn.execute("""
+        SELECT COALESCE(t.nombre,'Sin Tienda') as tienda,
+               vd.nombre_producto as producto,
+               COALESCE(SUM(vd.cantidad),0) as cantidad,
+               COALESCE(SUM(vd.subtotal),0) as total
+        FROM venta_detalle vd
+        JOIN ventas v ON v.id=vd.venta_id
+        LEFT JOIN tiendas t ON t.id=vd.tienda_id
+        WHERE DATE(v.created_at) BETWEEN ? AND ? AND (v.cancelada IS NULL OR v.cancelada=0)
+        GROUP BY COALESCE(t.nombre,'Sin Tienda'), vd.nombre_producto
+        ORDER BY tienda, total DESC
+    """, (fecha_inicio, fecha_fin)).fetchall()
+
+    detalle_por_tienda = {}
+    for row in detalle_rows:
+        tienda = row['tienda']
+        if tienda not in detalle_por_tienda:
+            detalle_por_tienda[tienda] = []
+        detalle_por_tienda[tienda].append({
+            'producto': row['producto'],
+            'cantidad': int(row['cantidad']),
+            'total': round(row['total'], 2)
+        })
+
     # Merge por-tienda and gastos into diario
     tiendas_map = {}
     for row in dt_rows:
@@ -813,6 +838,7 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         'balance_estudio_deco': balance_estudio,
         'balance_estacion_304': balance_estacion,
         'pagos_semana': pagos_semana,
+        'detalle_por_tienda': detalle_por_tienda,
     }
 
 def registrar_corte(usuario_id, efectivo_real, fondo_caja=0.0, desglose=None):

@@ -2413,6 +2413,48 @@ async function showCorteSemanalModal(offset){
       </div>
     </div>
 
+    <!-- Ventas por tienda (artículos) -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Ventas por tienda</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="semanal-tienda-tabs">
+        ${Object.keys(r.detalle_por_tienda||{}).map((nombre,i)=>`
+          <button onclick="semanalSelectTienda('${nombre.replace(/'/g,"\\'")}')" id="stab-${i}"
+            style="font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid var(--border);background:${i===0?'var(--sage-dark)':'var(--bg-warm)'};color:${i===0?'#fff':'var(--text-secondary)'};cursor:pointer;font-weight:600;">
+            ${nombre}
+          </button>`).join('')}
+      </div>
+      <div id="semanal-tienda-detalle" style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px 14px;">
+        ${(()=>{
+          const tiendas = Object.keys(r.detalle_por_tienda||{});
+          if(!tiendas.length) return '<div style="color:var(--text-muted);font-size:12px;">Sin datos</div>';
+          return tiendas.map((nombre,i)=>{
+            const items = r.detalle_por_tienda[nombre];
+            const totalTienda = items.reduce((s,x)=>s+x.total,0);
+            return `<div id="stienda-${i}" style="display:${i===0?'block':'none'}">
+              <table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="font-size:10px;text-transform:uppercase;color:var(--text-secondary);">
+                  <th style="padding:4px 8px;text-align:left;font-weight:700;">Producto</th>
+                  <th style="padding:4px 8px;text-align:right;font-weight:700;">Cant.</th>
+                  <th style="padding:4px 8px;text-align:right;font-weight:700;">Total</th>
+                </tr></thead>
+                <tbody>
+                  ${items.map(p=>`<tr style="border-top:1px solid var(--border-light);">
+                    <td style="padding:5px 8px;font-size:12px;">${p.producto}</td>
+                    <td style="padding:5px 8px;font-size:12px;text-align:right;color:var(--text-secondary);">${p.cantidad}</td>
+                    <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;">$${p.total.toFixed(2)}</td>
+                  </tr>`).join('')}
+                </tbody>
+                <tfoot><tr style="background:var(--sage-light);">
+                  <td colspan="2" style="padding:6px 8px;font-size:12px;font-weight:700;">TOTAL SEMANA</td>
+                  <td style="padding:6px 8px;font-size:14px;font-weight:800;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">$${totalTienda.toFixed(2)}</td>
+                </tr></tfoot>
+              </table>
+            </div>`;
+          }).join('');
+        })()}
+      </div>
+    </div>
+
     <!-- Tabla por tienda -->
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Pago por tienda (neto tras comisión)</div>
     <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:2px;">
@@ -2440,6 +2482,19 @@ async function showCorteSemanalModal(offset){
     <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
   </div></div>`);
   const m=document.querySelector('#modals .modal'); m.style.width='800px'; m.style.maxWidth='98vw';
+}
+
+/* ── SELECTOR TIENDA SEMANAL ── */
+function semanalSelectTienda(nombre) {
+  const tabs = document.querySelectorAll('#semanal-tienda-tabs button');
+  const panels = document.querySelectorAll('[id^="stienda-"]');
+  const tiendas = Array.from(tabs).map(b=>b.textContent.trim());
+  const idx = tiendas.indexOf(nombre);
+  tabs.forEach((b,i)=>{
+    b.style.background = i===idx?'var(--sage-dark)':'var(--bg-warm)';
+    b.style.color = i===idx?'#fff':'var(--text-secondary)';
+  });
+  panels.forEach((p,i)=>{ p.style.display=i===idx?'block':'none'; });
 }
 
 /* ── PAGO A TIENDA ── */
