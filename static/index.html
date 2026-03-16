@@ -2342,10 +2342,10 @@ async function showCorteSemanalModal(offset){
     const esSabro = t.tienda.toLowerCase().includes('sabro');
     const yaPagada = tid && tiendaYaPagada(tid);
 
-    // For Sabrodulce: suggested amount is neto minus Estudio Deco's $15/rol margin
+    // For Sabrodulce: pago = sum(cantidad * (precio - 15)), ya calculado en backend
     let montoSugerido = t.neto;
     if(esSabro && r.sabrodulce_pago) {
-      montoSugerido = t.neto - r.sabrodulce_pago;
+      montoSugerido = r.sabrodulce_pago;
     }
 
     let pagarBtn = '';
