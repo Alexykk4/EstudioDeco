@@ -2200,14 +2200,6 @@ async function showPreCorteModal(){
       ${t.comision>0?`<span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--red);">-$${t.comision.toFixed(2)}</span>`:''}
       <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--sage-dark);">$${(t.neto??t.total).toFixed(2)}</span>
     </div>`).join('');
-  const sabro = r.sabrodulce_roles>0 ? `
-    <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:10px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#F9A825;margin-bottom:4px;">🥐 Pago Sabrodulce</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:12px;color:var(--text-secondary);">${r.sabrodulce_roles} roles · costo del producto c/u</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#E65100;">$${r.sabrodulce_pago.toFixed(2)}</span>
-      </div>
-    </div>` : '';
   const gastosRows=r.gastos_detalle.map(g=>`
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-light);">
       <span style="color:var(--text-muted)">${g.concepto}</span>
@@ -2231,7 +2223,6 @@ async function showPreCorteModal(){
       <div class="res-card" style="background:#E3F2FD"><div class="res-label" style="color:#1565C0">Tarjeta Neta</div><div class="res-val" style="color:#1565C0">$${(r.tarjeta_esperado||0).toFixed(2)}</div></div>
       <div class="res-card" style="background:var(--sage-light)"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${(r.total_esperado||0).toFixed(2)}</div></div>
     </div>
-    ${sabro}
     ${tiendaRows?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">Ventas por tienda <span style="font-weight:400;opacity:.7">(neto tras comisión tarjeta)</span></div>${tiendaRows}</div>`:''}
     ${gastosRows?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Gastos del turno</div>${gastosRows}</div>`:''}
     ${ingRows?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Ingresos registrados</div>${ingRows}</div>`:''}
@@ -2372,11 +2363,7 @@ async function showCorteSemanalModal(offset){
     </tr>`;
   }).join('');
 
-  const sabroCard=r.sabrodulce_roles>0?`
-    <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:var(--radius-sm);padding:10px 14px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:12px;color:#6D4C41;">🥐 Pago Sabrodulce · ${r.sabrodulce_roles} roles vendidos · costo del producto c/u</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;color:#E65100;">$${(r.sabrodulce_pago).toFixed(2)}</span>
-    </div>`:'';
+  const sabroCard='';
 
   const legend=segsPago.map(s=>`<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:10px;height:10px;border-radius:50%;background:${s.color};display:inline-block;"></span>${s.label}: <strong>$${s.value.toFixed(0)}</strong></div>`).join('');
 
