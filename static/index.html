@@ -362,7 +362,7 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
 
 /* ── RESUMEN SEMANAL ── */
 .semanal-view { flex:1; display:flex; flex-direction:column; gap:16px; overflow:hidden; }
-.semanal-kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; flex-shrink:0; }
+.semanal-kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; flex-shrink:0; }
 .kpi-card {
   background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
   padding:16px 18px; display:flex; flex-direction:column; gap:4px;
@@ -371,6 +371,17 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
 .kpi-val { font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700; }
 .kpi-val.green { color:var(--green-ok); } .kpi-val.purple { color:var(--sage); }
 .kpi-val.red { color:var(--red); } .kpi-val.gold { color:var(--gold); }
+.semanal-layout { flex:1; display:grid; grid-template-columns:1fr 260px; gap:16px; overflow:hidden; }
+.semanal-main { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:14px; }
+.semanal-sidebar { display:flex; flex-direction:column; gap:14px; overflow-y:auto; }
+.balance-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:18px; display:flex; flex-direction:column; gap:10px;
+}
+.balance-card-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary); display:flex; align-items:center; gap:6px; }
+.balance-card-amount { font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:800; }
+.balance-card-detail { font-size:11px; color:var(--text-muted); display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid var(--border-light); }
+.balance-card-detail span:last-child { font-family:'JetBrains Mono',monospace; font-weight:600; }
 .semanal-body { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:14px; }
 .semanal-day {
   background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
@@ -394,6 +405,10 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
 .tienda-chip-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
 .semanal-gastos-row { font-size:11px; color:var(--red); font-weight:600; }
 .semanal-empty { display:flex; align-items:center; justify-content:center; height:80px; color:var(--text-muted); font-size:13px; }
+.btn-pagar { background:linear-gradient(135deg,#4CAF50,#2E7D32); color:white; border:none; border-radius:6px; padding:5px 14px; font-size:11px; font-weight:700; cursor:pointer; transition:all .2s; white-space:nowrap; }
+.btn-pagar:hover { transform:translateY(-1px); box-shadow:0 3px 8px rgba(76,175,80,.35); }
+.btn-pagar.pagado { background:linear-gradient(135deg,#9E9E9E,#757575); cursor:default; }
+@media (max-width:900px){ .semanal-layout { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -476,10 +491,8 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
     </div>
   </main>
 
-  <!-- ORDER PANEL -->
-  <aside class="order-panel">
-    <div class="order-header">
-      <div class="order-title" style="display:flex; align-items:center; width:100%;">
+  <aside class="order-panel" id="orderPanel"></aside>
+  <aside class="order-panel hidden" id="semanalSidebar" style="padding:18px; gap:14px; background:var(--bg); border:none;"></aside>
         📋 Orden <span class="order-count" id="orderCount">0</span>
         <button id="btnCancelarCuenta" class="btn btn-ghost btn-sm hidden" style="margin-left:auto; color:var(--red); border-color:var(--red-light); padding:2px 6px;" title="Cancelar Cuenta" onclick="confirmarCancelarCuenta()">
           🗑️
@@ -593,9 +606,9 @@ function switchView(v){
   document.querySelectorAll('.view-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   const mg=document.getElementById('mesasGrid'), pv=document.getElementById('productsView'),
         cv=document.getElementById('catalogView'), sv=document.getElementById('semanalView'),
-        op=document.querySelector('.order-panel');
+        op=document.getElementById('orderPanel'), sb=document.getElementById('semanalSidebar');
   // Ocultar todo
-  [mg,pv,cv,sv].forEach(el=>el.classList.add('hidden'));
+  [mg,pv,cv,sv,op,sb].forEach(el=>el?.classList.add('hidden'));
 
   if(v==='mesas'){
     mg.classList.remove('hidden'); op.classList.remove('hidden');
@@ -608,10 +621,10 @@ function switchView(v){
     renderOrder();
     if(tiendas.length) selectTab(tiendas[0]);
   } else if(v==='catalog') {
-    cv.classList.remove('hidden'); op.classList.add('hidden');
+    cv.classList.remove('hidden');
     loadCatalog();
   } else if(v==='semanal') {
-    sv.classList.remove('hidden'); op.classList.add('hidden');
+    sv.classList.remove('hidden'); sb.classList.remove('hidden');
     loadSemanal();
   }
 }
@@ -653,6 +666,7 @@ async function loadSemanal(){
     const efectivoNeto = (data.total_efectivo || 0) - gastosCaja;
     const tarjetaNeto  = (data.total_tarjeta  || 0) - gastosBanco;
     const acumuladoTotal = efectivoNeto + tarjetaNeto;
+    const totalIngresos = data.total_ingresos || 0;
     document.getElementById('semanalKpis').innerHTML = `
       <div class="kpi-card">
         <div class="kpi-label">📦 Saldo Anterior</div>
@@ -661,6 +675,10 @@ async function loadSemanal(){
       <div class="kpi-card">
         <div class="kpi-label">💰 Ventas Semana</div>
         <div class="kpi-val purple">${$pesos(data.total_ventas || 0)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">💲 Ingresos Semana</div>
+        <div class="kpi-val" style="color:#26A69A;">${$pesos(totalIngresos)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">💵 Efectivo</div>
@@ -674,6 +692,37 @@ async function loadSemanal(){
         <div class="kpi-label">✨ Acumulado Total</div>
         <div class="kpi-val ${acumuladoTotal>=0?'green':'red'}">${$pesos(acumuladoTotal)}</div>
       </div>`;
+
+    // Render balance sidebar on the right
+    const balEstudio = data.balance_estudio_deco || 0;
+    const balEstacion = data.balance_estacion_304 || 0;
+    const pagos = data.pagos_semana || [];
+    const pagosHtml = pagos.length ? pagos.map(p => `
+      <div class="balance-card-detail">
+        <span>${p.tienda_nombre} ${p.es_interno?'↔️':'💸'}</span>
+        <span style="color:${p.es_interno?'var(--sage)':'var(--red)'};">$${p.monto.toFixed(2)}</span>
+      </div>`).join('') : '<div style="font-size:11px;color:var(--text-muted);padding:4px 0;">Sin pagos esta semana</div>';
+
+    document.getElementById('semanalSidebar').innerHTML = `
+      <div class="balance-card" style="border-left:4px solid var(--sage);">
+        <div class="balance-card-title">🏠 Estudio Deco</div>
+        <div class="balance-card-amount" style="color:${balEstudio>=0?'var(--sage-dark)':'var(--red)'};">${$pesos(balEstudio)}</div>
+        <div class="balance-card-detail"><span>Ventas propias</span><span>+${$pesos(data.ventas_por_tienda?.find(t=>t.tienda.toLowerCase().includes('estudio'))?.total || 0)}</span></div>
+        <div class="balance-card-detail"><span>+ Ingresos</span><span style="color:var(--green-ok);">+${$pesos(totalIngresos)}</span></div>
+        <div class="balance-card-detail"><span>- Gastos</span><span style="color:var(--red);">-${$pesos(data.total_gastos||0)}</span></div>
+        <div class="balance-card-detail"><span>- Pagos a tiendas</span><span style="color:var(--red);">-${$pesos(pagos.filter(p=>!p.es_interno).reduce((s,p)=>s+p.monto,0))}</span></div>
+      </div>
+      <div class="balance-card" style="border-left:4px solid var(--terracotta);">
+        <div class="balance-card-title">☕ Estación 304</div>
+        <div class="balance-card-amount" style="color:var(--terracotta);">${$pesos(balEstacion)}</div>
+        <div class="balance-card-detail"><span>Ventas propias</span><span>+${$pesos(data.ventas_por_tienda?.find(t=>t.tienda.toLowerCase().includes('estaci'))?.total || 0)}</span></div>
+        <div class="balance-card-detail"><span>+ Transferencias internas</span><span style="color:var(--green-ok);">+${$pesos(pagos.filter(p=>p.es_interno).reduce((s,p)=>s+p.monto,0))}</span></div>
+      </div>
+      <div class="balance-card">
+        <div class="balance-card-title">📋 Pagos de la Semana</div>
+        ${pagosHtml}
+      </div>
+    `;
 
     const maxDia = Math.max(...data.dias.map(d=>d.total_ventas), 1);
     const body = document.getElementById('semanalBody');
@@ -2274,9 +2323,42 @@ async function showCorteSemanalModal(offset){
     barsDia.push({label:DIAS_SEMANA[i], value:diasMap[key]?.total||0, color: d<=hoy?'#7C9A7E':'#ddd'});
   }
 
-  // Tabla por tienda
-  const tiendaRows=(r.ventas_por_tienda||[]).map((t,i)=>`
-    <tr>
+  // Check which tiendas have already been paid this week
+  const pagosHechos = r.pagos_semana || [];
+  const tiendaYaPagada = (tid) => pagosHechos.some(p => p.tienda_id === tid);
+
+  // Find tienda IDs from the global tiendas array
+  const findTiendaId = (nombre) => {
+    const t = (window._allTiendas||tiendas||[]).find(x => x.nombre.toLowerCase().includes(nombre.toLowerCase()));
+    return t ? t.id : null;
+  };
+
+  // Tabla por tienda with PAGAR button
+  const tiendaRows=(r.ventas_por_tienda||[]).map((t,i)=>{
+    const tid = findTiendaId(t.tienda);
+    const esEstudio = t.tienda.toLowerCase().includes('estudio');
+    const esPromo = t.tienda.toLowerCase().includes('promoci');
+    const esEstacion = t.tienda.toLowerCase().includes('estaci');
+    const esSabro = t.tienda.toLowerCase().includes('sabro');
+    const yaPagada = tid && tiendaYaPagada(tid);
+
+    // For Sabrodulce: suggested amount is neto minus Estudio Deco's $15/rol margin
+    let montoSugerido = t.neto;
+    if(esSabro && r.sabrodulce_pago) {
+      montoSugerido = t.neto - r.sabrodulce_pago;
+    }
+
+    let pagarBtn = '';
+    if(!esEstudio && !esPromo && tid) {
+      if(yaPagada) {
+        const pagoPrev = pagosHechos.find(p=>p.tienda_id===tid);
+        pagarBtn = `<span style="font-size:10px;color:var(--green-ok);font-weight:700;">✅ Pagado $${pagoPrev.monto.toFixed(2)}</span>`;
+      } else {
+        pagarBtn = `<button class="btn-pagar" onclick="showPagoTiendaModal(${tid},'${t.tienda.replace(/'/g,"\\\'")}',${montoSugerido.toFixed(2)},${esEstacion?'true':'false'},'${desde}','${hasta}')">💰 PAGAR</button>`;
+      }
+    }
+
+    return `<tr>
       <td style="padding:7px 10px;font-size:12px;display:flex;align-items:center;gap:6px;">
         <span style="width:10px;height:10px;border-radius:50%;background:${TIENDA_COLORS[i%TIENDA_COLORS.length]};flex-shrink:0;display:inline-block;"></span>
         ${t.tienda}
@@ -2284,15 +2366,21 @@ async function showCorteSemanalModal(offset){
       <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;">$${t.total.toFixed(2)}</td>
       <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;color:var(--red);">${t.comision>0?'-$'+t.comision.toFixed(2):'-'}</td>
       <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;text-align:right;color:var(--sage-dark);">$${t.neto.toFixed(2)}</td>
-    </tr>`).join('');
+      <td style="padding:7px 10px;text-align:center;">${pagarBtn}</td>
+    </tr>`;
+  }).join('');
 
   const sabroCard=r.sabrodulce_roles>0?`
     <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:var(--radius-sm);padding:10px 14px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:12px;color:#6D4C41;">🥐 Pago Sabrodulce · ${r.sabrodulce_roles} roles × $15</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#E65100;">$${r.sabrodulce_pago.toFixed(2)}</span>
+      <span style="font-size:12px;color:#6D4C41;">🥐 Pago Sabrodulce · ${r.sabrodulce_roles} roles × $15 = se paga neto - $${r.sabrodulce_pago.toFixed(0)} utilidad</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#E65100;">$${(r.sabrodulce_pago).toFixed(2)}</span>
     </div>`:'';
 
   const legend=segsPago.map(s=>`<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:10px;height:10px;border-radius:50%;background:${s.color};display:inline-block;"></span>${s.label}: <strong>$${s.value.toFixed(0)}</strong></div>`).join('');
+
+  // Balance cards for the modal
+  const balEstudio = r.balance_estudio_deco || 0;
+  const balEstacion = r.balance_estacion_304 || 0;
 
   showModal(`<div class="modal-body">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
@@ -2310,6 +2398,18 @@ async function showCorteSemanalModal(offset){
       <div class="res-card"><div class="res-label">💵 Efectivo</div><div class="res-val v">$${r.total_efectivo.toFixed(0)}</div></div>
       <div class="res-card"><div class="res-label">💳 Tarjeta</div><div class="res-val" style="color:var(--gold);">$${r.total_tarjeta.toFixed(0)}</div></div>
       <div class="res-card"><div class="res-label">📦 Gastos</div><div class="res-val g">-$${r.total_gastos.toFixed(0)}</div></div>
+    </div>
+
+    <!-- Balance cards -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+      <div style="background:linear-gradient(135deg,#E8F5E9,#C8E6C9);border-radius:var(--radius-sm);padding:14px;border-left:4px solid var(--sage);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--sage-dark);margin-bottom:4px;">🏠 Balance Estudio Deco</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${balEstudio>=0?'var(--sage-dark)':'var(--red)'};">${$pesos(balEstudio)}</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#FFF3E0,#FFE0B2);border-radius:var(--radius-sm);padding:14px;border-left:4px solid var(--terracotta);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#BF360C;margin-bottom:4px;">☕ Balance Estación 304</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--terracotta);">${$pesos(balEstacion)}</div>
+      </div>
     </div>
 
     <!-- Gráfica semanal -->
@@ -2336,13 +2436,15 @@ async function showCorteSemanalModal(offset){
           <th style="padding:6px 10px;text-align:right;font-weight:700;">Bruto</th>
           <th style="padding:6px 10px;text-align:right;font-weight:700;">Comisión</th>
           <th style="padding:6px 10px;text-align:right;font-weight:700;">A PAGAR</th>
+          <th style="padding:6px 10px;text-align:center;font-weight:700;">Acción</th>
         </tr></thead>
-        <tbody>${tiendaRows||'<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">Sin ventas en este período</td></tr>'}</tbody>
+        <tbody>${tiendaRows||'<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">Sin ventas en este período</td></tr>'}</tbody>
         ${r.ventas_por_tienda?.length?`<tfoot><tr style="background:var(--sage-light);">
           <td style="padding:7px 10px;font-size:12px;font-weight:700;">TOTAL</td>
           <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;font-weight:700;">$${r.total_ventas.toFixed(2)}</td>
           <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;color:var(--red);font-weight:700;">-$${(r.ventas_por_tienda.reduce((s,t)=>s+t.comision,0)).toFixed(2)}</td>
           <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;text-align:right;color:var(--sage-dark);">$${(r.ventas_por_tienda.reduce((s,t)=>s+t.neto,0)).toFixed(2)}</td>
+          <td></td>
         </tr></tfoot>`:''}
       </table>
     </div>
@@ -2351,7 +2453,61 @@ async function showCorteSemanalModal(offset){
   <div class="modal-footer"><div class="modal-btns" style="margin-top:0">
     <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
   </div></div>`);
-  const m=document.querySelector('#modals .modal'); m.style.width='700px'; m.style.maxWidth='98vw';
+  const m=document.querySelector('#modals .modal'); m.style.width='800px'; m.style.maxWidth='98vw';
+}
+
+/* ── PAGO A TIENDA ── */
+function showPagoTiendaModal(tiendaId, tiendaNombre, montoSugerido, esInterno, desde, hasta) {
+  const infoEstacion = esInterno
+    ? `<div style="background:#E3F2FD;border:1px solid #90CAF9;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:12px;color:#1565C0;">
+        ℹ️ <strong>Transferencia interna</strong> — El dinero se mueve de Estudio Deco a Estación 304. Comparten caja fuerte y banco, solo es para separar contabilidad.
+      </div>`
+    : '';
+  const isSabro = tiendaNombre.toLowerCase().includes('sabro');
+  const sabroNote = isSabro
+    ? `<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:12px;color:#6D4C41;">
+        🥐 <strong>Sabrodulce</strong> — Se paga el precio del rol menos $15 de utilidad por pieza.
+      </div>`
+    : '';
+  showModal(`<div class="modal-simple">
+    <div class="modal-title">💰 Pagar a ${tiendaNombre}</div>
+    <div class="modal-sub">Registrar pago semanal</div>
+    ${infoEstacion}${sabroNote}
+    <div class="field"><label>Monto a pagar</label>
+      <input type="number" id="ptMonto" class="input" value="${montoSugerido.toFixed(2)}" step="0.01" min="0" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;text-align:center;">
+    </div>
+    <div class="field"><label>Método de pago</label>
+      <select id="ptMetodo" class="input">
+        <option value="Efectivo">💵 Efectivo (Caja Fuerte)</option>
+        <option value="Tarjeta">💳 Tarjeta / Transferencia (Banco)</option>
+      </select>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="showCorteSemanalModal()">← Volver</button>
+      <button class="btn" style="background:linear-gradient(135deg,#4CAF50,#2E7D32);color:white;" onclick="doPagoTienda(${tiendaId},'${tiendaNombre.replace(/'/g,"\\'")}',${esInterno?'true':'false'},'${desde}','${hasta}')">✓ Confirmar Pago</button>
+    </div>
+  </div>`);
+  setTimeout(()=>document.getElementById('ptMonto')?.select(),100);
+}
+
+async function doPagoTienda(tiendaId, tiendaNombre, esInterno, desde, hasta) {
+  const monto = parseFloat(document.getElementById('ptMonto').value);
+  const metodo = document.getElementById('ptMetodo').value;
+  if(!monto || monto <= 0) { toast('⚠️','Ingresa un monto válido','var(--gold)'); return; }
+  try {
+    await api('/pagos-tienda', {method:'POST', body:{
+      tienda_id: tiendaId,
+      tienda_nombre: tiendaNombre,
+      monto: monto,
+      metodo_pago: metodo,
+      concepto: `Pago semanal ${desde} a ${hasta}`,
+      es_interno: esInterno,
+      semana_inicio: desde,
+      semana_fin: hasta
+    }});
+    toast('✅', `Pago de $${monto.toFixed(2)} a ${tiendaNombre} registrado`, 'var(--green-ok)');
+    showCorteSemanalModal();
+  } catch(e) { toast('❌', e.message, 'var(--red)'); }
 }
 
 init();
