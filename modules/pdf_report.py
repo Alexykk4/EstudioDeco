@@ -226,6 +226,43 @@ def generar_corte_pdf(resumen: dict, cajero: str, ventas_turno: list = None) -> 
         pdf.cell(32, 8, f"${sum_neto:,.2f}", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(8)
 
+    # ── INGRESOS ──
+    ingresos_det = resumen.get("ingresos_detalle", [])
+    if ingresos_det:
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(*MORADO_PASTEL)
+        pdf.cell(0, 8, "Ingresos / Entradas", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+
+        pdf.set_fill_color(*AZUL_PASTEL)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(65, 8, "  Concepto", fill=True)
+        pdf.cell(45, 8, "Destino", fill=True, align="C")
+        pdf.cell(40, 8, u"M\xe9todo", fill=True, align="C")
+        pdf.cell(40, 8, "Monto", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_text_color(60, 60, 60)
+        pdf.set_font("Helvetica", "", 9)
+        fill = False
+        for ing in ingresos_det:
+            if fill:
+                pdf.set_fill_color(*GRIS_CLARO)
+            pdf.cell(65, 7, f"  {ing['concepto'][:30]}", fill=fill)
+            pdf.cell(45, 7, ing.get("tienda", "-"), fill=fill, align="C")
+            pdf.cell(40, 7, ing.get("metodo_pago", "Efectivo"), fill=fill, align="C")
+            pdf.cell(40, 7, f"${ing['monto']:,.2f}  ", fill=fill, align="R",
+                     new_x="LMARGIN", new_y="NEXT")
+            fill = not fill
+
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_fill_color(150, 200, 150)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(150, 8, "  TOTAL INGRESOS", fill=True)
+        pdf.cell(40, 8, f"${resumen.get('total_ingresos', 0):,.2f}  ", fill=True, align="R",
+                 new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(8)
+
     # ── GASTOS ──
     pdf.set_font("Helvetica", "B", 13)
     pdf.set_text_color(*MORADO_PASTEL)
@@ -235,9 +272,10 @@ def generar_corte_pdf(resumen: dict, cajero: str, ventas_turno: list = None) -> 
     pdf.set_fill_color(*AZUL_PASTEL)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(75, 8, "  Concepto", fill=True)
-    pdf.cell(40, 8, "Categoría", fill=True, align="C")
-    pdf.cell(35, 8, "Origen", fill=True, align="C")
+    pdf.cell(55, 8, "  Concepto", fill=True)
+    pdf.cell(40, 8, "Tienda", fill=True, align="C")
+    pdf.cell(30, 8, u"Categor\xeda", fill=True, align="C")
+    pdf.cell(25, 8, "Origen", fill=True, align="C")
     pdf.cell(40, 8, "Monto", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
 
     pdf.set_text_color(60, 60, 60)
@@ -246,9 +284,10 @@ def generar_corte_pdf(resumen: dict, cajero: str, ventas_turno: list = None) -> 
     for g in resumen.get("gastos_detalle", []):
         if fill:
             pdf.set_fill_color(*GRIS_CLARO)
-        pdf.cell(75, 7, f"  {g['concepto'][:35]}", fill=fill)
-        pdf.cell(40, 7, g["categoria"], fill=fill, align="C")
-        pdf.cell(35, 7, g.get("origen", "Caja"), fill=fill, align="C")
+        pdf.cell(55, 7, f"  {g['concepto'][:25]}", fill=fill)
+        pdf.cell(40, 7, g.get("tienda", "General"), fill=fill, align="C")
+        pdf.cell(30, 7, g["categoria"], fill=fill, align="C")
+        pdf.cell(25, 7, g.get("origen", "Caja"), fill=fill, align="C")
         pdf.cell(40, 7, f"${g['monto']:,.2f}  ", fill=fill, align="R",
                  new_x="LMARGIN", new_y="NEXT")
         fill = not fill

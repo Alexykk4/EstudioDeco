@@ -58,6 +58,20 @@ def init_db():
         # Registro de ventas canceladas
         "ALTER TABLE ventas ADD COLUMN cancelada INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE ventas ADD COLUMN cancelada_at TEXT DEFAULT NULL",
+        # Tabla para pagos a tiendas
+        """CREATE TABLE IF NOT EXISTS pagos_tienda (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            tienda_id     INTEGER NOT NULL,
+            tienda_nombre TEXT NOT NULL,
+            monto         REAL NOT NULL,
+            metodo_pago   TEXT NOT NULL DEFAULT 'Efectivo',
+            concepto      TEXT NOT NULL DEFAULT '',
+            es_interno    INTEGER NOT NULL DEFAULT 0,
+            semana_inicio TEXT NOT NULL,
+            semana_fin    TEXT NOT NULL,
+            created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (tienda_id) REFERENCES tiendas(id)
+        )""",
     ]
     for sql in migrations:
         try:
@@ -510,7 +524,7 @@ def obtener_resumen_dia(fecha=None):
         (fecha, desde)
     ).fetchone()
     gd = conn.execute(
-        "SELECT concepto,monto,categoria,origen FROM gastos WHERE DATE(created_at)=? AND created_at > ? ORDER BY created_at",
+        "SELECT g.concepto, g.monto, g.categoria, g.origen, COALESCE(t.nombre,'General') as tienda FROM gastos g LEFT JOIN tiendas t ON t.id = g.tienda_id WHERE DATE(g.created_at)=? AND g.created_at > ? ORDER BY g.created_at",
         (fecha, desde)
     ).fetchall()
     # Solo gastos que salen de la caja física (excluye comisiones de tarjeta y los que salen del banco)
@@ -748,13 +762,42 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
     sabro_roles = int(sabro['roles']) if sabro else 0
     total_semana = rv['total_ventas']
     total_ingresos = ingresos_total_row['total'] if ingresos_total_row else 0
+
+    # ── Pagos a tiendas de esta semana ──
+    pagos_rows = conn.execute("""
+        SELECT pt.*, t.nombre as tienda_nombre_actual
+        FROM pagos_tienda pt
+        LEFT JOIN tiendas t ON t.id = pt.tienda_id
+        WHERE pt.semana_inicio = ? AND pt.semana_fin = ?
+        ORDER BY pt.created_at
+    """, (fecha_inicio, fecha_fin)).fetchall()
+    pagos_semana = [dict(r) for r in pagos_rows]
+
+    # ── Balances por tienda ──
+    # Estudio Deco: ventas propias + ingresos - gastos - pagos enviados a otras tiendas
+    estudio_ventas = 0
+    estacion_ventas = 0
+    for t_row in vt:
+        if 'estudio' in t_row['tienda'].lower():
+            estudio_ventas = t_row['total']
+        elif 'estaci' in t_row['tienda'].lower():
+            estacion_ventas = t_row['total']
+
+    # Pagos enviados desde Estudio Deco a tiendas
+    total_pagos_enviados = sum(p['monto'] for p in pagos_semana)
+    total_pagos_internos = sum(p['monto'] for p in pagos_semana if p.get('es_interno'))
+    total_pagos_externos = total_pagos_enviados - total_pagos_internos
+
+    balance_estudio = estudio_ventas + total_ingresos - gastos['total'] - total_pagos_externos
+    balance_estacion = estacion_ventas + total_pagos_internos
+
     conn.close()
     return {
         'fecha_inicio': fecha_inicio,
         'fecha_fin': fecha_fin,
         'saldo_anterior': saldo_anterior,
         # Legacy fields for loadSemanal view
-        'total_semana': total_semana + total_ingresos,
+        'total_semana': total_semana,
         'total_efectivo': rv['total_efectivo'] + (ingresos_total_row['ef'] if ingresos_total_row else 0),
         'total_tarjeta': rv['total_tarjeta'] + (ingresos_total_row['tar'] if ingresos_total_row else 0),
         'total_gastos': gastos['total'],
@@ -772,6 +815,10 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         'diario': diario,
         'sabrodulce_roles': sabro_roles,
         'sabrodulce_pago': sabro_roles * 15.0,
+        # Balances y pagos
+        'balance_estudio_deco': balance_estudio,
+        'balance_estacion_304': balance_estacion,
+        'pagos_semana': pagos_semana,
     }
 
 def registrar_corte(usuario_id, efectivo_real, fondo_caja=0.0, desglose=None):
@@ -1005,3 +1052,25 @@ def marcar_sincronizado(tabla, record_id):
     conn = get_connection()
     conn.execute(f"UPDATE {tabla} SET sincronizado=1 WHERE id=?", (record_id,))
     conn.commit(); conn.close()
+
+# ── PAGOS A TIENDAS ──
+def registrar_pago_tienda(tienda_id, tienda_nombre, monto, metodo_pago, concepto, es_interno, semana_inicio, semana_fin):
+    """Registra un pago a una tienda. Si es_interno=True (Estación 304), solo es contable.
+    Si es_interno=False, también registra un gasto real."""
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO pagos_tienda (tienda_id, tienda_nombre, monto, metodo_pago, concepto, es_interno, semana_inicio, semana_fin)
+        VALUES (?,?,?,?,?,?,?,?)
+    """, (tienda_id, tienda_nombre, monto, metodo_pago, concepto, 1 if es_interno else 0, semana_inicio, semana_fin))
+    conn.commit()
+    conn.close()
+
+def obtener_pagos_semana(semana_inicio, semana_fin):
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT * FROM pagos_tienda
+        WHERE semana_inicio = ? AND semana_fin = ?
+        ORDER BY created_at
+    """, (semana_inicio, semana_fin)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

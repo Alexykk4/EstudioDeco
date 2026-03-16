@@ -19,7 +19,7 @@ from modules.database import (
     actualizar_item_orden, registrar_ingreso, set_fondo_apertura, get_fondo_apertura,
     obtener_ventas_dia, obtener_ventas_turno, corregir_venta, anular_venta,
     obtener_bundle_components, agregar_bundle_component, eliminar_bundle_component,
-    obtener_resumen_semana,
+    obtener_resumen_semana, registrar_pago_tienda, obtener_pagos_semana,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf
@@ -95,6 +95,16 @@ class BundleComponentReq(BaseModel):
     componente_id: int
     cantidad: int = 1
     precio_asignado: float
+
+class PagoTiendaReq(BaseModel):
+    tienda_id: int
+    tienda_nombre: str
+    monto: float
+    metodo_pago: str = "Efectivo"
+    concepto: str = ""
+    es_interno: bool = False
+    semana_inicio: str
+    semana_fin: str
 
 class ProductReq(BaseModel):
     tienda_id: int
@@ -355,6 +365,14 @@ async def api_resumen(): return obtener_resumen_dia()
 @app.get("/api/report/semanal")
 async def api_resumen_semanal(desde: str = None, hasta: str = None):
     return obtener_resumen_semana(desde, hasta)
+
+@app.post("/api/pagos-tienda")
+async def api_pago_tienda(r: PagoTiendaReq):
+    registrar_pago_tienda(
+        r.tienda_id, r.tienda_nombre, r.monto, r.metodo_pago,
+        r.concepto, r.es_interno, r.semana_inicio, r.semana_fin
+    )
+    return {"ok": True}
 
 @app.post("/api/corte")
 async def api_corte(r: CorteReq):
