@@ -2901,7 +2901,6 @@ async function showCorteSemanalModal(offset){
         <div class="modal-sub" style="margin:0;">${fmtLabel(lunes)} – ${fmtLabel(domingo)} · ${r.num_ventas} ticket${r.num_ventas!==1?'s':''}${r.num_canceladas?' · '+r.num_canceladas+' cancelada(s)':''}</div>
       </div>
       <button class="btn btn-ghost" style="padding:4px 10px;font-size:18px;line-height:1;" onclick="showCorteSemanalModal(${_semanaOffset+1})" ${_semanaOffset>=0?'disabled':''}>›</button>
-      <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;color:var(--red);border-color:var(--red);opacity:.7;" onclick="doLimpiarSemana('${desde}','${hasta}')" title="Borrar ingresos y gastos de esta semana (el balance se preserva)">🗑 Limpiar</button>
     </div>
 
     <!-- Tarjetas resumen -->
@@ -3075,14 +3074,6 @@ async function doPagoTienda(tiendaId, tiendaNombre, esInterno, desde, hasta) {
   } catch(e) { toast('❌', e.message, 'var(--red)'); }
 }
 
-async function doLimpiarSemana(desde, hasta) {
-  if(!confirm(`¿Borrar todos los ingresos y gastos de la semana ${desde} al ${hasta}?\n\nLas ventas no se tocan. El balance se preserva automáticamente.`)) return;
-  try {
-    const r = await api('/limpiar_semana', {method:'POST', body:{fecha_inicio:desde, fecha_fin:hasta}});
-    toast('✅', `Limpieza lista: ${r.borrados_ingresos} ingreso(s) y ${r.borrados_gastos} gasto(s) eliminados`, 'var(--green-ok)');
-    showCorteSemanalModal();
-  } catch(e) { toast('❌', e.message, 'var(--red)'); }
-}
 
 init();
 
