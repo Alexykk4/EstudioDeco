@@ -681,20 +681,14 @@ async function loadSemanal(){
     <div class="kpi-card"><div class="kpi-label">Cargando...</div><div class="kpi-val purple">⏳</div></div>`;
   document.getElementById('semanalBody').innerHTML = '';
   try {
-    const data = await api('/report/semanal');
+    const [data, bal] = await Promise.all([api('/report/semanal'), api('/api/balance')]);
     // KPIs
-    const saldoAnt    = data.saldo_anterior || 0;
     const gastosCaja  = (data.total_gastos || 0) - (data.total_gastos_banco || 0);
     const gastosBanco = data.total_gastos_banco || 0;
     const efectivoNeto = (data.total_efectivo || 0) - gastosCaja;
     const tarjetaNeto  = (data.total_tarjeta  || 0) - gastosBanco;
-    const acumuladoTotal = efectivoNeto + tarjetaNeto;
     const totalIngresos = data.total_ingresos || 0;
     document.getElementById('semanalKpis').innerHTML = `
-      <div class="kpi-card">
-        <div class="kpi-label">📦 Saldo Anterior</div>
-        <div class="kpi-val ${saldoAnt>=0?'green':'red'}">${$pesos(saldoAnt)}</div>
-      </div>
       <div class="kpi-card">
         <div class="kpi-label">💰 Ventas Semana</div>
         <div class="kpi-val purple">${$pesos(data.total_ventas || 0)}</div>
@@ -704,21 +698,23 @@ async function loadSemanal(){
         <div class="kpi-val" style="color:#26A69A;">${$pesos(totalIngresos)}</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">💵 Efectivo</div>
+        <div class="kpi-label">💵 Efectivo esta semana</div>
         <div class="kpi-val green">${$pesos(efectivoNeto)}</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">💳 Tarjeta / Transfer</div>
+        <div class="kpi-label">💳 Tarjeta esta semana</div>
         <div class="kpi-val gold">${$pesos(tarjetaNeto)}</div>
       </div>
       <div class="kpi-card" style="border:2px solid var(--sage);">
-        <div class="kpi-label">✨ Acumulado Total</div>
-        <div class="kpi-val ${acumuladoTotal>=0?'green':'red'}">${$pesos(acumuladoTotal)}</div>
+        <div class="kpi-label">💵 Balance en Caja</div>
+        <div class="kpi-val ${(bal.en_caja||0)>=0?'green':'red'}">${$pesos(bal.en_caja||0)}</div>
+      </div>
+      <div class="kpi-card" style="border:2px solid var(--gold,#FFC107);">
+        <div class="kpi-label">🏦 Balance en Banco</div>
+        <div class="kpi-val gold">${$pesos(bal.en_banco||0)}</div>
       </div>`;
 
-    // Render balance sidebar on the right
-    const balEstudio = data.balance_estudio_deco || 0;
-    const balEstacion = data.balance_estacion_304 || 0;
+    // Render balance sidebar on the right (historical cumulative)
     const pagos = data.pagos_semana || [];
     const pagosHtml = pagos.length ? pagos.map(p => `
       <div class="balance-card-detail">
@@ -726,20 +722,22 @@ async function loadSemanal(){
         <span style="color:${p.es_interno?'var(--sage)':'var(--red)'};">$${p.monto.toFixed(2)}</span>
       </div>`).join('') : '<div style="font-size:11px;color:var(--text-muted);padding:4px 0;">Sin pagos esta semana</div>';
 
+    const balTotal = bal.total || 0;
+    const balCaja  = bal.en_caja || 0;
+    const balBanco = bal.en_banco || 0;
+
     document.getElementById('semanalSidebar').innerHTML = `
       <div class="balance-card" style="border-left:4px solid var(--sage);">
-        <div class="balance-card-title">🏠 Estudio Deco</div>
-        <div class="balance-card-amount" style="color:${balEstudio>=0?'var(--sage-dark)':'var(--red)'};">${$pesos(balEstudio)}</div>
-        <div class="balance-card-detail"><span>Ventas propias</span><span>+${$pesos(data.ventas_por_tienda?.find(t=>t.tienda.toLowerCase().includes('estudio'))?.total || 0)}</span></div>
-        <div class="balance-card-detail"><span>+ Ingresos</span><span style="color:var(--green-ok);">+${$pesos(totalIngresos)}</span></div>
-        <div class="balance-card-detail"><span>- Gastos</span><span style="color:var(--red);">-${$pesos(data.total_gastos||0)}</span></div>
-        <div class="balance-card-detail"><span>- Pagos a tiendas</span><span style="color:var(--red);">-${$pesos(pagos.filter(p=>!p.es_interno).reduce((s,p)=>s+p.monto,0))}</span></div>
-      </div>
-      <div class="balance-card" style="border-left:4px solid var(--terracotta);">
-        <div class="balance-card-title">☕ Estación 304</div>
-        <div class="balance-card-amount" style="color:var(--terracotta);">${$pesos(balEstacion)}</div>
-        <div class="balance-card-detail"><span>Ventas propias</span><span>+${$pesos(data.ventas_por_tienda?.find(t=>t.tienda.toLowerCase().includes('estaci'))?.total || 0)}</span></div>
-        <div class="balance-card-detail"><span>+ Transferencias internas</span><span style="color:var(--green-ok);">+${$pesos(pagos.filter(p=>p.es_interno).reduce((s,p)=>s+p.monto,0))}</span></div>
+        <div class="balance-card-title">📊 Balance Actual (Histórico)</div>
+        <div class="balance-card-amount" style="color:${balTotal>=0?'var(--sage-dark)':'var(--red)'};">${$pesos(balTotal)}</div>
+        <div class="balance-card-detail"><span>💵 En Caja (efectivo)</span><span style="color:var(--green-ok);">$${balCaja.toFixed(2)}</span></div>
+        <div class="balance-card-detail"><span>🏦 En Banco / Tarjeta</span><span style="color:var(--gold);">$${balBanco.toFixed(2)}</span></div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light);">
+          <div class="balance-card-detail"><span>Total ventas históricas</span><span>+${$pesos(bal.total_ventas||0)}</span></div>
+          <div class="balance-card-detail"><span>+ Ingresos</span><span style="color:var(--green-ok);">+${$pesos(bal.total_ingresos||0)}</span></div>
+          <div class="balance-card-detail"><span>- Gastos</span><span style="color:var(--red);">-${$pesos(bal.total_gastos||0)}</span></div>
+          <div class="balance-card-detail"><span>- Pagos a tiendas</span><span style="color:var(--red);">-${$pesos(bal.total_pagos||0)}</span></div>
+        </div>
       </div>
       <div class="balance-card">
         <div class="balance-card-title">📋 Pagos de la Semana</div>
