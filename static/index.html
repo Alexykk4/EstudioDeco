@@ -67,12 +67,17 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
 .logo-text { font-size:13px; font-weight:800; letter-spacing:-0.5px; color:var(--text); white-space:nowrap; }
 .logo-sub { font-size:8px; color:var(--text-muted); font-weight:500; letter-spacing:2px; text-transform:uppercase; white-space:nowrap; }
 .sb-toggle {
-  margin-left:auto; width:24px; height:24px; border:none; background:transparent;
-  cursor:pointer; color:var(--text-muted); font-size:14px; border-radius:6px;
-  display:flex; align-items:center; justify-content:center; flex-shrink:0;
-  transition:var(--transition);
+  margin-left:auto; width:30px; height:30px; border:none; background:transparent;
+  cursor:pointer; border-radius:6px; display:flex; align-items:center;
+  justify-content:center; flex-shrink:0; transition:var(--transition); padding:4px;
 }
-.sb-toggle:hover { background:var(--bg); color:var(--text); }
+.sb-toggle:hover { background:var(--bg); }
+.hamburger-icon { display:flex; flex-direction:column; gap:4px; width:16px; }
+.hamburger-icon span {
+  display:block; height:2px; width:100%; background:var(--text-muted);
+  border-radius:2px; transition:var(--transition);
+}
+.sb-toggle:hover .hamburger-icon span { background:var(--text); }
 .sidebar-user { padding:0 8px; margin-bottom:12px; flex-shrink:0; overflow:hidden; }
 .sidebar-user .user-pill { width:100%; justify-content:flex-start; transition:var(--transition); }
 .nav-section-label {
@@ -598,20 +603,22 @@ body.sb-collapsed #fullpage { left:52px; }
         <div class="logo-text">Estudio Deco</div>
         <div class="logo-sub">Punto de Venta</div>
       </div>
-      <button class="sb-toggle" onclick="toggleSidebarCollapse()" title="Colapsar menú">◀</button>
+      <button class="sb-toggle" onclick="toggleSidebarCollapse()" title="Menú">
+        <span class="hamburger-icon"><span></span><span></span><span></span></span>
+      </button>
     </div>
     <div class="sidebar-user">
       <div class="user-pill" id="userPill" onclick="showNipModal()" title="Cambiar usuario"><span class="dot"></span><span id="userName">Sin usuario</span></div>
     </div>
     <div class="nav-section-label">Caja</div>
-    <button class="nav-item" onclick="openPage('🏦 Abrir Caja', showFondoModal)"><span class="nav-icon">🏦</span><span class="nav-label"> Abrir Caja</span></button>
-    <button class="nav-item" onclick="openPage('💰 Ingreso', showIngresoModal)"><span class="nav-icon">💰</span><span class="nav-label"> Ingreso</span></button>
-    <button class="nav-item" onclick="openPage('💸 Gasto', showGastoModal)"><span class="nav-icon">💸</span><span class="nav-label"> Gasto</span></button>
+    <button class="nav-item" onclick="showFondoModal()"><span class="nav-icon">🏦</span><span class="nav-label"> Abrir Caja</span></button>
+    <button class="nav-item" onclick="showIngresoModal()"><span class="nav-icon">💰</span><span class="nav-label"> Ingreso</span></button>
+    <button class="nav-item" onclick="showGastoModal()"><span class="nav-icon">💸</span><span class="nav-label"> Gasto</span></button>
     <div class="nav-section-label">Reportes</div>
-    <button class="nav-item" onclick="openPage('📋 Ventas del Día', showVentasHoyModal)"><span class="nav-icon">📋</span><span class="nav-label"> Ventas del Día</span></button>
-    <button class="nav-item" onclick="openPage('👁 Pre-Corte', showPreCorteModal)"><span class="nav-icon">👁</span><span class="nav-label"> Pre-Corte</span></button>
+    <button class="nav-item" onclick="showVentasHoyModal()"><span class="nav-icon">📋</span><span class="nav-label"> Ventas del Día</span></button>
+    <button class="nav-item" onclick="showPreCorteModal()"><span class="nav-icon">👁</span><span class="nav-label"> Pre-Corte</span></button>
     <button class="nav-item nav-item-gold" onclick="openPage('📊 Corte', showCorteModal)"><span class="nav-icon">📊</span><span class="nav-label"> Corte</span></button>
-    <button class="nav-item" onclick="openPage('📅 Semanal', ()=>showCorteSemanalModal(0))"><span class="nav-icon">📅</span><span class="nav-label"> Semanal</span></button>
+    <button class="nav-item" onclick="openPage('📅 Corte Semanal', ()=>showCorteSemanalModal(0))"><span class="nav-icon">📅</span><span class="nav-label"> Corte Semanal</span></button>
     <button class="nav-item" onclick="openPage('📈 Estadísticas', showEstadisticasModal)"><span class="nav-icon">📈</span><span class="nav-label"> Estadísticas</span></button>
     <div class="nav-section-label">Recursos</div>
     <button class="nav-item" onclick="openPage('👥 Nóminas', showNominasPage)"><span class="nav-icon">👥</span><span class="nav-label"> Nóminas</span></button>
@@ -1815,10 +1822,7 @@ function toggleSidebarCollapse(){
   const collapsed = sb.classList.toggle('sb-collapsed');
   app.classList.toggle('sb-collapsed', collapsed);
   document.body.classList.toggle('sb-collapsed', collapsed);
-  // Mover el fullpage
   document.getElementById('fullpage').style.left = collapsed ? '52px' : 'var(--sb-w)';
-  // Cambiar ícono del botón
-  document.querySelector('.sb-toggle').textContent = collapsed ? '▶' : '◀';
   localStorage.setItem('sb-collapsed', collapsed ? '1' : '0');
 }
 
@@ -1830,8 +1834,6 @@ function toggleSidebarCollapse(){
     document.body.classList.add('sb-collapsed');
     const fp = document.getElementById('fullpage');
     if(fp) fp.style.left='52px';
-    const btn = document.querySelector('.sb-toggle');
-    if(btn) btn.textContent='▶';
   }
 })();
 
