@@ -681,7 +681,7 @@ async function loadSemanal(){
     <div class="kpi-card"><div class="kpi-label">Cargando...</div><div class="kpi-val purple">⏳</div></div>`;
   document.getElementById('semanalBody').innerHTML = '';
   try {
-    const [data, bal] = await Promise.all([api('/report/semanal'), api('/api/balance')]);
+    const [data, bal] = await Promise.all([api('/report/semanal'), api('/balance')]);
     // KPIs
     const gastosCaja  = (data.total_gastos || 0) - (data.total_gastos_banco || 0);
     const gastosBanco = data.total_gastos_banco || 0;
