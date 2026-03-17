@@ -581,6 +581,8 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
     <button class="nav-item nav-item-gold" onclick="openPage('📊 Corte', showCorteModal)"><span class="nav-icon">📊</span> Corte</button>
     <button class="nav-item" onclick="openPage('📅 Semanal', ()=>showCorteSemanalModal(0))"><span class="nav-icon">📅</span> Semanal</button>
     <button class="nav-item" onclick="openPage('📈 Estadísticas', showEstadisticasModal)"><span class="nav-icon">📈</span> Estadísticas</button>
+    <div class="nav-section-label">Recursos</div>
+    <button class="nav-item" onclick="openPage('👥 Nóminas', showNominasPage)"><span class="nav-icon">👥</span> Nóminas</button>
   </aside>
 
   <!-- MAIN -->
@@ -3010,6 +3012,96 @@ async function doPagoTienda(tiendaId, tiendaNombre, esInterno, desde, hasta) {
 }
 
 init();
+
+/* ── NÓMINAS ── */
+async function showNominasPage() {
+  if(!usuario) return showNipModal(()=>openPage('👥 Nóminas', showNominasPage));
+  let nominas = [];
+  try { nominas = await api('/nominas'); } catch(e) {}
+
+  const metIcon = m => m==='Efectivo'?'💵':'💳';
+  const rows = nominas.length ? nominas.map(n => `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;">
+      <div style="width:38px;height:38px;border-radius:50%;background:var(--sage-light);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">👤</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:13px;">${n.nombre_empleado}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${n.concepto} · ${n.created_at?.slice(0,16)||''} · ${n.cajero||''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:var(--sage-dark);">$${n.monto.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${metIcon(n.metodo_pago)} ${n.metodo_pago}</div>
+      </div>
+    </div>`).join('') : '<div style="padding:40px;text-align:center;color:var(--text-muted);">Sin nóminas registradas</div>';
+
+  const totalMes = nominas.filter(n => n.created_at?.slice(0,7) === new Date().toISOString().slice(0,7)).reduce((s,n)=>s+n.monto,0);
+
+  showModal(`<div class="modal-body">
+    <div class="modal-title">👥 Nóminas</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div class="res-card"><div class="res-label">Total este mes</div><div class="res-val" style="color:var(--sage-dark);">$${totalMes.toLocaleString('es-MX',{minimumFractionDigits:2})}</div></div>
+      <div class="res-card"><div class="res-label">Registros totales</div><div class="res-val">${nominas.length}</div></div>
+    </div>
+    <button class="btn btn-sage" style="width:100%;margin-bottom:14px;" onclick="showRegistrarNominaModal()">+ Registrar Pago</button>
+    <div style="max-height:500px;overflow-y:auto;">${rows}</div>
+  </div>`);
+}
+
+function showRegistrarNominaModal() {
+  // Abre encima como modal normal (saliendo del modo fp temporalmente)
+  const wasFp = _fpActive;
+  _fpActive = false;
+  showModal(`<div class="modal-title">💸 Registrar Pago de Nómina</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px;">
+      <div>
+        <label class="input-label">👤 Nombre del empleado</label>
+        <input id="nomEmpleado" type="text" class="input" placeholder="Nombre completo" autofocus>
+      </div>
+      <div>
+        <label class="input-label">📝 Concepto</label>
+        <input id="nomConcepto" type="text" class="input" placeholder="Ej: Quincena, Semana, Bono…" value="Nómina">
+      </div>
+      <div>
+        <label class="input-label">💰 Monto</label>
+        <input id="nomMonto" type="number" class="input" placeholder="0.00" step="0.01" min="0">
+      </div>
+      <div>
+        <label class="input-label">💳 Método de pago</label>
+        <div style="display:flex;gap:8px;">
+          <button id="nomBtnEf" class="pay-btn active" onclick="nomSetMetodo('Efectivo')" style="flex:1">💵 Efectivo</button>
+          <button id="nomBtnTar" class="pay-btn" onclick="nomSetMetodo('Tarjeta')" style="flex:1">💳 Tarjeta</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-btns" style="margin-top:20px;">
+      <button class="btn btn-ghost" onclick="closeModal();${wasFp?'_fpActive=true;':''}" >Cancelar</button>
+      <button class="btn btn-sage" onclick="doRegistrarNomina(${wasFp})">Registrar y Enviar PDF</button>
+    </div>`);
+  window._nomMetodo = 'Efectivo';
+}
+
+function nomSetMetodo(m){
+  window._nomMetodo = m;
+  document.getElementById('nomBtnEf').classList.toggle('active', m==='Efectivo');
+  document.getElementById('nomBtnTar').classList.toggle('active', m==='Tarjeta');
+}
+
+async function doRegistrarNomina(wasFp=false) {
+  const nombre = document.getElementById('nomEmpleado')?.value?.trim();
+  const concepto = document.getElementById('nomConcepto')?.value?.trim() || 'Nómina';
+  const monto = parseFloat(document.getElementById('nomMonto')?.value);
+  if(!nombre) { toast('⚠️','Ingresa el nombre del empleado','var(--gold)'); return; }
+  if(!monto || monto<=0) { toast('⚠️','Ingresa un monto válido','var(--gold)'); return; }
+  try {
+    await api('/nominas', {method:'POST', body:{
+      nombre_empleado: nombre, concepto, monto,
+      metodo_pago: window._nomMetodo || 'Efectivo',
+      usuario_id: usuario?.id
+    }});
+    toast('✅','Nómina registrada y correo enviado','var(--green-ok)');
+    document.getElementById('modals').innerHTML='';
+    if(wasFp){ _fpActive=true; _fpRendered=false; showNominasPage(); }
+  } catch(e) { toast('❌', e.message, 'var(--red)'); }
+}
 </script>
 </body>
 </html>

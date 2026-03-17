@@ -22,10 +22,11 @@ from modules.database import (
     obtener_resumen_semana, registrar_pago_tienda, obtener_pagos_semana,
     obtener_estadisticas,
     obtener_balance_actual, ajustar_balance,
+    registrar_nomina, listar_nominas,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
-from modules.pdf_report import generar_corte_pdf
-from modules.email_sender import enviar_corte_email, enviar_notificacion_email
+from modules.pdf_report import generar_corte_pdf, generar_nomina_pdf
+from modules.email_sender import enviar_corte_email, enviar_notificacion_email, enviar_nomina_email
 from modules.sync_sheets import sync_worker
 
 init_db(); sync_worker.start()
@@ -377,6 +378,24 @@ async def api_balance(): return obtener_balance_actual()
 @app.post("/api/balance/ajustar")
 async def api_ajustar_balance(r: dict):
     return ajustar_balance(float(r.get('caja', 0)), float(r.get('banco', 0)))
+
+@app.get("/api/nominas")
+async def api_listar_nominas():
+    return listar_nominas()
+
+@app.post("/api/nominas")
+async def api_registrar_nomina(r: dict):
+    nomina = registrar_nomina(
+        r['nombre_empleado'], float(r['monto']), r.get('concepto','Nómina'),
+        r.get('metodo_pago','Efectivo'), r.get('usuario_id')
+    )
+    conn = __import__('modules.database', fromlist=['get_connection']).get_connection()
+    u = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (r.get('usuario_id'),)).fetchone()
+    conn.close()
+    cajero = u['nombre'] if u else 'Sistema'
+    pdf_path = generar_nomina_pdf(nomina, cajero)
+    enviar_nomina_email(pdf_path, nomina, cajero)
+    return {'ok': True, 'nomina': nomina}
 
 @app.post("/api/pagos-tienda")
 async def api_pago_tienda(r: PagoTiendaReq):
