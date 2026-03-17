@@ -548,6 +548,33 @@ def ajustar_balance(caja_real: float, banco_real: float):
     conn.commit(); conn.close()
     return {'ajuste_caja': ajuste_caja, 'ajuste_banco': ajuste_banco}
 
+def limpiar_ingresos_gastos(fecha_inicio: str, fecha_fin: str):
+    """
+    Borra ingresos y gastos del rango dado manteniendo el balance intacto.
+    """
+    bal = obtener_balance_actual()
+    caja_real  = bal['en_caja']
+    banco_real = bal['en_banco']
+
+    conn = get_connection()
+    borrados_ingresos = conn.execute(
+        "DELETE FROM ingresos WHERE DATE(created_at) BETWEEN ? AND ?",
+        (fecha_inicio, fecha_fin)
+    ).rowcount
+    borrados_gastos = conn.execute(
+        "DELETE FROM gastos WHERE DATE(created_at) BETWEEN ? AND ?",
+        (fecha_inicio, fecha_fin)
+    ).rowcount
+    conn.commit(); conn.close()
+
+    ajustar_balance(caja_real, banco_real)
+
+    return {
+        'borrados_ingresos': borrados_ingresos,
+        'borrados_gastos': borrados_gastos,
+        'balance_preservado': {'en_caja': caja_real, 'en_banco': banco_real}
+    }
+
 # ── NÓMINAS ──
 def registrar_nomina(nombre_empleado: str, monto: float, concepto: str, metodo_pago: str, usuario_id: int):
     conn = get_connection()
