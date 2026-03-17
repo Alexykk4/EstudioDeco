@@ -724,16 +724,14 @@ async function loadSemanal(){
 
     document.getElementById('semanalSidebar').innerHTML = `
       <div class="balance-card" style="border-left:4px solid var(--sage);">
-        <div class="balance-card-title">📊 Balance Actual (Histórico)</div>
+        <div class="balance-card-title" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>📊 Balance Actual</span>
+          <button class="btn-icon" style="background:var(--bg);color:var(--text-secondary);font-size:11px;padding:3px 8px;border-radius:6px;" onclick="showAjusteBalanceModal(${balCaja},${balBanco})" title="Ajustar balance">✏️ Ajustar</button>
+        </div>
         <div class="balance-card-amount" style="color:${balTotal>=0?'var(--sage-dark)':'var(--red)'};">${$pesos(balTotal)}</div>
         <div class="balance-card-detail"><span>💵 En Caja (efectivo)</span><span style="color:var(--green-ok);">$${balCaja.toFixed(2)}</span></div>
         <div class="balance-card-detail"><span>🏦 En Banco / Tarjeta</span><span style="color:var(--gold);">$${balBanco.toFixed(2)}</span></div>
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light);">
-          <div class="balance-card-detail"><span>Total ventas históricas</span><span>+${$pesos(bal.total_ventas||0)}</span></div>
-          <div class="balance-card-detail"><span>+ Ingresos</span><span style="color:var(--green-ok);">+${$pesos(bal.total_ingresos||0)}</span></div>
-          <div class="balance-card-detail"><span>- Gastos</span><span style="color:var(--red);">-${$pesos(bal.total_gastos||0)}</span></div>
-          <div class="balance-card-detail"><span>- Pagos a tiendas</span><span style="color:var(--red);">-${$pesos(bal.total_pagos||0)}</span></div>
-        </div>
+        ${(bal.ajuste_caja||bal.ajuste_banco)?`<div style="margin-top:4px;font-size:10px;color:var(--text-muted);">Ajuste manual: caja ${$pesos(bal.ajuste_caja||0)} · banco ${$pesos(bal.ajuste_banco||0)}</div>`:''}
       </div>
       <div class="balance-card">
         <div class="balance-card-title">📋 Pagos de la Semana</div>
@@ -1997,6 +1995,37 @@ async function reimprimirComanda(vid) {
     const r = await api(`/ventas/${vid}/reimprimir_comanda`, {method:'POST'});
     if(r.msg) toast('⚠️', r.msg, 'var(--gold)');
     else toast(r.impreso ? '✅' : '⚠️', r.impreso ? 'Comanda reimpresa' : 'Sin impresora', r.impreso ? 'var(--green-ok)' : 'var(--gold)');
+  } catch(e) { toast('❌', e.message, 'var(--red)'); }
+}
+
+function showAjusteBalanceModal(cajaActual, bancoActual) {
+  if(usuario?.perfil !== 'Administrador') { toast('⚠️','Solo Administrador','var(--gold)'); return; }
+  showModal(`<div class="modal-title">✏️ Ajustar Balance</div>
+    <div class="modal-sub">Ingresa el monto real que tienes ahora mismo. El sistema calculará la diferencia automáticamente.</div>
+    <div style="display:flex;flex-direction:column;gap:14px;margin-top:18px;">
+      <div>
+        <label class="input-label">💵 Efectivo en Caja</label>
+        <input id="ajusteCaja" type="number" class="input" step="0.01" value="${cajaActual.toFixed(2)}" placeholder="0.00">
+      </div>
+      <div>
+        <label class="input-label">🏦 Monto en Banco / Tarjeta</label>
+        <input id="ajusteBanco" type="number" class="input" step="0.01" value="${bancoActual.toFixed(2)}" placeholder="0.00">
+      </div>
+    </div>
+    <div class="modal-btns" style="margin-top:20px;">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-sage" onclick="doAjusteBalance()">Guardar Ajuste</button>
+    </div>`);
+}
+
+async function doAjusteBalance() {
+  const caja  = parseFloat(document.getElementById('ajusteCaja')?.value)  || 0;
+  const banco = parseFloat(document.getElementById('ajusteBanco')?.value) || 0;
+  try {
+    await api('/balance/ajustar', {method:'POST', body:{caja, banco}});
+    toast('✅','Balance ajustado','var(--green-ok)');
+    closeModal();
+    loadSemanal();
   } catch(e) { toast('❌', e.message, 'var(--red)'); }
 }
 
