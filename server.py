@@ -21,7 +21,7 @@ from modules.database import (
     obtener_bundle_components, agregar_bundle_component, eliminar_bundle_component,
     obtener_resumen_semana, registrar_pago_tienda, obtener_pagos_semana,
     obtener_estadisticas,
-    obtener_balance_actual, ajustar_balance,
+    obtener_balance_actual, ajustar_balance, limpiar_ingresos_gastos,
     registrar_nomina, listar_nominas,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
@@ -378,6 +378,10 @@ async def api_balance(): return obtener_balance_actual()
 @app.post("/api/balance/ajustar")
 async def api_ajustar_balance(r: dict):
     return ajustar_balance(float(r.get('caja', 0)), float(r.get('banco', 0)))
+
+@app.post("/api/limpiar_semana")
+async def api_limpiar_semana(r: dict):
+    return limpiar_ingresos_gastos(r['fecha_inicio'], r['fecha_fin'])
 
 @app.get("/api/nominas")
 async def api_listar_nominas():
