@@ -2805,6 +2805,7 @@ async function showCorteSemanalModal(offset){
   if(offset!==undefined) _semanaOffset=offset;
   if(!usuario) return showNipModal(()=>showCorteSemanalModal());
   if(usuario.perfil!=='Administrador'){toast('⚠️','Solo Administrador','var(--gold)');return;}
+  if(_fpActive) _fpRendered=false;
 
   // Calcular rango de la semana (Lunes a Domingo)
   const hoy=new Date(); hoy.setHours(12,0,0,0);
