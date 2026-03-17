@@ -429,9 +429,137 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
 .btn-pagar:hover { transform:translateY(-1px); box-shadow:0 3px 8px rgba(76,175,80,.35); }
 .btn-pagar.pagado { background:linear-gradient(135deg,#9E9E9E,#757575); cursor:default; }
 @media (max-width:900px){ .semanal-layout { grid-template-columns:1fr; } }
+
+/* ── FULL-PAGE VIEWS ── */
+#fullpage {
+  position:fixed; inset:0; z-index:50; background:var(--bg);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+#fullpage.hidden { display:none; }
+.fp-header {
+  display:flex; align-items:center; gap:12px; padding:12px 18px;
+  background:var(--surface); border-bottom:1px solid var(--border); flex-shrink:0;
+}
+.fp-back {
+  width:34px; height:34px; border-radius:50%; border:1px solid var(--border);
+  background:transparent; cursor:pointer; font-size:17px; display:flex;
+  align-items:center; justify-content:center; transition:var(--transition); flex-shrink:0;
+}
+.fp-back:hover { background:var(--bg); }
+.fp-title { font-size:16px; font-weight:800; }
+.fp-body { flex:1; overflow-y:auto; padding:20px 24px; }
+
+/* ── MOBILE TOPBAR ── */
+.topbar {
+  display:none; align-items:center; gap:10px; padding:10px 14px;
+  background:var(--surface); border-bottom:1px solid var(--border);
+  position:sticky; top:0; z-index:30;
+}
+.hamburger {
+  width:36px; height:36px; border:none; background:transparent;
+  font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  border-radius:8px; transition:var(--transition);
+}
+.hamburger:hover { background:var(--bg); }
+.sidebar-overlay {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:59;
+}
+
+/* ── BOTTOM NAV (mobile) ── */
+.bottom-nav {
+  display:none; position:fixed; bottom:0; left:0; right:0;
+  background:var(--surface); border-top:1px solid var(--border); z-index:45;
+  padding-bottom:env(safe-area-inset-bottom,0);
+}
+.bottom-nav-btn {
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:7px 2px 5px; font-size:9px; font-weight:600; color:var(--text-muted);
+  border:none; background:transparent; cursor:pointer; gap:2px; transition:var(--transition);
+}
+.bottom-nav-btn .nav-icon { font-size:19px; line-height:1; }
+.bottom-nav-btn.active { color:var(--sage); }
+
+/* ── CART FAB ── */
+.cart-fab {
+  display:none; position:fixed; bottom:24px; right:20px;
+  width:52px; height:52px; border-radius:50%; background:var(--sage); color:white;
+  font-size:20px; align-items:center; justify-content:center;
+  box-shadow:var(--shadow-lg); cursor:pointer; z-index:44; border:none;
+  transition:var(--transition);
+}
+.cart-fab:hover { background:var(--sage-dark); transform:scale(1.05); }
+.cart-fab-badge {
+  position:absolute; top:-2px; right:-2px; background:var(--red); color:white;
+  font-size:10px; font-weight:700; width:18px; height:18px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; line-height:1;
+}
+
+/* ── RESPONSIVE: Tablet (≤1024px) ── */
+@media (max-width:1024px) {
+  .app { grid-template-columns:190px 1fr; }
+  #semanalSidebar { display:none !important; }
+  .order-panel#orderPanel {
+    position:fixed; bottom:0; left:0; right:0; width:100%;
+    max-height:70vh; transform:translateY(100%); border-radius:20px 20px 0 0;
+    border-top:2px solid var(--border); border-left:none; z-index:43;
+    transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    box-shadow:var(--shadow-lg);
+  }
+  .order-panel#orderPanel.cart-open { transform:translateY(0); }
+  .cart-fab { display:flex; }
+  .fp-body { padding:14px 16px; }
+}
+
+/* ── RESPONSIVE: Tablet portrait (≤768px) ── */
+@media (max-width:768px) {
+  body { overflow:auto; }
+  .app { grid-template-columns:1fr; grid-template-rows:auto 1fr; height:auto; min-height:100vh; }
+  .sidebar {
+    position:fixed; left:-220px; top:0; bottom:0; width:220px;
+    transition:left 0.3s cubic-bezier(0.4,0,0.2,1); z-index:60;
+    box-shadow:var(--shadow-lg);
+  }
+  .sidebar.sidebar-open { left:0; }
+  .sidebar-overlay.active { display:block; }
+  .topbar { display:flex; }
+  .main { padding:12px 14px; gap:10px; overflow:visible; }
+  .view-nav { flex-wrap:wrap; gap:4px; }
+  .mesas-grid { grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); }
+  .kpi-grid { grid-template-columns:repeat(2,1fr); }
+  .semanal-kpis { grid-template-columns:repeat(2,1fr); }
+  .fp-body { padding:12px 14px; }
+}
+
+/* ── RESPONSIVE: Phone (≤480px) ── */
+@media (max-width:480px) {
+  .sidebar { display:none !important; }
+  .bottom-nav { display:flex; }
+  .main { padding:10px 10px 80px; }
+  .mesas-grid { grid-template-columns:repeat(2,1fr); gap:8px; }
+  .products-grid { grid-template-columns:repeat(2,1fr) !important; }
+  .product-card { padding:10px; }
+  .product-name { font-size:12px; }
+  .product-price { font-size:14px; }
+  .kpi-grid,.semanal-kpis { grid-template-columns:repeat(2,1fr); gap:8px; }
+  .kpi-card { padding:12px; }
+  .kpi-val { font-size:16px !important; }
+  .res-grid { grid-template-columns:repeat(2,1fr) !important; }
+  .fp-body { padding:10px; }
+  .modal { width:98vw !important; max-width:98vw !important; }
+  /* Toast above bottom nav */
+  #toast { bottom:80px !important; }
+}
 </style>
 </head>
 <body>
+<!-- Mobile topbar -->
+<div class="topbar" id="topbar">
+  <button class="hamburger" onclick="toggleSidebar()">☰</button>
+  <span class="logo-text" style="flex:1">Estudio Deco</span>
+  <div class="user-pill" id="topUserPill" onclick="showNipModal()" title="Cambiar usuario"><span class="dot" id="topDot"></span><span id="topUserName">Sin usuario</span></div>
+</div>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
 <div class="app">
   <!-- SIDEBAR -->
   <aside class="sidebar">
@@ -444,15 +572,15 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
       <div class="user-pill" id="userPill" onclick="showNipModal()" title="Cambiar usuario"><span class="dot"></span><span id="userName">Sin usuario</span></div>
     </div>
     <div class="nav-section-label">Caja</div>
-    <button class="nav-item" onclick="showFondoModal()"><span class="nav-icon">🏦</span> Abrir Caja</button>
-    <button class="nav-item" onclick="showIngresoModal()"><span class="nav-icon">💰</span> Ingreso</button>
-    <button class="nav-item" onclick="showGastoModal()"><span class="nav-icon">💸</span> Gasto</button>
+    <button class="nav-item" onclick="openPage('🏦 Abrir Caja', showFondoModal)"><span class="nav-icon">🏦</span> Abrir Caja</button>
+    <button class="nav-item" onclick="openPage('💰 Ingreso', showIngresoModal)"><span class="nav-icon">💰</span> Ingreso</button>
+    <button class="nav-item" onclick="openPage('💸 Gasto', showGastoModal)"><span class="nav-icon">💸</span> Gasto</button>
     <div class="nav-section-label">Reportes</div>
-    <button class="nav-item" onclick="showVentasHoyModal()"><span class="nav-icon">📋</span> Ventas del Día</button>
-    <button class="nav-item" onclick="showPreCorteModal()"><span class="nav-icon">👁</span> Pre-Corte</button>
-    <button class="nav-item nav-item-gold" onclick="showCorteModal()"><span class="nav-icon">📊</span> Corte</button>
-    <button class="nav-item" onclick="showCorteSemanalModal(0)"><span class="nav-icon">📅</span> Semanal</button>
-    <button class="nav-item" onclick="showEstadisticasModal()"><span class="nav-icon">📈</span> Estadísticas</button>
+    <button class="nav-item" onclick="openPage('📋 Ventas del Día', showVentasHoyModal)"><span class="nav-icon">📋</span> Ventas del Día</button>
+    <button class="nav-item" onclick="openPage('👁 Pre-Corte', showPreCorteModal)"><span class="nav-icon">👁</span> Pre-Corte</button>
+    <button class="nav-item nav-item-gold" onclick="openPage('📊 Corte', showCorteModal)"><span class="nav-icon">📊</span> Corte</button>
+    <button class="nav-item" onclick="openPage('📅 Semanal', ()=>showCorteSemanalModal(0))"><span class="nav-icon">📅</span> Semanal</button>
+    <button class="nav-item" onclick="openPage('📈 Estadísticas', showEstadisticasModal)"><span class="nav-icon">📈</span> Estadísticas</button>
   </aside>
 
   <!-- MAIN -->
@@ -574,7 +702,21 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
     </div>
   </aside>
   <aside class="order-panel hidden" id="semanalSidebar" style="padding:18px; gap:14px; background:var(--bg); border:none;"></aside>
+  <!-- Cart FAB (tablet/mobile) -->
+  <button class="cart-fab" id="cartFab" onclick="toggleCart()">🛒<span class="cart-fab-badge" id="cartFabBadge" style="display:none">0</span></button>
 </div>
+
+<!-- Bottom nav (phone) -->
+<nav class="bottom-nav" id="bottomNav">
+  <button class="bottom-nav-btn active" id="bnMesas" onclick="switchView('mesas');setBottomNav('mesas')"><span class="nav-icon">🪑</span>Mesas</button>
+  <button class="bottom-nav-btn" id="bnDirecta" onclick="switchView('directa');setBottomNav('directa')"><span class="nav-icon">🛒</span>Venta</button>
+  <button class="bottom-nav-btn" id="bnVentas" onclick="openPage('📋 Ventas del Día', showVentasHoyModal)"><span class="nav-icon">📋</span>Ventas</button>
+  <button class="bottom-nav-btn" id="bnSemanal" onclick="openPage('📅 Semanal', ()=>showCorteSemanalModal(0))"><span class="nav-icon">📅</span>Semanal</button>
+  <button class="bottom-nav-btn" id="bnCorte" onclick="openPage('📊 Corte', showCorteModal)"><span class="nav-icon">📊</span>Corte</button>
+</nav>
+
+<!-- Full-page view -->
+<div id="fullpage" class="hidden"></div>
 <div id="modals"></div>
 
 <script>
@@ -625,6 +767,8 @@ async function init(){
 /* ── VIEWS ── */
 function switchView(v){
   if(v==='catalog' && (!usuario || usuario.perfil!=='Administrador')) return toast('⚠️','Solo Administrador','var(--gold)');
+  closePage();
+  closeSidebar();
   currentView=v;
   document.querySelectorAll('.view-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   const mg=document.getElementById('mesasGrid'), pv=document.getElementById('productsView'),
@@ -1172,6 +1316,8 @@ function renderOrder(){
   document.getElementById('orderCount').textContent=cnt;
   document.getElementById('orderTotal').textContent=`$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}`;
   document.getElementById('btnCobrar').disabled=items.length===0;
+  const badge=document.getElementById('cartFabBadge');
+  if(badge){badge.textContent=cnt;badge.style.display=cnt>0?'flex':'none';}
 
   // Mostrar subtotal + propina si hay propina activa
   const showPropina = propina>0;
@@ -1491,7 +1637,7 @@ function showCashModal(){
       <button id="btnConfirmCash" class="btn btn-sage" onclick="confirmarCobroCash(${total})" disabled style="font-size:15px;padding:11px 28px;">✓ Confirmar Cobro</button>
     </div>
   </div>`);
-  const m=document.querySelector('#modals .modal'); m.style.width='440px'; m.style.maxWidth='98vw';
+  const m=document.querySelector('#modals .modal'); if(m){m.style.width='440px'; m.style.maxWidth='98vw';}
   setTimeout(()=>document.getElementById('cashIn')?.focus(), 80);
 }
 
@@ -1564,13 +1710,80 @@ async function _procesarCobro(efectivo_recibido){
 }
 
 /* ── MODALS ── */
+let _fpActive = false;
+let _fpRendered = false; // true after first render into fpBody
+
 function showModal(h){
+  if(_fpActive && !_fpRendered){
+    const body = document.getElementById('fpBody');
+    if(body){
+      _fpRendered = true;
+      body.innerHTML = h.trimStart().startsWith('<div class="modal-body">') ? h : `<div class="modal-simple" style="max-width:100%;box-shadow:none;border:none;padding:0;">${h}</div>`;
+      return;
+    }
+  }
   const inner = h.trimStart().startsWith('<div class="modal-body">')
     ? h
     : `<div class="modal-simple">${h}</div>`;
   document.getElementById('modals').innerHTML=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">${inner}</div></div>`;
 }
-function closeModal(){ document.getElementById('modals').innerHTML=''; }
+function closeModal(){
+  document.getElementById('modals').innerHTML='';
+  // Si estamos en modo página, re-renderizar el contenido de la página
+  if(_fpActive && document.getElementById('fpBody') && !document.getElementById('fpBody').innerHTML.trim()){
+    document.getElementById('fpBody').innerHTML='<div style="padding:20px;color:var(--text-muted)">← Usa el botón Volver</div>';
+  }
+}
+
+async function openPage(title, fn){
+  const fp = document.getElementById('fullpage');
+  fp.innerHTML = `
+    <div class="fp-header">
+      <button class="fp-back" onclick="closePage()">←</button>
+      <div class="fp-title">${title}</div>
+    </div>
+    <div class="fp-body" id="fpBody" style="display:flex;align-items:center;justify-content:center;">
+      <span style="color:var(--text-muted);font-size:13px;">Cargando…</span>
+    </div>`;
+  fp.classList.remove('hidden');
+  closeSidebar();
+  _fpActive = true;
+  _fpRendered = false;
+  try { await fn(); } catch(e){ document.getElementById('fpBody').innerHTML=`<div style="padding:30px;color:var(--red);">❌ ${e.message}</div>`; }
+  const fpBody = document.getElementById('fpBody');
+  if(fpBody) fpBody.style.display = '';
+}
+
+function closePage(){
+  _fpActive = false;
+  _fpRendered = false;
+  const fp = document.getElementById('fullpage');
+  fp.classList.add('hidden');
+  fp.innerHTML = '';
+  // Re-enable closeModal for regular modals
+  document.getElementById('modals').innerHTML = '';
+}
+
+function toggleSidebar(){
+  const s = document.querySelector('.sidebar');
+  const isOpen = s.classList.contains('sidebar-open');
+  s.classList.toggle('sidebar-open');
+  document.getElementById('sidebarOverlay').classList.toggle('active', !isOpen);
+}
+function closeSidebar(){
+  document.querySelector('.sidebar').classList.remove('sidebar-open');
+  document.getElementById('sidebarOverlay').classList.remove('active');
+}
+
+function toggleCart(){
+  document.getElementById('orderPanel').classList.toggle('cart-open');
+}
+
+function setBottomNav(id){
+  document.querySelectorAll('.bottom-nav-btn').forEach(b=>b.classList.remove('active'));
+  const el = document.getElementById('bn'+id.charAt(0).toUpperCase()+id.slice(1));
+  if(el) el.classList.add('active');
+}
 
 let nipCb=null;
 function showNipModal(cb){
@@ -1588,6 +1801,9 @@ async function doNip(){
     usuario=await api('/auth',{method:'POST',body:{nip:v}});
     document.getElementById('userName').textContent=`${usuario.nombre}`;
     document.getElementById('userPill').classList.add('active');
+    document.getElementById('topUserName').textContent=`${usuario.nombre}`;
+    document.getElementById('topUserPill').classList.add('active');
+    document.getElementById('topDot').style.background='var(--green-ok)';
     if(usuario.perfil==='Administrador') document.getElementById('navCatalog').classList.remove('hidden');
     closeModal(); toast('✅',`Hola, ${usuario.nombre}`);
     if(nipCb){const c=nipCb;nipCb=null;c();}
@@ -1749,8 +1965,7 @@ async function showCorteModal(){
     </div>
   </div>`);
   const m = document.querySelector('#modals .modal');
-  m.style.width = '760px';
-  m.style.maxWidth = '98vw';
+  if(m){ m.style.width = '760px'; m.style.maxWidth = '98vw'; }
 }
 async function printCorteDia(){
   try {
@@ -1980,7 +2195,7 @@ async function showVentasHoyModal() {
     <div style="max-height:480px;overflow-y:auto;">${rows}${canceladasHtml}</div>
   </div>
   <div class="modal-footer"><div class="modal-btns" style="margin-top:0"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div>`);
-  const m=document.querySelector('#modals .modal'); m.style.width='660px'; m.style.maxWidth='98vw';
+  const m=document.querySelector('#modals .modal'); if(m){m.style.width='660px'; m.style.maxWidth='98vw';}
 }
 
 async function reimprimirTicket(vid) {
@@ -2143,7 +2358,7 @@ async function showBundleModal(bid, nombre, precioBundle) {
   <div class="modal-footer"><div class="modal-btns" style="margin-top:0">
     <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
   </div></div>`);
-  const m=document.querySelector('#modals .modal'); m.style.width='560px'; m.style.maxWidth='98vw';
+  const m=document.querySelector('#modals .modal'); if(m){m.style.width='560px'; m.style.maxWidth='98vw';}
 }
 
 function filterBcTienda(){
@@ -2192,7 +2407,7 @@ async function showGlobalSearch() {
     <div id="gsResults" style="max-height:380px;overflow-y:auto;"></div>
   </div>
   <div class="modal-footer"><div class="modal-btns" style="margin-top:0"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div>`);
-  const m=document.querySelector('#modals .modal'); m.style.width='580px'; m.style.maxWidth='98vw';
+  const m=document.querySelector('#modals .modal'); if(m){m.style.width='580px'; m.style.maxWidth='98vw';}
   const inp=document.getElementById('gsInput');
   const results=document.getElementById('gsResults');
   function render(){
@@ -2286,7 +2501,7 @@ async function showPreCorteModal(){
       ${usuario.perfil==='Administrador'?`<button class="btn btn-gold" onclick="closeModal();showCorteModal()">📊 Ir a Corte</button>`:''}
     </div>
   </div>`);
-  const m=document.querySelector('#modals .modal'); m.style.width='560px'; m.style.maxWidth='98vw';
+  const m=document.querySelector('#modals .modal'); if(m){m.style.width='560px'; m.style.maxWidth='98vw';}
 }
 
 /* ── SVG CHART HELPERS ── */
@@ -2513,7 +2728,7 @@ async function showEstadisticasModal() {
       ${renderContent(tab)}
       <div style="padding-top:12px;margin-top:4px;"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>
     </div>`);
-    const m=document.querySelector('#modals .modal'); m.style.width='880px'; m.style.maxWidth='99vw';
+    const m=document.querySelector('#modals .modal'); if(m){m.style.width='880px'; m.style.maxWidth='99vw';}
   }
 
   window._statsTab = (tab) => renderModal(tab);
@@ -2730,7 +2945,7 @@ async function showCorteSemanalModal(offset){
   <div class="modal-footer"><div class="modal-btns" style="margin-top:0">
     <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
   </div></div>`);
-  const m=document.querySelector('#modals .modal'); m.style.width='800px'; m.style.maxWidth='98vw';
+  const m=document.querySelector('#modals .modal'); if(m){m.style.width='800px'; m.style.maxWidth='98vw';}
 }
 
 /* ── SELECTOR TIENDA SEMANAL ── */
