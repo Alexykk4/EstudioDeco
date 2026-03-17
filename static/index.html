@@ -1954,6 +1954,7 @@ async function showVentasHoyModal() {
         <span style="font-size:11px;color:var(--text-secondary);margin-right:6px;">${pagoInfo}</span>
         <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:${totalColor};">$${v.total.toFixed(2)}</span>
         <button class="btn-icon" style="background:var(--sage-light);color:var(--sage);flex-shrink:0;" onclick="reimprimirTicket(${v.id})" title="Reimprimir ticket">🖨️</button>
+        <button class="btn-icon" style="background:#FFF3E0;color:#E65100;flex-shrink:0;" onclick="reimprimirComanda(${v.id})" title="Reimprimir comanda">📋</button>
         ${!isCancelled && usuario.perfil==='Administrador'?`
         <button class="btn-icon btn-edit" onclick="showEditVentaModal(${v.id},'${v.folio}',${v.total},'${v.metodo_pago}',${v.monto_efectivo},${v.monto_tarjeta})" title="Corregir pago" style="flex-shrink:0;">✏️</button>
         <button class="btn-icon btn-del" onclick="confirmarAnularVenta(${v.id},'${v.folio}')" title="Anular venta" style="flex-shrink:0;">🗑️</button>`:''}
@@ -1994,6 +1995,14 @@ async function reimprimirTicket(vid) {
   try {
     const r = await api(`/ventas/${vid}/reimprimir`, {method:'POST'});
     toast(r.impreso ? '✅' : '⚠️', r.impreso ? 'Ticket reimpreso' : 'Sin impresora', r.impreso ? 'var(--green-ok)' : 'var(--gold)');
+  } catch(e) { toast('❌', e.message, 'var(--red)'); }
+}
+
+async function reimprimirComanda(vid) {
+  try {
+    const r = await api(`/ventas/${vid}/reimprimir_comanda`, {method:'POST'});
+    if(r.msg) toast('⚠️', r.msg, 'var(--gold)');
+    else toast(r.impreso ? '✅' : '⚠️', r.impreso ? 'Comanda reimpresa' : 'Sin impresora', r.impreso ? 'var(--green-ok)' : 'var(--gold)');
   } catch(e) { toast('❌', e.message, 'var(--red)'); }
 }
 
