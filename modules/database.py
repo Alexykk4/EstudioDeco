@@ -562,7 +562,7 @@ def limpiar_ingresos_gastos(fecha_inicio: str, fecha_fin: str):
         (fecha_inicio, fecha_fin)
     ).rowcount
     borrados_gastos = conn.execute(
-        "DELETE FROM gastos WHERE DATE(created_at) BETWEEN ? AND ?",
+        "DELETE FROM gastos WHERE DATE(created_at) BETWEEN ? AND ? AND concepto NOT LIKE 'Comisión Tarjeta 4%%'",
         (fecha_inicio, fecha_fin)
     ).rowcount
     conn.commit(); conn.close()
