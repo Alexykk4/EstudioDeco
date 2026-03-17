@@ -88,6 +88,54 @@ def enviar_corte_email(pdf_path: str, resumen: dict, cajero: str,
     hilo.start()
 
 
+def enviar_nomina_email(pdf_path: str, nomina: dict, cajero: str):
+    """Envía el comprobante de nómina por email en un hilo separado."""
+    def _enviar():
+        try:
+            from modules.database import get_email_config
+            config = get_email_config()
+            email_from = config.get("email_from", "").strip()
+            email_pass = config.get("email_password", "").strip()
+            email_dest = config.get("email_destino", "").strip() or "estudiodecomx@gmail.com"
+            if not email_from or not email_pass:
+                print("[EMAIL] Sin credenciales, omitiendo nómina.")
+                return
+
+            msg = MIMEMultipart()
+            msg["From"] = email_from
+            msg["To"] = email_dest
+            msg["Subject"] = f"Pago de Nómina – {nomina['nombre_empleado']} – {nomina['created_at'][:10]}"
+            body = (
+                f"Se registró un pago de nómina:\n\n"
+                f"Empleado:  {nomina['nombre_empleado']}\n"
+                f"Concepto:  {nomina['concepto']}\n"
+                f"Monto:     ${nomina['monto']:,.2f}\n"
+                f"Método:    {nomina['metodo_pago']}\n"
+                f"Registrado por: {cajero}\n"
+                f"Fecha:     {nomina['created_at'][:16]}\n\n"
+                f"Se adjunta el comprobante en PDF."
+            )
+            msg.attach(MIMEText(body, "plain"))
+
+            pdf_file = Path(pdf_path)
+            if pdf_file.exists():
+                with open(pdf_file, "rb") as f:
+                    part = MIMEBase("application", "pdf")
+                    part.set_payload(f.read())
+                    encoders.encode_base64(part)
+                    part.add_header("Content-Disposition", f"attachment; filename={pdf_file.name}")
+                    msg.attach(part)
+
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(email_from, email_pass)
+                server.sendmail(email_from, email_dest, msg.as_string())
+            print(f"[EMAIL] Nómina enviada: {nomina['nombre_empleado']} ${nomina['monto']:,.2f}")
+        except Exception as e:
+            print(f"[EMAIL] Error nómina: {e}")
+
+    threading.Thread(target=_enviar, daemon=True).start()
+
+
 def enviar_notificacion_email(asunto: str, cuerpo: str):
     """
     Envía un email de notificación simple (sin adjuntos) en un hilo separado.

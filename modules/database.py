@@ -72,6 +72,16 @@ def init_db():
             created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
             FOREIGN KEY (tienda_id) REFERENCES tiendas(id)
         )""",
+        """CREATE TABLE IF NOT EXISTS nominas (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre_empleado TEXT NOT NULL,
+            concepto        TEXT NOT NULL DEFAULT 'Nómina',
+            monto           REAL NOT NULL,
+            metodo_pago     TEXT NOT NULL DEFAULT 'Efectivo',
+            usuario_id      INTEGER,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+        )""",
     ]
     for sql in migrations:
         try:
@@ -537,6 +547,30 @@ def ajustar_balance(caja_real: float, banco_real: float):
     conn.execute("INSERT OR REPLACE INTO config (clave,valor) VALUES ('ajuste_banco',?)", (str(ajuste_banco),))
     conn.commit(); conn.close()
     return {'ajuste_caja': ajuste_caja, 'ajuste_banco': ajuste_banco}
+
+# ── NÓMINAS ──
+def registrar_nomina(nombre_empleado: str, monto: float, concepto: str, metodo_pago: str, usuario_id: int):
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO nominas (nombre_empleado, monto, concepto, metodo_pago, usuario_id) VALUES (?,?,?,?,?)",
+        (nombre_empleado, monto, concepto, metodo_pago, usuario_id)
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM nominas WHERE id=last_insert_rowid()").fetchone()
+    conn.close()
+    return dict(row)
+
+def listar_nominas(limit: int = 100):
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT n.*, u.nombre as cajero
+        FROM nominas n
+        LEFT JOIN usuarios u ON u.id = n.usuario_id
+        ORDER BY n.created_at DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 # ── FONDO DE APERTURA ──
 def set_fondo_apertura(monto):

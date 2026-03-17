@@ -436,3 +436,72 @@ def generar_corte_pdf(resumen: dict, cajero: str, ventas_turno: list = None) -> 
         
     return str(filepath)
 
+
+def generar_nomina_pdf(nomina: dict, cajero: str) -> str:
+    """Genera un comprobante PDF de pago de nomina."""
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    nombre_safe = nomina['nombre_empleado'].replace(' ', '_')
+    filename = f"Nomina_{nombre_safe}_{timestamp}.pdf"
+    filepath = REPORTS_DIR / filename
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_margins(20, 20, 20)
+
+    if LOGO_PATH.exists():
+        pdf.image(str(LOGO_PATH), x=85, y=15, w=30)
+    pdf.ln(35)
+
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_text_color(*MORADO_PASTEL)
+    pdf.cell(0, 10, "Estudio Deco", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 12)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 7, "Comprobante de Pago de Nomina", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(8)
+
+    pdf.set_draw_color(*MORADO_PASTEL)
+    pdf.set_line_width(1.0)
+    pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+    pdf.ln(10)
+
+    pdf.set_fill_color(*GRIS_CLARO)
+    pdf.set_draw_color(*AZUL_PASTEL)
+    pdf.set_line_width(0.5)
+    pdf.rect(20, pdf.get_y(), 170, 75, style='FD')
+    pdf.ln(6)
+
+    def fila(etiqueta, valor):
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(120, 90, 180)
+        pdf.cell(70, 10, f"  {etiqueta}:")
+        pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(40, 40, 40)
+        pdf.cell(100, 10, str(valor), new_x="LMARGIN", new_y="NEXT")
+
+    fila("Empleado", nomina['nombre_empleado'])
+    fila("Concepto", nomina['concepto'])
+    fila("Fecha", nomina['created_at'][:16])
+    fila("Metodo de Pago", nomina['metodo_pago'])
+    fila("Registrado por", cajero)
+    pdf.ln(8)
+
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 8, "MONTO PAGADO", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "B", 34)
+    pdf.set_text_color(*MORADO_PASTEL)
+    pdf.cell(0, 18, f"${nomina['monto']:,.2f}", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(10)
+
+    pdf.set_draw_color(*AZUL_PASTEL)
+    pdf.set_line_width(0.5)
+    pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+    pdf.ln(5)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.set_text_color(160, 160, 160)
+    pdf.cell(0, 6, f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}  |  Folio #{nomina['id']}", align="C")
+
+    pdf.output(str(filepath))
+    return str(filepath)
