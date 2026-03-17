@@ -483,6 +483,8 @@ def obtener_balance_actual():
         FROM pagos_tienda
     """).fetchone()
 
+    ajuste_caja_row  = conn.execute("SELECT valor FROM config WHERE clave='ajuste_caja'").fetchone()
+    ajuste_banco_row = conn.execute("SELECT valor FROM config WHERE clave='ajuste_banco'").fetchone()
     conn.close()
 
     total_ventas   = ventas_row['total']
@@ -490,9 +492,12 @@ def obtener_balance_actual():
     total_gastos   = gastos_row['total']
     total_pagos    = pagos_row['externos']
 
-    efectivo = ventas_row['efectivo'] + ingresos_row['efectivo'] - gastos_row['caja']
-    banco    = ventas_row['tarjeta']  + ingresos_row['banco']    - gastos_row['banco']
-    neto     = total_ventas + total_ingresos - total_gastos - total_pagos
+    ajuste_caja  = float(ajuste_caja_row['valor'])  if ajuste_caja_row  else 0.0
+    ajuste_banco = float(ajuste_banco_row['valor']) if ajuste_banco_row else 0.0
+
+    efectivo = ventas_row['efectivo'] + ingresos_row['efectivo'] - gastos_row['caja']  + ajuste_caja
+    banco    = ventas_row['tarjeta']  + ingresos_row['banco']    - gastos_row['banco'] + ajuste_banco
+    neto     = total_ventas + total_ingresos - total_gastos - total_pagos + ajuste_caja + ajuste_banco
 
     return {
         'total':          round(neto, 2),
@@ -502,7 +507,36 @@ def obtener_balance_actual():
         'total_ingresos': round(total_ingresos, 2),
         'total_gastos':   round(total_gastos, 2),
         'total_pagos':    round(total_pagos, 2),
+        'ajuste_caja':    round(ajuste_caja, 2),
+        'ajuste_banco':   round(ajuste_banco, 2),
     }
+
+def ajustar_balance(caja_real: float, banco_real: float):
+    """Guarda ajustes para que el balance calculado coincida con los valores reales."""
+    conn = get_connection()
+    # Calcular balance actual sin ajustes para determinar la diferencia
+    ventas_row = conn.execute("""
+        SELECT COALESCE(SUM(monto_efectivo),0) as ef, COALESCE(SUM(monto_tarjeta),0) as tar
+        FROM ventas WHERE (cancelada IS NULL OR cancelada=0)
+    """).fetchone()
+    ingresos_row = conn.execute("""
+        SELECT COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN monto ELSE 0 END),0) as ef,
+               COALESCE(SUM(CASE WHEN metodo_pago!='Efectivo' THEN monto ELSE 0 END),0) as banco
+        FROM ingresos
+    """).fetchone()
+    gastos_row = conn.execute("""
+        SELECT COALESCE(SUM(CASE WHEN origen='Caja' THEN monto ELSE 0 END),0) as caja,
+               COALESCE(SUM(CASE WHEN origen='Banco' THEN monto ELSE 0 END),0) as banco
+        FROM gastos
+    """).fetchone()
+    calculado_caja  = ventas_row['ef']  + ingresos_row['ef']    - gastos_row['caja']
+    calculado_banco = ventas_row['tar'] + ingresos_row['banco']  - gastos_row['banco']
+    ajuste_caja  = round(caja_real  - calculado_caja,  2)
+    ajuste_banco = round(banco_real - calculado_banco, 2)
+    conn.execute("INSERT OR REPLACE INTO config (clave,valor) VALUES ('ajuste_caja',?)",  (str(ajuste_caja),))
+    conn.execute("INSERT OR REPLACE INTO config (clave,valor) VALUES ('ajuste_banco',?)", (str(ajuste_banco),))
+    conn.commit(); conn.close()
+    return {'ajuste_caja': ajuste_caja, 'ajuste_banco': ajuste_banco}
 
 # ── FONDO DE APERTURA ──
 def set_fondo_apertura(monto):
