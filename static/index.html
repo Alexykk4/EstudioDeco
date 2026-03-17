@@ -685,9 +685,13 @@ async function loadSemanal(){
     // KPIs
     const gastosCaja  = (data.total_gastos || 0) - (data.total_gastos_banco || 0);
     const gastosBanco = data.total_gastos_banco || 0;
-    const efectivoNeto = (data.total_efectivo || 0) - gastosCaja;
-    const tarjetaNeto  = (data.total_tarjeta  || 0) - gastosBanco;
-    const totalIngresos = data.total_ingresos || 0;
+    const efectivoSemana = (data.total_efectivo || 0) - gastosCaja;
+    const tarjetaSemana  = (data.total_tarjeta  || 0) - gastosBanco;
+    const totalIngresos  = data.total_ingresos || 0;
+    const balCaja  = bal.en_caja  || 0;
+    const balBanco = bal.en_banco || 0;
+    const saldoAntCaja  = balCaja  - efectivoSemana;
+    const saldoAntBanco = balBanco - tarjetaSemana;
     document.getElementById('semanalKpis').innerHTML = `
       <div class="kpi-card">
         <div class="kpi-label">💰 Ventas Semana</div>
@@ -697,21 +701,15 @@ async function loadSemanal(){
         <div class="kpi-label">💲 Ingresos Semana</div>
         <div class="kpi-val" style="color:#26A69A;">${$pesos(totalIngresos)}</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">💵 Efectivo esta semana</div>
-        <div class="kpi-val green">${$pesos(efectivoNeto)}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">💳 Tarjeta esta semana</div>
-        <div class="kpi-val gold">${$pesos(tarjetaNeto)}</div>
-      </div>
       <div class="kpi-card" style="border:2px solid var(--sage);">
-        <div class="kpi-label">💵 Balance en Caja</div>
-        <div class="kpi-val ${(bal.en_caja||0)>=0?'green':'red'}">${$pesos(bal.en_caja||0)}</div>
+        <div class="kpi-label">💵 Efectivo en Caja</div>
+        <div class="kpi-val ${balCaja>=0?'green':'red'}">${$pesos(balCaja)}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Semana anterior: ${$pesos(saldoAntCaja)} · Esta semana: +${$pesos(efectivoSemana)}</div>
       </div>
       <div class="kpi-card" style="border:2px solid var(--gold,#FFC107);">
-        <div class="kpi-label">🏦 Balance en Banco</div>
-        <div class="kpi-val gold">${$pesos(bal.en_banco||0)}</div>
+        <div class="kpi-label">🏦 Tarjeta / Banco</div>
+        <div class="kpi-val gold">${$pesos(balBanco)}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Semana anterior: ${$pesos(saldoAntBanco)} · Esta semana: +${$pesos(tarjetaSemana)}</div>
       </div>`;
 
     // Render balance sidebar on the right (historical cumulative)
@@ -723,8 +721,6 @@ async function loadSemanal(){
       </div>`).join('') : '<div style="font-size:11px;color:var(--text-muted);padding:4px 0;">Sin pagos esta semana</div>';
 
     const balTotal = bal.total || 0;
-    const balCaja  = bal.en_caja || 0;
-    const balBanco = bal.en_banco || 0;
 
     document.getElementById('semanalSidebar').innerHTML = `
       <div class="balance-card" style="border-left:4px solid var(--sage);">
