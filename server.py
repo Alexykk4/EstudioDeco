@@ -459,6 +459,27 @@ async def api_reimprimir_ticket(vid: int):
     ok = imprimir_ticket(venta_data, cajero)
     return {"impreso": ok}
 
+@app.post("/api/ventas/{vid}/reimprimir_comanda")
+async def api_reimprimir_comanda(vid: int):
+    conn = get_connection()
+    v = conn.execute("SELECT * FROM ventas WHERE id=?", (vid,)).fetchone()
+    if not v:
+        conn.close()
+        raise HTTPException(404, "Venta no encontrada")
+    items = conn.execute("""
+        SELECT vd.nombre_producto, vd.cantidad, vd.tienda_id
+        FROM venta_detalle vd
+        WHERE vd.venta_id = ? AND vd.tienda_id = 1
+    """, (vid,)).fetchall()
+    mesa_row = conn.execute("SELECT numero FROM mesas WHERE id=?", (v["mesa_id"],)).fetchone() if v["mesa_id"] else None
+    conn.close()
+    if not items:
+        return {"impreso": False, "msg": "Sin items de barra"}
+    label = f"Mesa {mesa_row['numero']}" if mesa_row else "VENTA DIRECTA"
+    label += f" · {v['folio']}"
+    ok = imprimir_comanda(label, [dict(i) for i in items])
+    return {"impreso": ok}
+
 if __name__ == "__main__":
     print("\n  * Estudio Deco POS *")
     print("  http://localhost:8001\n")
