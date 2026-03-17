@@ -448,6 +448,62 @@ def registrar_ingreso(usuario_id, concepto, monto, metodo_pago="Efectivo"):
                  (usuario_id, concepto, monto, metodo_pago))
     conn.commit(); conn.close()
 
+# ── BALANCE ACUMULADO HISTÓRICO ──
+def obtener_balance_actual():
+    """Devuelve el balance real acumulado desde el inicio: ventas + ingresos - gastos - pagos."""
+    conn = get_connection()
+
+    ventas_row = conn.execute("""
+        SELECT
+            COALESCE(SUM(total), 0) as total,
+            COALESCE(SUM(monto_efectivo), 0) as efectivo,
+            COALESCE(SUM(monto_tarjeta), 0) as tarjeta
+        FROM ventas WHERE (cancelada IS NULL OR cancelada=0)
+    """).fetchone()
+
+    ingresos_row = conn.execute("""
+        SELECT
+            COALESCE(SUM(monto), 0) as total,
+            COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN monto ELSE 0 END), 0) as efectivo,
+            COALESCE(SUM(CASE WHEN metodo_pago!='Efectivo' THEN monto ELSE 0 END), 0) as banco
+        FROM ingresos
+    """).fetchone()
+
+    gastos_row = conn.execute("""
+        SELECT
+            COALESCE(SUM(monto), 0) as total,
+            COALESCE(SUM(CASE WHEN origen='Caja' THEN monto ELSE 0 END), 0) as caja,
+            COALESCE(SUM(CASE WHEN origen='Banco' THEN monto ELSE 0 END), 0) as banco
+        FROM gastos
+    """).fetchone()
+
+    pagos_row = conn.execute("""
+        SELECT COALESCE(SUM(monto), 0) as total,
+               COALESCE(SUM(CASE WHEN es_interno=0 OR es_interno IS NULL THEN monto ELSE 0 END), 0) as externos
+        FROM pagos_tienda
+    """).fetchone()
+
+    conn.close()
+
+    total_ventas   = ventas_row['total']
+    total_ingresos = ingresos_row['total']
+    total_gastos   = gastos_row['total']
+    total_pagos    = pagos_row['externos']
+
+    efectivo = ventas_row['efectivo'] + ingresos_row['efectivo'] - gastos_row['caja']
+    banco    = ventas_row['tarjeta']  + ingresos_row['banco']    - gastos_row['banco']
+    neto     = total_ventas + total_ingresos - total_gastos - total_pagos
+
+    return {
+        'total':          round(neto, 2),
+        'en_caja':        round(efectivo, 2),
+        'en_banco':       round(banco, 2),
+        'total_ventas':   round(total_ventas, 2),
+        'total_ingresos': round(total_ingresos, 2),
+        'total_gastos':   round(total_gastos, 2),
+        'total_pagos':    round(total_pagos, 2),
+    }
+
 # ── FONDO DE APERTURA ──
 def set_fondo_apertura(monto):
     import json
