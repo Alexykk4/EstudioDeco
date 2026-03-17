@@ -3077,7 +3077,7 @@ async function doPagoTienda(tiendaId, tiendaNombre, esInterno, desde, hasta) {
 async function doLimpiarSemana(desde, hasta) {
   if(!confirm(`¿Borrar todos los ingresos y gastos de la semana ${desde} al ${hasta}?\n\nLas ventas no se tocan. El balance se preserva automáticamente.`)) return;
   try {
-    const r = await api('/limpiar_semana', {method:'POST', body:JSON.stringify({fecha_inicio:desde, fecha_fin:hasta})});
+    const r = await api('/limpiar_semana', {method:'POST', body:{fecha_inicio:desde, fecha_fin:hasta}});
     toast('✅', `Limpieza lista: ${r.borrados_ingresos} ingreso(s) y ${r.borrados_gastos} gasto(s) eliminados`, 'var(--green-ok)');
     showCorteSemanalModal();
   } catch(e) { toast('❌', e.message, 'var(--red)'); }
