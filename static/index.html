@@ -102,13 +102,15 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
 /* ── SIDEBAR COLLAPSED ── */
 .sidebar.sb-collapsed { width:52px; }
 .app.sb-collapsed { grid-template-columns:52px 1fr 360px; }
+.sidebar.sb-collapsed .sidebar-logo { padding:8px 0; justify-content:center; }
+.sidebar.sb-collapsed .sidebar-logo img { display:none; }
 .sidebar.sb-collapsed .sidebar-logo-text { opacity:0; width:0; }
+.sidebar.sb-collapsed .sb-toggle { margin-left:0; width:36px; height:36px; }
 .sidebar.sb-collapsed .nav-label { opacity:0; width:0; overflow:hidden; }
 .sidebar.sb-collapsed .nav-section-label { opacity:0; height:0; padding:0; margin:0; }
 .sidebar.sb-collapsed .sidebar-user .user-pill span:last-child { display:none; }
 .sidebar.sb-collapsed .sidebar-user .user-pill { padding:6px; justify-content:center; }
 .sidebar.sb-collapsed .nav-item { padding:9px 0; justify-content:center; margin:1px 4px; width:calc(100% - 8px); }
-.sidebar.sb-collapsed .sb-toggle { margin-left:0; }
 
 .user-pill {
   display:flex; align-items:center; gap:8px; padding:6px 14px;
