@@ -47,18 +47,39 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
 ::-webkit-scrollbar-thumb { background:var(--border); border-radius:10px; }
 
 /* ── LAYOUT ── */
-.app { display:grid; grid-template-columns:1fr 360px; grid-template-rows:64px 1fr; height:100vh; }
+.app { display:grid; grid-template-columns:210px 1fr 360px; grid-template-rows:100vh; height:100vh; }
 
-/* ── HEADER ── */
-.header {
-  grid-column:1/-1; background:var(--surface); border-bottom:1px solid var(--border);
-  display:flex; align-items:center; padding:0 24px; gap:14px; z-index:10;
+/* ── SIDEBAR ── */
+.sidebar {
+  background:var(--surface); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden;
+  padding-bottom:20px; z-index:10;
 }
-.logo-area { display:flex; align-items:center; gap:12px; }
-.logo-area img { height:36px; width:auto; border-radius:8px; }
-.logo-text { font-size:18px; font-weight:800; letter-spacing:-0.5px; color:var(--text); }
-.logo-sub { font-size:10px; color:var(--text-muted); font-weight:500; letter-spacing:2px; text-transform:uppercase; }
-.spacer { flex:1; }
+.sidebar-logo {
+  padding:20px 18px 16px; border-bottom:1px solid var(--border-light);
+  margin-bottom:12px; flex-shrink:0; display:flex; align-items:center; gap:10px;
+}
+.logo-area { display:flex; align-items:center; gap:10px; }
+.logo-area img { height:32px; width:auto; border-radius:7px; }
+.logo-text { font-size:15px; font-weight:800; letter-spacing:-0.5px; color:var(--text); }
+.logo-sub { font-size:9px; color:var(--text-muted); font-weight:500; letter-spacing:2px; text-transform:uppercase; }
+.sidebar-user { padding:0 12px; margin-bottom:16px; flex-shrink:0; }
+.sidebar-user .user-pill { width:100%; justify-content:flex-start; }
+.nav-section-label {
+  padding:4px 18px 4px; font-size:9px; font-weight:700; text-transform:uppercase;
+  letter-spacing:1.5px; color:var(--text-muted); margin-top:8px;
+}
+.nav-item {
+  display:flex; align-items:center; gap:10px; padding:9px 14px;
+  margin:1px 8px; border-radius:var(--radius-sm); font-size:12px; font-weight:600;
+  color:var(--text-secondary); cursor:pointer; border:none; background:transparent;
+  font-family:inherit; transition:var(--transition); width:calc(100% - 16px); text-align:left;
+}
+.nav-item:hover { background:var(--bg); color:var(--text); }
+.nav-item:active { transform:scale(0.97); }
+.nav-item-gold { color:var(--gold,#FFC107); }
+.nav-item-gold:hover { background:rgba(255,193,7,0.1); color:var(--gold,#FFC107); }
+.nav-icon { font-size:15px; width:20px; text-align:center; flex-shrink:0; }
 
 .user-pill {
   display:flex; align-items:center; gap:8px; padding:6px 14px;
@@ -413,26 +434,29 @@ select.input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg 
 </head>
 <body>
 <div class="app">
-  <!-- HEADER -->
-  <header class="header">
-    <div class="logo-area">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
       <img src="/assets/logo.png" alt="Logo" onerror="this.style.display='none'">
       <div>
         <div class="logo-text">Estudio Deco</div>
         <div class="logo-sub">Punto de Venta</div>
       </div>
     </div>
-    <div class="spacer"></div>
-    <div class="user-pill" id="userPill" onclick="showNipModal()" title="Cambiar usuario"><span class="dot"></span><span id="userName">Sin usuario</span></div>
-    <button class="btn" style="background:#66BB6A;color:white;" onclick="showFondoModal()">🏦 Abrir Caja</button>
-    <button class="btn" style="background:#26A69A;color:white;" onclick="showIngresoModal()">💰 Ingreso</button>
-    <button class="btn btn-ghost" onclick="showGastoModal()">💸 Gasto</button>
-    <button class="btn btn-ghost" onclick="showVentasHoyModal()">📋 Ventas</button>
-    <button class="btn btn-ghost" onclick="showPreCorteModal()">👁 Pre-Corte</button>
-    <button class="btn btn-gold" onclick="showCorteModal()">📊 Corte</button>
-    <button class="btn" style="background:#5C6BC0;color:white;" onclick="showCorteSemanalModal(0)">📅 Semanal</button>
-    <button class="btn" style="background:#7B1FA2;color:white;" onclick="showEstadisticasModal()">📈 Estadísticas</button>
-  </header>
+    <div class="sidebar-user">
+      <div class="user-pill" id="userPill" onclick="showNipModal()" title="Cambiar usuario"><span class="dot"></span><span id="userName">Sin usuario</span></div>
+    </div>
+    <div class="nav-section-label">Caja</div>
+    <button class="nav-item" onclick="showFondoModal()"><span class="nav-icon">🏦</span> Abrir Caja</button>
+    <button class="nav-item" onclick="showIngresoModal()"><span class="nav-icon">💰</span> Ingreso</button>
+    <button class="nav-item" onclick="showGastoModal()"><span class="nav-icon">💸</span> Gasto</button>
+    <div class="nav-section-label">Reportes</div>
+    <button class="nav-item" onclick="showVentasHoyModal()"><span class="nav-icon">📋</span> Ventas del Día</button>
+    <button class="nav-item" onclick="showPreCorteModal()"><span class="nav-icon">👁</span> Pre-Corte</button>
+    <button class="nav-item nav-item-gold" onclick="showCorteModal()"><span class="nav-icon">📊</span> Corte</button>
+    <button class="nav-item" onclick="showCorteSemanalModal(0)"><span class="nav-icon">📅</span> Semanal</button>
+    <button class="nav-item" onclick="showEstadisticasModal()"><span class="nav-icon">📈</span> Estadísticas</button>
+  </aside>
 
   <!-- MAIN -->
   <main class="main">
