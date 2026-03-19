@@ -82,6 +82,14 @@ def init_db():
             created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime')),
             FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
         )""",
+        """CREATE TABLE IF NOT EXISTS estacion_movimientos (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo        TEXT    NOT NULL DEFAULT 'ingreso',
+            concepto    TEXT    NOT NULL,
+            monto       REAL    NOT NULL,
+            metodo_pago TEXT    NOT NULL DEFAULT 'Efectivo',
+            created_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        )""",
     ]
     for sql in migrations:
         try:
@@ -1236,9 +1244,37 @@ def marcar_sincronizado(tabla, record_id):
     conn.commit(); conn.close()
 
 # ── PAGOS A TIENDAS ──
+def registrar_movimiento_estacion(tipo, concepto, monto, metodo_pago='Efectivo'):
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO estacion_movimientos (tipo, concepto, monto, metodo_pago) VALUES (?,?,?,?)",
+        (tipo, concepto, monto, metodo_pago)
+    )
+    conn.commit(); conn.close()
+
+def obtener_balance_estacion():
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT
+            COALESCE(SUM(CASE WHEN tipo='ingreso' THEN monto ELSE 0 END), 0) as total_ingresos,
+            COALESCE(SUM(CASE WHEN tipo='gasto'   THEN monto ELSE 0 END), 0) as total_gastos
+        FROM estacion_movimientos
+    """).fetchone()
+    conn.close()
+    ing = row['total_ingresos']; gas = row['total_gastos']
+    return {'balance': round(ing - gas, 2), 'total_ingresos': round(ing, 2), 'total_gastos': round(gas, 2)}
+
+def obtener_movimientos_estacion():
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT id, tipo, concepto, monto, metodo_pago, created_at
+        FROM estacion_movimientos ORDER BY created_at DESC
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 def registrar_pago_tienda(tienda_id, tienda_nombre, monto, metodo_pago, concepto, es_interno, semana_inicio, semana_fin):
-    """Registra un pago a una tienda. Si es_interno=True (Estación 304), solo es contable.
-    Si es_interno=False, también registra un gasto real."""
+    """Registra un pago a una tienda. Si tienda_id=1 (Estación 304), también suma a su balance."""
     conn = get_connection()
     conn.execute("""
         INSERT INTO pagos_tienda (tienda_id, tienda_nombre, monto, metodo_pago, concepto, es_interno, semana_inicio, semana_fin)
@@ -1246,6 +1282,9 @@ def registrar_pago_tienda(tienda_id, tienda_nombre, monto, metodo_pago, concepto
     """, (tienda_id, tienda_nombre, monto, metodo_pago, concepto, 1 if es_interno else 0, semana_inicio, semana_fin))
     conn.commit()
     conn.close()
+    # Si el pago es a Estación 304, también registrarlo como ingreso de Estación
+    if tienda_id == 1:
+        registrar_movimiento_estacion('ingreso', concepto or 'Pago de Estudio Deco', monto, metodo_pago)
 
 def obtener_pagos_semana(semana_inicio, semana_fin):
     conn = get_connection()
