@@ -1283,7 +1283,7 @@ def registrar_pago_tienda(tienda_id, tienda_nombre, monto, metodo_pago, concepto
     conn.commit()
     conn.close()
     # Si el pago es a Estación 304, también registrarlo como ingreso de Estación
-    if tienda_id == 1:
+    if tienda_nombre and 'Estaci' in tienda_nombre:
         registrar_movimiento_estacion('ingreso', concepto or 'Pago de Estudio Deco', monto, metodo_pago)
 
 def obtener_pagos_semana(semana_inicio, semana_fin):

@@ -167,6 +167,11 @@ async def api_estacion_gasto(r: EstacionGastoReq):
     registrar_movimiento_estacion('gasto', r.concepto, r.monto, r.metodo_pago)
     return {"ok": True}
 
+@app.post("/api/estacion/ingreso")
+async def api_estacion_ingreso(r: EstacionGastoReq):
+    registrar_movimiento_estacion('ingreso', r.concepto, r.monto, r.metodo_pago)
+    return {"ok": True}
+
 # ── Data ──
 @app.get("/api/tiendas")
 async def api_tiendas(): return listar_tiendas()
