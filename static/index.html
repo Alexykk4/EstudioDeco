@@ -2521,16 +2521,7 @@
         <div class="kpi-label">💲 Ingresos Semana</div>
         <div class="kpi-val" style="color:#26A69A;">${$pesos(totalIngresos)}</div>
       </div>
-      <div class="kpi-card" style="border:2px solid var(--sage);">
-        <div class="kpi-label">💵 Efectivo en Caja</div>
-        <div class="kpi-val ${balCaja >= 0 ? 'green' : 'red'}">${$pesos(balCaja)}</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Semana anterior: ${$pesos(saldoAntCaja)} · Esta semana: +${$pesos(efectivoSemana)}</div>
-      </div>
-      <div class="kpi-card" style="border:2px solid var(--gold,#FFC107);">
-        <div class="kpi-label">🏦 Tarjeta / Banco</div>
-        <div class="kpi-val gold">${$pesos(balBanco)}</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Semana anterior: ${$pesos(saldoAntBanco)} · Esta semana: +${$pesos(tarjetaSemana)}</div>
-      </div>`;
+`;
 
         // Render balance sidebar on the right (historical cumulative)
         const pagos = data.pagos_semana || [];
@@ -2543,16 +2534,6 @@
         const balTotal = bal.total || 0;
 
         document.getElementById('semanalSidebar').innerHTML = `
-      <div class="balance-card" style="border-left:4px solid var(--sage);">
-        <div class="balance-card-title" style="display:flex;justify-content:space-between;align-items:center;">
-          <span>📊 Balance Actual</span>
-          <button class="btn-icon" style="background:var(--bg);color:var(--text-secondary);font-size:11px;padding:3px 8px;border-radius:6px;" onclick="showAjusteBalanceModal(${balCaja},${balBanco})" title="Ajustar balance">✏️ Ajustar</button>
-        </div>
-        <div class="balance-card-amount" style="color:${balTotal >= 0 ? 'var(--sage-dark)' : 'var(--red)'};">${$pesos(balTotal)}</div>
-        <div class="balance-card-detail"><span>💵 En Caja (efectivo)</span><span style="color:var(--green-ok);">$${balCaja.toFixed(2)}</span></div>
-        <div class="balance-card-detail"><span>🏦 En Banco / Tarjeta</span><span style="color:var(--gold);">$${balBanco.toFixed(2)}</span></div>
-        ${(bal.ajuste_caja || bal.ajuste_banco) ? `<div style="margin-top:4px;font-size:10px;color:var(--text-muted);">Ajuste manual: caja ${$pesos(bal.ajuste_caja || 0)} · banco ${$pesos(bal.ajuste_banco || 0)}</div>` : ''}
-      </div>
       <div class="balance-card">
         <div class="balance-card-title">📋 Pagos de la Semana</div>
         ${pagosHtml}
@@ -4306,8 +4287,9 @@
     /* ── ESTADÍSTICAS ── */
     async function showEstadisticasModal() {
       if (!usuario) return showNipModal(() => showEstadisticasModal());
-      let data;
-      try { data = await api('/estadisticas'); } catch (e) { toast('❌', e.message, 'var(--red)'); return; }
+      let data, bal;
+      try { [data, bal] = await Promise.all([api('/estadisticas'), api('/balance')]); } catch (e) { toast('❌', e.message, 'var(--red)'); return; }
+      const _balCaja = bal?.en_caja || 0, _balBanco = bal?.en_banco || 0, _balTotal = bal?.total || 0;
 
       const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
       const fmtMes = m => { const [y, mn] = m.split('-'); return MESES[+mn - 1] + "'" + y.slice(2); };
@@ -4503,11 +4485,28 @@
         return kpis + chart7 + chart5 + chart6 + chart1 + chart2 + chart3 + chart4 + table;
       }
 
+      const balanceHtml = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+      <div style="background:var(--surface);border:2px solid var(--sage);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:6px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);">📊 Balance Actual</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${_balTotal >= 0 ? 'var(--sage-dark)' : 'var(--red)'};">${$pesos(_balTotal)}</div>
+        <button style="align-self:flex-start;font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-secondary);cursor:pointer;" onclick="showAjusteBalanceModal(${_balCaja},${_balBanco})">✏️ Ajustar</button>
+      </div>
+      <div style="background:var(--green-light);border:2px solid var(--sage);border-radius:var(--radius-sm);padding:14px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:6px;">💵 Efectivo en Caja</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${_balCaja >= 0 ? 'var(--green-ok)' : 'var(--red)'};">${$pesos(_balCaja)}</div>
+      </div>
+      <div style="background:var(--gold-light);border:2px solid var(--gold);border-radius:var(--radius-sm);padding:14px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">🏦 Tarjeta / Banco</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--gold);">${$pesos(_balBanco)}</div>
+      </div>
+    </div>`;
+
       function renderModal(tab) {
         const bs = t => t === tab ? 'background:var(--sage-dark);color:#fff;border:none;' : 'background:var(--bg-warm);color:var(--text-secondary);border:1px solid var(--border);';
         showModal(`<div class="modal-body">
       <div class="modal-title">📈 Estadísticas</div>
       <div class="modal-sub">Análisis histórico de ventas, ingresos y gastos</div>
+      ${balanceHtml}
       <div style="display:flex;gap:8px;margin-bottom:16px;">
         <button onclick="window._statsTab('mes')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('mes')}">Por mes</button>
         <button onclick="window._statsTab('año')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('año')}">Por año</button>
