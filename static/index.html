@@ -45,6 +45,56 @@
       --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
+    /* ── DARK MODE ── */
+    [data-theme="dark"] {
+      --bg: #12101C;
+      --bg-warm: #1A1628;
+      --surface: #1E1A2E;
+      --surface-hover: #272040;
+      --border: #3A2D56;
+      --border-light: #261E3E;
+      --text: #EDE7F6;
+      --text-secondary: #B39DDB;
+      --text-muted: #7E6BAA;
+      --sage: #B39DDB;
+      --sage-light: #261E38;
+      --sage-dark: #D1C4E9;
+      --terracotta: #CE93D8;
+      --terracotta-light: #2A1A38;
+      --gold: #90CAF9;
+      --gold-light: #162030;
+      --rose: #F48FB1;
+      --rose-light: #2A1020;
+      --blue: #90CAF9;
+      --blue-light: #162030;
+      --green-ok: #81C784;
+      --green-light: #0E1E10;
+      --red: #EF9A9A;
+      --red-light: #201010;
+      --shadow-sm: 0 1px 4px rgba(0,0,0,.5);
+      --shadow: 0 4px 20px rgba(0,0,0,.6);
+      --shadow-lg: 0 16px 48px rgba(0,0,0,.7), 0 4px 16px rgba(0,0,0,.4);
+    }
+    [data-theme="dark"] .modal-bg { background: rgba(0,0,0,.72) !important; }
+    [data-theme="dark"] .res-card { background: var(--surface) !important; border: 1px solid var(--border) !important; }
+    [data-theme="dark"] .prod-card { background: var(--surface); border-color: var(--border); }
+    [data-theme="dark"] .prod-card:hover { background: var(--surface-hover); }
+    [data-theme="dark"] .stock-tag { opacity: .9; }
+    [data-theme="dark"] .order-item { border-color: var(--border); }
+    [data-theme="dark"] thead tr { background: var(--surface) !important; }
+    [data-theme="dark"] svg text { fill: #c8b8e8; }
+    [data-theme="dark"] .fullpage { background: var(--bg); }
+    [data-theme="dark"] .balance-card { background: var(--surface); border-color: var(--border); }
+    [data-theme="dark"] .kpi-card { background: var(--surface); border-color: var(--border); }
+
+    .theme-btn {
+      width: 30px; height: 30px; border: none; background: transparent;
+      cursor: pointer; border-radius: 6px; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0; transition: var(--transition);
+      font-size: 16px; padding: 0; line-height: 1;
+    }
+    .theme-btn:hover { background: var(--bg); }
+
     * {
       margin: 0;
       padding: 0;
@@ -2129,6 +2179,7 @@
   <div class="topbar" id="topbar">
     <button class="hamburger" onclick="toggleSidebar()">☰</button>
     <span class="logo-text" style="flex:1">Estudio Deco</span>
+    <button class="theme-btn" id="themeToggleMobile" onclick="toggleTheme()" title="Cambiar tema">🌙</button>
     <div class="user-pill" id="topUserPill" onclick="showNipModal()" title="Cambiar usuario"><span class="dot"
         id="topDot"></span><span id="topUserName">Sin usuario</span></div>
   </div>
@@ -2143,6 +2194,7 @@
           <div class="logo-text">Estudio Deco</div>
           <div class="logo-sub">Punto de Venta</div>
         </div>
+        <button class="theme-btn" id="themeToggle" onclick="toggleTheme()" title="Cambiar tema">🌙</button>
         <button class="sb-toggle" onclick="toggleSidebarCollapse()" title="Menú">
           <span class="hamburger-icon"><span></span><span></span><span></span></span>
         </button>
@@ -3467,7 +3519,7 @@
         document.getElementById('topDot').style.background = 'var(--green-ok)';
         if (usuario.perfil === 'Administrador') document.getElementById('navCatalog').classList.remove('hidden');
         closeModal(); toast('✅', `Hola, ${usuario.nombre}`);
-        if (nipCb) { const c = nipCb; nipCb = null; c(); }
+        if (nipCb) { const c = nipCb; nipCb = null; if (_fpActive) _fpRendered = false; c(); }
       } catch { e.textContent = 'NIP incorrecto'; document.getElementById('nipIn').value = ''; document.getElementById('nipIn').focus(); }
     }
 
@@ -4806,6 +4858,30 @@
         if (wasFp) { _fpActive = true; _fpRendered = false; showNominasPage(); }
       } catch (e) { toast('❌', e.message, 'var(--red)'); }
     }
+
+    function toggleTheme() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const next = isDark ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      const emoji = next === 'dark' ? '☀️' : '🌙';
+      const btn1 = document.getElementById('themeToggle');
+      const btn2 = document.getElementById('themeToggleMobile');
+      if (btn1) btn1.textContent = emoji;
+      if (btn2) btn2.textContent = emoji;
+    }
+
+    function initTheme() {
+      const saved = localStorage.getItem('theme') || 'light';
+      document.documentElement.setAttribute('data-theme', saved);
+      const emoji = saved === 'dark' ? '☀️' : '🌙';
+      const btn1 = document.getElementById('themeToggle');
+      const btn2 = document.getElementById('themeToggleMobile');
+      if (btn1) btn1.textContent = emoji;
+      if (btn2) btn2.textContent = emoji;
+    }
+
+    initTheme();
   </script>
 </body>
 
