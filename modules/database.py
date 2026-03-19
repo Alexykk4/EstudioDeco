@@ -1367,9 +1367,34 @@ def obtener_estadisticas():
     tiendas = sorted(tiendas_set)
 
     # Enrich por_mes and por_año with per-store data
+    # Efectivo y tarjeta por período
+    ef_tar_mes = conn.execute("""
+        SELECT strftime('%Y-%m', created_at) as mes,
+               COALESCE(SUM(monto_efectivo), 0) as efectivo,
+               COALESCE(SUM(monto_tarjeta), 0) as tarjeta
+        FROM ventas WHERE (cancelada IS NULL OR cancelada=0)
+        GROUP BY mes
+    """).fetchall()
+    ef_tar_mes_map = {r['mes']: (round(r['efectivo'],2), round(r['tarjeta'],2)) for r in ef_tar_mes}
+
+    ef_tar_año = conn.execute("""
+        SELECT strftime('%Y', created_at) as año,
+               COALESCE(SUM(monto_efectivo), 0) as efectivo,
+               COALESCE(SUM(monto_tarjeta), 0) as tarjeta
+        FROM ventas WHERE (cancelada IS NULL OR cancelada=0)
+        GROUP BY año
+    """).fetchall()
+    ef_tar_año_map = {r['año']: (round(r['efectivo'],2), round(r['tarjeta'],2)) for r in ef_tar_año}
+
     for row in por_mes:
+        ef, tar = ef_tar_mes_map.get(row['mes'], (0, 0))
+        row['efectivo'] = ef
+        row['tarjeta'] = tar
         row['por_tienda'] = {t: tienda_mes_map.get(row['mes'], {}).get(t, 0) for t in tiendas}
     for row in por_año:
+        ef, tar = ef_tar_año_map.get(row['año'], (0, 0))
+        row['efectivo'] = ef
+        row['tarjeta'] = tar
         row['por_tienda'] = {t: tienda_año_map.get(row['año'], {}).get(t, 0) for t in tiendas}
 
     conn.close()

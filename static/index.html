@@ -4184,44 +4184,53 @@
     }
 
     /* ── SVG CHART HELPERS ── */
+    let _gc = 0;
+    function _glowFilter(blur = 2.5) {
+      const id = 'gf' + (++_gc);
+      return { id, def: `<defs><filter id="${id}" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur in="SourceGraphic" stdDeviation="${blur}" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>` };
+    }
+
     function svgDonut(segments, size = 130) {
       const total = segments.reduce((s, x) => s + x.value, 0);
       if (!total) return `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size * 0.35}" fill="none" stroke="#eee" stroke-width="${size * 0.18}"/><text x="${size / 2}" y="${size / 2 + 4}" text-anchor="middle" font-size="11" fill="#aaa">Sin datos</text></svg>`;
       const r = size * 0.35, cx = size / 2, cy = size / 2, circ = 2 * Math.PI * r;
+      const { id, def } = _glowFilter(3);
       let offset = 0, arcs = '';
       for (const seg of segments) {
         if (!seg.value) continue;
         const dash = (seg.value / total) * circ;
-        arcs += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${size * 0.19}" stroke-dasharray="${dash} ${circ - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" opacity="0.92"/>`;
+        arcs += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${size * 0.19}" stroke-dasharray="${dash} ${circ - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" opacity="0.92" filter="url(#${id})"/>`;
         offset += dash;
       }
-      return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f0f0f0" stroke-width="${size * 0.19}"/>${arcs}<circle cx="${cx}" cy="${cy}" r="${r * 0.56}" fill="white"/></svg>`;
+      return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${def}<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f0f0f0" stroke-width="${size * 0.19}"/>${arcs}<circle cx="${cx}" cy="${cy}" r="${r * 0.56}" fill="white"/></svg>`;
     }
 
     function svgBarsH(items, barMaxW = 170, barH = 22, gap = 7) {
       if (!items.length) return '';
       const max = Math.max(...items.map(i => i.value), 1), labelW = 92, valueW = 72;
       const W = labelW + barMaxW + valueW, H = items.length * (barH + gap);
+      const { id, def } = _glowFilter(2.5);
       const bars = items.map((item, i) => {
         const y = i * (barH + gap), w = Math.max(3, (item.value / max) * barMaxW);
         const lbl = item.label.length > 13 ? item.label.slice(0, 12) + '…' : item.label;
         const val = '$' + (item.value || 0).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-        return `<text x="${labelW - 5}" y="${y + barH * 0.72}" text-anchor="end" font-size="11" fill="#555">${lbl}</text><rect x="${labelW}" y="${y + 2}" width="${w}" height="${barH - 4}" rx="5" fill="${item.color || '#7C9A7E'}" opacity="0.85"/><text x="${labelW + w + 5}" y="${y + barH * 0.72}" font-size="11" font-weight="700" fill="#333">${val}</text>`;
+        return `<text x="${labelW - 5}" y="${y + barH * 0.72}" text-anchor="end" font-size="11" fill="#555">${lbl}</text><rect x="${labelW}" y="${y + 2}" width="${w}" height="${barH - 4}" rx="5" fill="${item.color || '#7C9A7E'}" opacity="0.85" filter="url(#${id})"/><text x="${labelW + w + 5}" y="${y + barH * 0.72}" font-size="11" font-weight="700" fill="#333">${val}</text>`;
       }).join('');
-      return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${bars}</svg>`;
+      return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
     }
 
     function svgBarsV(items, maxH = 90, barW = 32, gap = 8) {
       if (!items.length) return '';
       const maxVal = Math.max(...items.map(i => i.value), 1);
       const W = items.length * (barW + gap), H = maxH + 28;
+      const { id, def } = _glowFilter(2.5);
       const bars = items.map((item, i) => {
         const x = i * (barW + gap), bh = Math.max(2, (item.value / maxVal) * maxH), y = maxH - bh;
         const lbl = item.label.length > 3 ? item.label.slice(0, 3) : item.label;
         const val = item.value > 0 ? '$' + (item.value / 1000).toFixed(1) + 'k' : '';
-        return `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="5" fill="${item.color || '#7C9A7E'}" opacity="0.85"/><text x="${x + barW / 2}" y="${maxH + 13}" text-anchor="middle" font-size="10" fill="#666">${lbl}</text>${item.value > 0 ? `<text x="${x + barW / 2}" y="${y - 3}" text-anchor="middle" font-size="9" font-weight="700" fill="#444">${val}</text>` : ''}`;
+        return `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="5" fill="${item.color || '#7C9A7E'}" opacity="0.85" filter="url(#${id})"/><text x="${x + barW / 2}" y="${maxH + 13}" text-anchor="middle" font-size="10" fill="#666">${lbl}</text>${item.value > 0 ? `<text x="${x + barW / 2}" y="${y - 3}" text-anchor="middle" font-size="9" font-weight="700" fill="#444">${val}</text>` : ''}`;
       }).join('');
-      return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${bars}</svg>`;
+      return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
     }
 
     /* ── ESTADÍSTICAS ── */
@@ -4238,14 +4247,15 @@
         if (!items.length) return '';
         const maxV = Math.max(...items.flatMap(it => [it[s1.k] || 0, it[s2.k] || 0]), 1);
         const gW = bW * 2 + 3 + gap, W = items.length * gW, H = maxH + 28;
+        const { id, def } = _glowFilter(2.5);
         const bars = items.map((it, i) => {
           const gx = i * gW;
           const h1 = Math.max(2, (it[s1.k] || 0) / maxV * maxH), h2 = Math.max(2, (it[s2.k] || 0) / maxV * maxH);
-          return `<rect x="${gx}" y="${maxH - h1}" width="${bW}" height="${h1}" rx="3" fill="${s1.c}" opacity="0.85"/>
-              <rect x="${gx + bW + 3}" y="${maxH - h2}" width="${bW}" height="${h2}" rx="3" fill="${s2.c}" opacity="0.85"/>
+          return `<rect x="${gx}" y="${maxH - h1}" width="${bW}" height="${h1}" rx="3" fill="${s1.c}" opacity="0.85" filter="url(#${id})"/>
+              <rect x="${gx + bW + 3}" y="${maxH - h2}" width="${bW}" height="${h2}" rx="3" fill="${s2.c}" opacity="0.85" filter="url(#${id})"/>
               <text x="${gx + bW}" y="${maxH + 13}" text-anchor="middle" font-size="8" fill="#888">${it.label}</text>`;
         }).join('');
-        return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${bars}</svg>`;
+        return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
       }
 
       // Line/area chart (single or multi series)
@@ -4256,20 +4266,21 @@
         const maxV = Math.max(...allV, 1), minV = Math.min(...allV, 0);
         const range = maxV - minV || 1;
         const xStep = (W - 20) / (items.length - 1);
+        const { id, def } = _glowFilter(2);
         const paths = series.map(s => {
           const pts = items.map((it, i) => [10 + i * xStep, maxH - ((it[s.k] - minV) / range) * maxH]);
           const d = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
           const area = `M${pts[0][0]},${maxH} ` + pts.map(p => `L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ') + ` L${pts[pts.length - 1][0]},${maxH} Z`;
-          const dots = pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="${s.c}"/>
+          const dots = pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="${s.c}" filter="url(#${id})"/>
         ${i % Math.ceil(items.length / 8) === 0 ? `<text x="${p[0].toFixed(1)}" y="${(p[1] - 8).toFixed(1)}" text-anchor="middle" font-size="8" fill="${s.c}" font-weight="700">$${((items[i][s.k] || 0) / 1000).toFixed(0)}k</text>` : ''}`).join('');
           return `<path d="${area}" fill="${s.c}" opacity="0.12"/>
-              <path d="${d}" fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+              <path d="${d}" fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" filter="url(#${id})"/>
               ${dots}`;
         }).join('');
         const zy = minV < 0 ? maxH - (0 - minV) / range * maxH : null;
         const zeroline = zy !== null ? `<line x1="10" y1="${zy.toFixed(1)}" x2="${W - 10}" y2="${zy.toFixed(1)}" stroke="#ddd" stroke-width="1" stroke-dasharray="4,3"/>` : '';
         const xlabels = items.map((it, i) => i % Math.ceil(items.length / 8) === 0 ? `<text x="${(10 + i * xStep).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="8" fill="#aaa">${it.label}</text>` : '').join('');
-        return `<svg width="${W}" height="${H}" style="display:block;overflow:visible;min-width:${W}px">${zeroline}${paths}${xlabels}</svg>`;
+        return `<svg width="${W}" height="${H}" style="display:block;overflow:visible;min-width:${W}px">${def}${zeroline}${paths}${xlabels}</svg>`;
       }
 
       function renderContent(tab) {
@@ -4332,16 +4343,26 @@
           const gW = series.length * (bW + pad) + gp;
           const W = its.length * gW, H = maxH + 28;
           const maxV = Math.max(...its.flatMap(it => series.map(s => it[s.k] || 0)), 1);
+          const { id, def } = _glowFilter(2.5);
           const bars = its.map((it, gi) => {
             const gx = gi * gW;
             const bs = series.map((s, si) => {
               const v = it[s.k] || 0, h = Math.max(2, v / maxV * maxH), y = maxH - h;
-              return `<rect x="${gx + si * (bW + pad)}" y="${y}" width="${bW}" height="${h}" rx="2" fill="${s.c}" opacity="0.85"/>`;
+              return `<rect x="${gx + si * (bW + pad)}" y="${y}" width="${bW}" height="${h}" rx="2" fill="${s.c}" opacity="0.85" filter="url(#${id})"/>`;
             }).join('');
             return bs + `<text x="${gx + series.length * (bW + pad) / 2}" y="${maxH + 13}" text-anchor="middle" font-size="8" fill="#888">${it.label}</text>`;
           }).join('');
-          return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${bars}</svg>`;
+          return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
         }
+
+        const chart5 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">💵 Balance Efectivo vs 💳 Tarjeta</div>
+      <div style="display:flex;gap:14px;margin-bottom:8px;font-size:11px;">
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#4CAF50;display:inline-block;"></span>Efectivo</span>
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#C9A84C;display:inline-block;"></span>Tarjeta</span>
+      </div>
+      <div style="overflow-x:auto;">${svgLineArea(items, [{ k: 'efectivo', c: '#4CAF50' }, { k: 'tarjeta', c: '#C9A84C' }], 120)}</div>
+    </div>`;
 
         const chart3 = tiendas.length ? `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">🏪 Ventas por tienda</div>
@@ -4392,7 +4413,7 @@
       </table>
     </div>`;
 
-        return kpis + chart1 + chart2 + chart3 + chart4 + table;
+        return kpis + chart1 + chart2 + chart5 + chart3 + chart4 + table;
       }
 
       function renderModal(tab) {
