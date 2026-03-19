@@ -3672,7 +3672,12 @@
       if (!c || !m || m <= 0) return;
       const estacionT = tiendas.find(t => t.nombre === 'Estación 304');
       if (estacionT && tid === estacionT.id) {
-        await api('/estacion/ingreso', { method: 'POST', body: { concepto: c, monto: m, metodo_pago: p } });
+        const hoy = new Date().toISOString().split('T')[0];
+        await api('/pagos-tienda', { method: 'POST', body: {
+          tienda_id: tid, tienda_nombre: 'Estación 304',
+          monto: m, metodo_pago: p, concepto: c,
+          es_interno: true, semana_inicio: hoy, semana_fin: hoy
+        }});
       } else {
         await api('/ingresos', { method: 'POST', body: { usuario_id: usuario.id, concepto: c, monto: m, metodo_pago: p } });
       }
