@@ -2848,17 +2848,17 @@
       });
 
       const colorsByCat = {
-        "Bebidas": "rgba(232, 234, 246, 0.5)",
-        "Extras": "rgba(252, 228, 236, 0.5)",
-        "Roles": "rgba(255, 243, 224, 0.5)",
-        "Talleres": "rgba(224, 247, 250, 0.5)",
-        "Productos": "rgba(241, 248, 233, 0.5)"
+        "Bebidas": "var(--blue-light)",
+        "Extras": "var(--rose-light)",
+        "Roles": "var(--gold-light)",
+        "Talleres": "var(--green-light)",
+        "Productos": "var(--sage-light)"
       };
 
       let html = '';
       for (const [catName, prods] of Object.entries(cats)) {
-        const bg = colorsByCat[catName] || "transparent";
-        html += `<div style="padding:15px 10px 5px 10px; font-weight:bold; font-size:16px; color:var(--morado);">${catName}</div>`;
+        const bg = colorsByCat[catName] || "var(--bg-warm)";
+        html += `<div style="padding:12px 10px 4px 10px; font-weight:700; font-size:13px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.5px;">${catName}</div>`;
         html += `<div style="background:${bg}; padding:10px; border-radius:10px; margin-bottom:10px;">`;
         html += `<div class="products-grid">${prods.map(p => renderProd(p, currentTienda)).join('')}</div>`;
         html += `</div>`;
