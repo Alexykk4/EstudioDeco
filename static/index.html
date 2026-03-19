@@ -2175,11 +2175,13 @@
 </head>
 
 <body>
+  <!-- Theme toggle fixed -->
+  <button id="themeToggle" onclick="toggleTheme()" title="Cambiar tema" style="position:fixed;top:12px;right:14px;z-index:9999;width:36px;height:36px;border:none;border-radius:50%;background:var(--surface);box-shadow:var(--shadow-sm);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:var(--transition);">🌙</button>
+
   <!-- Mobile topbar -->
   <div class="topbar" id="topbar">
     <button class="hamburger" onclick="toggleSidebar()">☰</button>
     <span class="logo-text" style="flex:1">Estudio Deco</span>
-    <button class="theme-btn" id="themeToggleMobile" onclick="toggleTheme()" title="Cambiar tema">🌙</button>
     <div class="user-pill" id="topUserPill" onclick="showNipModal()" title="Cambiar usuario"><span class="dot"
         id="topDot"></span><span id="topUserName">Sin usuario</span></div>
   </div>
@@ -2194,7 +2196,6 @@
           <div class="logo-text">Estudio Deco</div>
           <div class="logo-sub">Punto de Venta</div>
         </div>
-        <button class="theme-btn" id="themeToggle" onclick="toggleTheme()" title="Cambiar tema">🌙</button>
         <button class="sb-toggle" onclick="toggleSidebarCollapse()" title="Menú">
           <span class="hamburger-icon"><span></span><span></span><span></span></span>
         </button>
@@ -4864,21 +4865,15 @@
       const next = isDark ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('theme', next);
-      const emoji = next === 'dark' ? '☀️' : '🌙';
-      const btn1 = document.getElementById('themeToggle');
-      const btn2 = document.getElementById('themeToggleMobile');
-      if (btn1) btn1.textContent = emoji;
-      if (btn2) btn2.textContent = emoji;
+      const btn = document.getElementById('themeToggle');
+      if (btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
     }
 
     function initTheme() {
       const saved = localStorage.getItem('theme') || 'light';
       document.documentElement.setAttribute('data-theme', saved);
-      const emoji = saved === 'dark' ? '☀️' : '🌙';
-      const btn1 = document.getElementById('themeToggle');
-      const btn2 = document.getElementById('themeToggleMobile');
-      if (btn1) btn1.textContent = emoji;
-      if (btn2) btn2.textContent = emoji;
+      const btn = document.getElementById('themeToggle');
+      if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
     }
 
     initTheme();
