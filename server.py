@@ -23,6 +23,7 @@ from modules.database import (
     obtener_estadisticas,
     obtener_balance_actual, ajustar_balance, limpiar_ingresos_gastos,
     registrar_nomina, listar_nominas,
+    registrar_movimiento_estacion, obtener_balance_estacion, obtener_movimientos_estacion,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf, generar_nomina_pdf
@@ -31,6 +32,12 @@ from modules.sync_sheets import sync_worker
 
 init_db(); sync_worker.start()
 app = FastAPI(title="Estudio Deco POS", version="2.0")
+
+# ── System users (login) ──
+SYSTEM_USERS = {
+    "estudiodeco": {"password": "19jul",    "role": "deco"},
+    "estacion304": {"password": "telefono", "role": "estacion"},
+}
 
 STATIC = Path(__file__).parent / "static"
 ASSETS = Path(__file__).parent / "assets"
@@ -99,6 +106,15 @@ class BundleComponentReq(BaseModel):
     cantidad: int = 1
     precio_asignado: float
 
+class LoginReq(BaseModel):
+    username: str
+    password: str
+
+class EstacionGastoReq(BaseModel):
+    concepto: str
+    monto: float
+    metodo_pago: str = "Efectivo"
+
 class PagoTiendaReq(BaseModel):
     tienda_id: int
     tienda_nombre: str
@@ -131,6 +147,25 @@ async def auth(r: NipReq):
     u = validar_nip(r.nip)
     if not u: raise HTTPException(401, "NIP incorrecto")
     return u
+
+@app.post("/api/login")
+async def login(r: LoginReq):
+    user = SYSTEM_USERS.get(r.username)
+    if not user or user["password"] != r.password:
+        raise HTTPException(401, "Usuario o contraseña incorrectos")
+    return {"ok": True, "role": user["role"], "username": r.username}
+
+# ── Estación 304 admin ──
+@app.get("/api/estacion/balance")
+async def api_estacion_balance(): return obtener_balance_estacion()
+
+@app.get("/api/estacion/movimientos")
+async def api_estacion_movimientos(): return obtener_movimientos_estacion()
+
+@app.post("/api/estacion/gasto")
+async def api_estacion_gasto(r: EstacionGastoReq):
+    registrar_movimiento_estacion('gasto', r.concepto, r.monto, r.metodo_pago)
+    return {"ok": True}
 
 # ── Data ──
 @app.get("/api/tiendas")

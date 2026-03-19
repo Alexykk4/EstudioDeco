@@ -2175,8 +2175,98 @@
 </head>
 
 <body>
-  <!-- Theme toggle fixed -->
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       LOGIN SCREEN
+  ═══════════════════════════════════════════════════════════════ -->
+  <div id="loginScreen" style="display:none;position:fixed;inset:0;z-index:99999;background:var(--bg);align-items:center;justify-content:center;padding:20px;">
+    <div style="background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:40px 36px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:18px;align-items:center;">
+      <div style="font-size:48px;line-height:1;">☕</div>
+      <div style="font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.5px;">Estudio Deco</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:-8px;">Sistema de Punto de Venta</div>
+      <div style="width:100%;display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+        <input id="loginUser" type="text" placeholder="Usuario" autocomplete="username"
+          style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit;box-sizing:border-box;outline:none;transition:var(--transition);"
+          onfocus="this.style.borderColor='var(--sage)'" onblur="this.style.borderColor='var(--border)'"
+          onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
+        <input id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password"
+          style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit;box-sizing:border-box;outline:none;transition:var(--transition);"
+          onfocus="this.style.borderColor='var(--sage)'" onblur="this.style.borderColor='var(--border)'"
+          onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <div id="loginError" style="display:none;color:var(--red);font-size:13px;text-align:center;"></div>
+      <button onclick="doLogin()" style="width:100%;padding:13px;background:var(--sage);color:#fff;border:none;border-radius:var(--radius-sm);font-size:15px;font-weight:600;cursor:pointer;transition:var(--transition);" onmouseover="this.style.background='var(--sage-dark)'" onmouseout="this.style.background='var(--sage)'">
+        Entrar
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ESTACIÓN 304 — ADMIN
+  ═══════════════════════════════════════════════════════════════ -->
+  <div id="estacionApp" style="display:none;min-height:100vh;background:var(--bg);padding:0;">
+    <!-- Header -->
+    <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;">
+      <span style="font-size:22px;">☕</span>
+      <span style="font-size:17px;font-weight:700;color:var(--text);flex:1;">Estación 304 — Admin</span>
+      <button id="themeToggleE" onclick="toggleTheme()" title="Cambiar tema" style="width:34px;height:34px;border:none;border-radius:50%;background:var(--bg-warm);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:var(--transition);">🌙</button>
+      <button onclick="doLogout()" style="padding:8px 16px;background:var(--red-light);color:var(--red);border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:var(--transition);">Salir</button>
+    </div>
+    <!-- Content -->
+    <div style="max-width:680px;margin:0 auto;padding:24px 16px;display:flex;flex-direction:column;gap:20px;">
+      <!-- Balance card -->
+      <div id="estBalanceCard" style="background:var(--surface);border-radius:var(--radius-lg);padding:28px 24px;box-shadow:var(--shadow);text-align:center;">
+        <div style="font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Balance Actual</div>
+        <div id="estBalanceNum" style="font-size:42px;font-weight:800;color:var(--sage);letter-spacing:-1px;">$0.00</div>
+        <div style="display:flex;gap:16px;justify-content:center;margin-top:16px;">
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;">Total Ingresos</div>
+            <div id="estIngresosNum" style="font-size:18px;font-weight:700;color:var(--green-ok);">$0.00</div>
+          </div>
+          <div style="width:1px;background:var(--border);"></div>
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;">Total Gastos</div>
+            <div id="estGastosNum" style="font-size:18px;font-weight:700;color:var(--red);">$0.00</div>
+          </div>
+        </div>
+      </div>
+      <!-- Register gasto -->
+      <div style="background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);">
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:14px;">Registrar Gasto</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <input id="estGastoConcepto" type="text" placeholder="Concepto del gasto"
+            style="padding:11px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:var(--transition);"
+            onfocus="this.style.borderColor='var(--sage)'" onblur="this.style.borderColor='var(--border)'">
+          <div style="display:flex;gap:10px;">
+            <input id="estGastoMonto" type="number" placeholder="Monto" min="0" step="0.01"
+              style="flex:1;padding:11px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:var(--transition);"
+              onfocus="this.style.borderColor='var(--sage)'" onblur="this.style.borderColor='var(--border)'">
+            <select id="estGastoMetodo" style="padding:11px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;outline:none;">
+              <option value="Efectivo">Efectivo</option>
+              <option value="Tarjeta">Tarjeta</option>
+              <option value="Transferencia">Transferencia</option>
+            </select>
+          </div>
+          <button onclick="registrarGastoEstacion()" style="padding:12px;background:var(--sage);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:var(--transition);" onmouseover="this.style.background='var(--sage-dark)'" onmouseout="this.style.background='var(--sage)'">
+            Registrar Gasto
+          </button>
+        </div>
+      </div>
+      <!-- Movimientos -->
+      <div style="background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);">
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:14px;">Historial de Movimientos</div>
+        <div id="estMovimientos" style="display:flex;flex-direction:column;gap:8px;">
+          <div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px;">Cargando...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Theme toggle fixed (solo visible en app Deco) -->
   <button id="themeToggle" onclick="toggleTheme()" title="Cambiar tema" style="position:fixed;top:12px;right:14px;z-index:9999;width:36px;height:36px;border:none;border-radius:50%;background:var(--surface);box-shadow:var(--shadow-sm);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:var(--transition);">🌙</button>
+
+  <!-- ═══ DECO APP ═══ -->
+  <div id="decoApp" style="display:none;">
 
   <!-- Mobile topbar -->
   <div class="topbar" id="topbar">
@@ -2394,6 +2484,8 @@
   <!-- Full-page view -->
   <div id="fullpage" class="hidden"></div>
   <div id="modals"></div>
+
+  </div><!-- /#decoApp -->
 
   <script>
     /* ═══════════════════════════════════════════════
@@ -4927,18 +5019,136 @@
       const next = isDark ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('theme', next);
-      const btn = document.getElementById('themeToggle');
-      if (btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
+      ['themeToggle','themeToggleE'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
+      });
     }
 
     function initTheme() {
       const saved = localStorage.getItem('theme') || 'light';
       document.documentElement.setAttribute('data-theme', saved);
-      const btn = document.getElementById('themeToggle');
-      if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
+      ['themeToggle','themeToggleE'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
+      });
+    }
+
+    // ── LOGIN / SESSION ──────────────────────────────────────────────
+    let _currentRole = null;
+
+    function showLogin() {
+      const ls = document.getElementById('loginScreen');
+      ls.style.display = 'flex';
+      ls.style.alignItems = 'center';
+      ls.style.justifyContent = 'center';
+      document.getElementById('decoApp').style.display = 'none';
+      document.getElementById('estacionApp').style.display = 'none';
+      document.getElementById('themeToggle').style.display = 'none';
+      setTimeout(() => document.getElementById('loginUser').focus(), 100);
+    }
+
+    function showDecoApp() {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('decoApp').style.display = 'block';
+      document.getElementById('estacionApp').style.display = 'none';
+      document.getElementById('themeToggle').style.display = 'flex';
+    }
+
+    function showEstacionApp() {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('decoApp').style.display = 'none';
+      document.getElementById('estacionApp').style.display = 'block';
+      document.getElementById('themeToggle').style.display = 'none';
+      loadEstacionData();
+    }
+
+    async function doLogin() {
+      const username = document.getElementById('loginUser').value.trim();
+      const password = document.getElementById('loginPass').value;
+      const errEl = document.getElementById('loginError');
+      errEl.style.display = 'none';
+      if (!username || !password) { errEl.textContent = 'Ingresa usuario y contraseña'; errEl.style.display = 'block'; return; }
+      try {
+        const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username, password}) });
+        if (!res.ok) { const e = await res.json(); errEl.textContent = e.detail || 'Credenciales incorrectas'; errEl.style.display = 'block'; return; }
+        const data = await res.json();
+        sessionStorage.setItem('session', JSON.stringify({username: data.username, role: data.role}));
+        _currentRole = data.role;
+        if (data.role === 'deco') showDecoApp();
+        else showEstacionApp();
+      } catch(e) { errEl.textContent = 'Error de conexión'; errEl.style.display = 'block'; }
+    }
+
+    function doLogout() {
+      sessionStorage.removeItem('session');
+      _currentRole = null;
+      document.getElementById('loginUser').value = '';
+      document.getElementById('loginPass').value = '';
+      showLogin();
+    }
+
+    function initSession() {
+      const raw = sessionStorage.getItem('session');
+      if (!raw) { showLogin(); return; }
+      try {
+        const s = JSON.parse(raw);
+        _currentRole = s.role;
+        if (s.role === 'deco') showDecoApp();
+        else if (s.role === 'estacion') showEstacionApp();
+        else showLogin();
+      } catch { showLogin(); }
+    }
+
+    // ── ESTACIÓN 304 ADMIN ───────────────────────────────────────────
+    async function loadEstacionData() {
+      try {
+        const [bal, movs] = await Promise.all([
+          fetch('/api/estacion/balance').then(r => r.json()),
+          fetch('/api/estacion/movimientos').then(r => r.json()),
+        ]);
+        document.getElementById('estBalanceNum').textContent = '$' + bal.balance.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
+        document.getElementById('estIngresosNum').textContent = '$' + bal.total_ingresos.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
+        document.getElementById('estGastosNum').textContent = '$' + bal.total_gastos.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
+        const el = document.getElementById('estMovimientos');
+        if (!movs.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px;">Sin movimientos aún</div>'; return; }
+        el.innerHTML = movs.map(m => {
+          const isIng = m.tipo === 'ingreso';
+          const sign = isIng ? '+' : '-';
+          const color = isIng ? 'var(--green-ok)' : 'var(--red)';
+          const bg = isIng ? 'var(--green-light)' : 'var(--red-light)';
+          const icon = isIng ? '↓' : '↑';
+          const fecha = m.created_at ? m.created_at.substring(0,16).replace('T',' ') : '';
+          return `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div style="width:32px;height:32px;border-radius:50%;background:${bg};color:${color};display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;">${icon}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.concepto}</div>
+              <div style="font-size:11px;color:var(--text-muted);">${fecha} · ${m.metodo_pago}</div>
+            </div>
+            <div style="font-size:16px;font-weight:700;color:${color};flex-shrink:0;">${sign}$${m.monto.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          </div>`;
+        }).join('');
+      } catch(e) { console.error('loadEstacionData', e); }
+    }
+
+    async function registrarGastoEstacion() {
+      const concepto = document.getElementById('estGastoConcepto').value.trim();
+      const monto = parseFloat(document.getElementById('estGastoMonto').value);
+      const metodo_pago = document.getElementById('estGastoMetodo').value;
+      if (!concepto) { toast('⚠️', 'Ingresa el concepto del gasto', 'var(--gold)'); return; }
+      if (!monto || monto <= 0) { toast('⚠️', 'Ingresa un monto válido', 'var(--gold)'); return; }
+      try {
+        const res = await fetch('/api/estacion/gasto', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({concepto, monto, metodo_pago}) });
+        if (!res.ok) throw new Error('Error al registrar');
+        document.getElementById('estGastoConcepto').value = '';
+        document.getElementById('estGastoMonto').value = '';
+        toast('✅', 'Gasto registrado', 'var(--green-ok)');
+        loadEstacionData();
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
     }
 
     initTheme();
+    initSession();
   </script>
 </body>
 
