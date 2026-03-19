@@ -343,6 +343,9 @@ async def api_get_fondo():
 
 @app.post("/api/fondo")
 async def api_set_fondo(r: FondoReq):
+    # Solo se puede abrir caja una vez al día
+    if get_fondo_apertura() > 0:
+        raise HTTPException(409, "La caja ya fue abierta hoy. Solo se puede abrir una vez al día.")
     set_fondo_apertura(r.monto)
     return {"ok": True}
 
