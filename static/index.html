@@ -4713,7 +4713,8 @@
         if (!esEstudio && !esPromo && tid) {
           if (yaPagada) {
             const pagoPrev = pagosHechos.find(p => p.tienda_id === tid);
-            pagarBtn = `<span style="font-size:10px;color:var(--green-ok);font-weight:700;">✅ Pagado $${pagoPrev.monto.toFixed(2)}</span>`;
+            pagarBtn = `<span style="font-size:10px;color:var(--green-ok);font-weight:700;">✅ Pagado $${pagoPrev.monto.toFixed(2)}</span>
+              <button class="btn-pagar" style="font-size:10px;padding:3px 8px;margin-left:4px;opacity:.7;" onclick="showPagoTiendaModal(${tid},'${t.tienda.replace(/'/g, "\\\'")}',${montoSugerido.toFixed(2)},${esEstacion ? 'true' : 'false'},'${desde}','${hasta}')">+ Pago</button>`;
           } else {
             pagarBtn = `<button class="btn-pagar" onclick="showPagoTiendaModal(${tid},'${t.tienda.replace(/'/g, "\\\'")}',${montoSugerido.toFixed(2)},${esEstacion ? 'true' : 'false'},'${desde}','${hasta}')">💰 PAGAR</button>`;
           }
