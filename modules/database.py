@@ -499,7 +499,43 @@ def obtener_balance_actual():
 
     ajuste_caja_row  = conn.execute("SELECT valor FROM config WHERE clave='ajuste_caja'").fetchone()
     ajuste_banco_row = conn.execute("SELECT valor FROM config WHERE clave='ajuste_banco'").fetchone()
+
+    # Balance acumulado por tienda
+    ventas_tienda = conn.execute("""
+        SELECT COALESCE(t.nombre, 'Sin Tienda') as tienda, COALESCE(SUM(vd.subtotal), 0) as ventas
+        FROM venta_detalle vd
+        JOIN ventas v ON v.id = vd.venta_id
+        LEFT JOIN tiendas t ON t.id = vd.tienda_id
+        WHERE (v.cancelada IS NULL OR v.cancelada = 0)
+        GROUP BY t.id
+    """).fetchall()
+    gastos_tienda = conn.execute("""
+        SELECT COALESCE(t.nombre, '__compartido__') as tienda, COALESCE(SUM(g.monto), 0) as gastos
+        FROM gastos g LEFT JOIN tiendas t ON t.id = g.tienda_id
+        GROUP BY g.tienda_id
+    """).fetchall()
+    pagos_tienda_q = conn.execute("""
+        SELECT COALESCE(t.nombre, 'Sin Tienda') as tienda,
+               COALESCE(SUM(CASE WHEN es_interno=0 OR es_interno IS NULL THEN monto ELSE 0 END), 0) as pagos
+        FROM pagos_tienda p LEFT JOIN tiendas t ON t.id = p.tienda_id
+        GROUP BY p.tienda_id
+    """).fetchall()
+
     conn.close()
+
+    v_map = {r['tienda']: round(r['ventas'], 2) for r in ventas_tienda}
+    g_map = {r['tienda']: round(r['gastos'], 2) for r in gastos_tienda}
+    p_map = {r['tienda']: round(r['pagos'],  2) for r in pagos_tienda_q}
+    gastos_compartidos = g_map.pop('__compartido__', 0)
+    total_v = sum(v_map.values()) or 1
+
+    tiendas_bal = sorted(set(list(v_map) + list(g_map) + list(p_map)))
+    balance_tiendas = []
+    for t in tiendas_bal:
+        v = v_map.get(t, 0)
+        g = g_map.get(t, 0) + round(gastos_compartidos * v / total_v, 2)
+        p = p_map.get(t, 0)
+        balance_tiendas.append({'tienda': t, 'ventas': v, 'gastos': round(g, 2), 'pagos': p, 'balance': round(v - g - p, 2)})
 
     total_ventas   = ventas_row['total']
     total_ingresos = ingresos_row['total']
@@ -514,15 +550,16 @@ def obtener_balance_actual():
     neto     = total_ventas + total_ingresos - total_gastos - total_pagos + ajuste_caja + ajuste_banco
 
     return {
-        'total':          round(neto, 2),
-        'en_caja':        round(efectivo, 2),
-        'en_banco':       round(banco, 2),
-        'total_ventas':   round(total_ventas, 2),
-        'total_ingresos': round(total_ingresos, 2),
-        'total_gastos':   round(total_gastos, 2),
-        'total_pagos':    round(total_pagos, 2),
-        'ajuste_caja':    round(ajuste_caja, 2),
-        'ajuste_banco':   round(ajuste_banco, 2),
+        'total':           round(neto, 2),
+        'en_caja':         round(efectivo, 2),
+        'en_banco':        round(banco, 2),
+        'total_ventas':    round(total_ventas, 2),
+        'total_ingresos':  round(total_ingresos, 2),
+        'total_gastos':    round(total_gastos, 2),
+        'total_pagos':     round(total_pagos, 2),
+        'ajuste_caja':     round(ajuste_caja, 2),
+        'ajuste_banco':    round(ajuste_banco, 2),
+        'balance_tiendas': balance_tiendas,
     }
 
 def ajustar_balance(caja_real: float, banco_real: float):
