@@ -4514,36 +4514,21 @@
         return kpis + chart7 + chart5 + chart6 + chart1 + chart2 + chart3 + chart4 + table;
       }
 
-      const tiendaColors = { 'Estudio Deco': ['var(--sage-light)', 'var(--sage)', 'var(--sage-dark)'], 'Estación 304': ['var(--terracotta-light)', 'var(--terracotta)', 'var(--terracotta)'] };
-      const tiendaCards = (bal.balance_tiendas || []).map(t => {
-        const [bg, border, clr] = tiendaColors[t.tienda] || ['var(--surface)', 'var(--border)', 'var(--text)'];
-        return `<div style="background:${bg};border:2px solid ${border};border-radius:var(--radius-sm);padding:12px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${clr};margin-bottom:4px;">${t.tienda}</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;color:${t.balance >= 0 ? clr : 'var(--red)'};">${$pesos(t.balance)}</div>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.6;">
-            Ventas ${$pesos(t.ventas)}<br>
-            Gastos −${$pesos(t.gastos)}${t.pagos > 0 ? `<br>Pagos −${$pesos(t.pagos)}` : ''}
-          </div>
-        </div>`;
-      }).join('');
-
-      const balanceHtml = `
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
-        <div style="background:var(--surface);border:2px solid var(--sage);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:6px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);">📊 Balance Total</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${_balTotal >= 0 ? 'var(--sage-dark)' : 'var(--red)'};">${$pesos(_balTotal)}</div>
-          <button style="align-self:flex-start;font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-secondary);cursor:pointer;" onclick="showAjusteBalanceModal(${_balCaja},${_balBanco})">✏️ Ajustar</button>
-        </div>
-        <div style="background:var(--green-light);border:2px solid var(--sage);border-radius:var(--radius-sm);padding:14px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:6px;">💵 Efectivo en Caja</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${_balCaja >= 0 ? 'var(--green-ok)' : 'var(--red)'};">${$pesos(_balCaja)}</div>
-        </div>
-        <div style="background:var(--gold-light);border:2px solid var(--gold);border-radius:var(--radius-sm);padding:14px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">🏦 Tarjeta / Banco</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--gold);">${$pesos(_balBanco)}</div>
-        </div>
+      const balanceHtml = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+      <div style="background:var(--surface);border:2px solid var(--sage);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:6px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);">📊 Balance Actual</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${_balTotal >= 0 ? 'var(--sage-dark)' : 'var(--red)'};">${$pesos(_balTotal)}</div>
+        <button style="align-self:flex-start;font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-secondary);cursor:pointer;" onclick="showAjusteBalanceModal(${_balCaja},${_balBanco})">✏️ Ajustar</button>
       </div>
-      ${tiendaCards ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px;">${tiendaCards}</div>` : ''}`;
+      <div style="background:var(--green-light);border:2px solid var(--sage);border-radius:var(--radius-sm);padding:14px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:6px;">💵 Efectivo en Caja</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${_balCaja >= 0 ? 'var(--green-ok)' : 'var(--red)'};">${$pesos(_balCaja)}</div>
+      </div>
+      <div style="background:var(--gold-light);border:2px solid var(--gold);border-radius:var(--radius-sm);padding:14px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">🏦 Tarjeta / Banco</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--gold);">${$pesos(_balBanco)}</div>
+      </div>
+    </div>`;
 
       function renderModal(tab) {
         const bs = t => t === tab ? 'background:var(--sage-dark);color:#fff;border:none;' : 'background:var(--bg-warm);color:var(--text-secondary);border:1px solid var(--border);';
