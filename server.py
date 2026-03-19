@@ -285,9 +285,16 @@ async def api_venta_directa(r: dict):
     cajero = row["nombre"] if row else "?"
     impreso = imprimir_ticket(venta, cajero)
     # Imprimir comanda automática para items de barra (tienda_id=1)
-    items_barra = [i for i in r["items"] if i.get("tienda_id") == 1]
+    # Consultamos venta_detalle (ya expandida con componentes de bundles)
+    venta_id = venta["venta_id"]
+    conn2 = get_connection()
+    items_barra = conn2.execute(
+        "SELECT nombre_producto, cantidad FROM venta_detalle WHERE venta_id=? AND tienda_id=1",
+        (venta_id,)
+    ).fetchall()
+    conn2.close()
     if items_barra:
-        imprimir_comanda("VENTA DIRECTA", [{"nombre_producto": i["nombre"], "cantidad": i["cantidad"]} for i in items_barra])
+        imprimir_comanda("VENTA DIRECTA", [dict(i) for i in items_barra])
     return {"venta": venta, "impreso": impreso, "cajero": cajero}
 
 # ── Gastos ──
