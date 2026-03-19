@@ -4242,10 +4242,25 @@
       const id = 'gf' + (++_gc);
       return { id, def: `<defs><filter id="${id}" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur in="SourceGraphic" stdDeviation="${blur}" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>` };
     }
+    function _tc() {
+      const d = document.documentElement.getAttribute('data-theme') === 'dark';
+      return {
+        label:  d ? '#9e8cc5' : '#555',
+        val:    d ? '#ede7f6' : '#333',
+        axis:   d ? '#7e6baa' : '#666',
+        valSm:  d ? '#b39ddb' : '#444',
+        tick:   d ? '#6b5b8a' : '#888',
+        muted:  d ? '#5a4a78' : '#aaa',
+        track:  d ? '#2a2040' : '#f0f0f0',
+        center: d ? '#1a1628' : 'white',
+        zero:   d ? '#3a2d56' : '#ddd',
+      };
+    }
 
     function svgDonut(segments, size = 130) {
       const total = segments.reduce((s, x) => s + x.value, 0);
-      if (!total) return `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size * 0.35}" fill="none" stroke="#eee" stroke-width="${size * 0.18}"/><text x="${size / 2}" y="${size / 2 + 4}" text-anchor="middle" font-size="11" fill="#aaa">Sin datos</text></svg>`;
+      const tc = _tc();
+      if (!total) return `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size * 0.35}" fill="none" stroke="${tc.track}" stroke-width="${size * 0.18}"/><text x="${size / 2}" y="${size / 2 + 4}" text-anchor="middle" font-size="11" fill="${tc.muted}">Sin datos</text></svg>`;
       const r = size * 0.35, cx = size / 2, cy = size / 2, circ = 2 * Math.PI * r;
       const { id, def } = _glowFilter(3);
       let offset = 0, arcs = '';
@@ -4255,11 +4270,12 @@
         arcs += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${size * 0.19}" stroke-dasharray="${dash} ${circ - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" opacity="0.92" filter="url(#${id})"/>`;
         offset += dash;
       }
-      return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${def}<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f0f0f0" stroke-width="${size * 0.19}"/>${arcs}<circle cx="${cx}" cy="${cy}" r="${r * 0.56}" fill="white"/></svg>`;
+      return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${def}<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${tc.track}" stroke-width="${size * 0.19}"/>${arcs}<circle cx="${cx}" cy="${cy}" r="${r * 0.56}" fill="${tc.center}"/></svg>`;
     }
 
     function svgBarsH(items, barMaxW = 170, barH = 22, gap = 7) {
       if (!items.length) return '';
+      const tc = _tc();
       const max = Math.max(...items.map(i => i.value), 1), labelW = 92, valueW = 72;
       const W = labelW + barMaxW + valueW, H = items.length * (barH + gap);
       const { id, def } = _glowFilter(2.5);
@@ -4267,13 +4283,14 @@
         const y = i * (barH + gap), w = Math.max(3, (item.value / max) * barMaxW);
         const lbl = item.label.length > 13 ? item.label.slice(0, 12) + '…' : item.label;
         const val = '$' + (item.value || 0).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-        return `<text x="${labelW - 5}" y="${y + barH * 0.72}" text-anchor="end" font-size="11" fill="#555">${lbl}</text><rect x="${labelW}" y="${y + 2}" width="${w}" height="${barH - 4}" rx="5" fill="${item.color || '#7C9A7E'}" opacity="0.85" filter="url(#${id})"/><text x="${labelW + w + 5}" y="${y + barH * 0.72}" font-size="11" font-weight="700" fill="#333">${val}</text>`;
+        return `<text x="${labelW - 5}" y="${y + barH * 0.72}" text-anchor="end" font-size="11" fill="${tc.label}">${lbl}</text><rect x="${labelW}" y="${y + 2}" width="${w}" height="${barH - 4}" rx="5" fill="${item.color || '#7C9A7E'}" opacity="0.85" filter="url(#${id})"/><text x="${labelW + w + 5}" y="${y + barH * 0.72}" font-size="11" font-weight="700" fill="${tc.val}">${val}</text>`;
       }).join('');
       return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
     }
 
     function svgBarsV(items, maxH = 90, barW = 32, gap = 8) {
       if (!items.length) return '';
+      const tc = _tc();
       const maxVal = Math.max(...items.map(i => i.value), 1);
       const W = items.length * (barW + gap), H = maxH + 28;
       const { id, def } = _glowFilter(2.5);
@@ -4281,7 +4298,7 @@
         const x = i * (barW + gap), bh = Math.max(2, (item.value / maxVal) * maxH), y = maxH - bh;
         const lbl = item.label.length > 3 ? item.label.slice(0, 3) : item.label;
         const val = item.value > 0 ? '$' + (item.value / 1000).toFixed(1) + 'k' : '';
-        return `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="5" fill="${item.color || '#7C9A7E'}" opacity="0.85" filter="url(#${id})"/><text x="${x + barW / 2}" y="${maxH + 13}" text-anchor="middle" font-size="10" fill="#666">${lbl}</text>${item.value > 0 ? `<text x="${x + barW / 2}" y="${y - 3}" text-anchor="middle" font-size="9" font-weight="700" fill="#444">${val}</text>` : ''}`;
+        return `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="5" fill="${item.color || '#7C9A7E'}" opacity="0.85" filter="url(#${id})"/><text x="${x + barW / 2}" y="${maxH + 13}" text-anchor="middle" font-size="10" fill="${tc.axis}">${lbl}</text>${item.value > 0 ? `<text x="${x + barW / 2}" y="${y - 3}" text-anchor="middle" font-size="9" font-weight="700" fill="${tc.valSm}">${val}</text>` : ''}`;
       }).join('');
       return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
     }
@@ -4298,6 +4315,7 @@
       // Grouped bar chart (2 series)
       function svgGrouped(items, s1, s2, maxH = 110, bW = 12, gap = 10) {
         if (!items.length) return '';
+        const tc = _tc();
         const maxV = Math.max(...items.flatMap(it => [it[s1.k] || 0, it[s2.k] || 0]), 1);
         const gW = bW * 2 + 3 + gap, W = items.length * gW, H = maxH + 28;
         const { id, def } = _glowFilter(2.5);
@@ -4306,7 +4324,7 @@
           const h1 = Math.max(2, (it[s1.k] || 0) / maxV * maxH), h2 = Math.max(2, (it[s2.k] || 0) / maxV * maxH);
           return `<rect x="${gx}" y="${maxH - h1}" width="${bW}" height="${h1}" rx="3" fill="${s1.c}" opacity="0.85" filter="url(#${id})"/>
               <rect x="${gx + bW + 3}" y="${maxH - h2}" width="${bW}" height="${h2}" rx="3" fill="${s2.c}" opacity="0.85" filter="url(#${id})"/>
-              <text x="${gx + bW}" y="${maxH + 13}" text-anchor="middle" font-size="8" fill="#888">${it.label}</text>`;
+              <text x="${gx + bW}" y="${maxH + 13}" text-anchor="middle" font-size="8" fill="${tc.tick}">${it.label}</text>`;
         }).join('');
         return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
       }
@@ -4314,6 +4332,7 @@
       // Line/area chart (single or multi series)
       function svgLineArea(items, series, maxH = 110) {
         if (items.length < 2) return '';
+        const tc = _tc();
         const W = Math.max(items.length * 38, 300), H = maxH + 28;
         const allV = items.flatMap(it => series.map(s => it[s.k] || 0));
         const maxV = Math.max(...allV, 1), minV = Math.min(...allV, 0);
@@ -4331,8 +4350,8 @@
               ${dots}`;
         }).join('');
         const zy = minV < 0 ? maxH - (0 - minV) / range * maxH : null;
-        const zeroline = zy !== null ? `<line x1="10" y1="${zy.toFixed(1)}" x2="${W - 10}" y2="${zy.toFixed(1)}" stroke="#ddd" stroke-width="1" stroke-dasharray="4,3"/>` : '';
-        const xlabels = items.map((it, i) => i % Math.ceil(items.length / 8) === 0 ? `<text x="${(10 + i * xStep).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="8" fill="#aaa">${it.label}</text>` : '').join('');
+        const zeroline = zy !== null ? `<line x1="10" y1="${zy.toFixed(1)}" x2="${W - 10}" y2="${zy.toFixed(1)}" stroke="${tc.zero}" stroke-width="1" stroke-dasharray="4,3"/>` : '';
+        const xlabels = items.map((it, i) => i % Math.ceil(items.length / 8) === 0 ? `<text x="${(10 + i * xStep).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="8" fill="${tc.muted}">${it.label}</text>` : '').join('');
         return `<svg width="${W}" height="${H}" style="display:block;overflow:visible;min-width:${W}px">${def}${zeroline}${paths}${xlabels}</svg>`;
       }
 
@@ -4350,17 +4369,17 @@
         const fmt$ = v => '$' + v.toLocaleString('es-MX', { minimumFractionDigits: 0 });
 
         const kpis = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
-      <div style="background:#E8F5E9;border-radius:var(--radius-sm);padding:12px;text-align:center;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#2E7D32;margin-bottom:4px;">Ventas</div>
-        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#2E7D32;">${fmt$(totV)}</div>
+      <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:12px;text-align:center;border:1px solid var(--border-light);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:4px;">Ventas</div>
+        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);">${fmt$(totV)}</div>
       </div>
-      <div style="background:#E3F2FD;border-radius:var(--radius-sm);padding:12px;text-align:center;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#1565C0;margin-bottom:4px;">Ingresos</div>
-        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#1565C0;">${fmt$(totI)}</div>
+      <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:12px;text-align:center;border:1px solid var(--border-light);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:4px;">Ingresos</div>
+        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--blue);">${fmt$(totI)}</div>
       </div>
-      <div style="background:#FFEBEE;border-radius:var(--radius-sm);padding:12px;text-align:center;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#C62828;margin-bottom:4px;">Gastos</div>
-        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#C62828;">${fmt$(totG)}</div>
+      <div style="background:var(--red-light);border-radius:var(--radius-sm);padding:12px;text-align:center;border:1px solid var(--border-light);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red);margin-bottom:4px;">Gastos</div>
+        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--red);">${fmt$(totG)}</div>
       </div>
     </div>`;
 
@@ -4403,7 +4422,7 @@
               const v = it[s.k] || 0, h = Math.max(2, v / maxV * maxH), y = maxH - h;
               return `<rect x="${gx + si * (bW + pad)}" y="${y}" width="${bW}" height="${h}" rx="2" fill="${s.c}" opacity="0.85" filter="url(#${id})"/>`;
             }).join('');
-            return bs + `<text x="${gx + series.length * (bW + pad) / 2}" y="${maxH + 13}" text-anchor="middle" font-size="8" fill="#888">${it.label}</text>`;
+            return bs + `<text x="${gx + series.length * (bW + pad) / 2}" y="${maxH + 13}" text-anchor="middle" font-size="8" fill="${_tc().tick}">${it.label}</text>`;
           }).join('');
           return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
         }
@@ -4602,12 +4621,12 @@
 
     <!-- Balance cards -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-      <div style="background:linear-gradient(135deg,#E8F5E9,#C8E6C9);border-radius:var(--radius-sm);padding:14px;border-left:4px solid var(--sage);">
+      <div style="background:var(--sage-light);border-radius:var(--radius-sm);padding:14px;border-left:4px solid var(--sage);">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--sage-dark);margin-bottom:4px;">🏠 Balance Estudio Deco</div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${balEstudio >= 0 ? 'var(--sage-dark)' : 'var(--red)'};">${$pesos(balEstudio)}</div>
       </div>
-      <div style="background:linear-gradient(135deg,#FFF3E0,#FFE0B2);border-radius:var(--radius-sm);padding:14px;border-left:4px solid var(--terracotta);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#BF360C;margin-bottom:4px;">☕ Balance Estación 304</div>
+      <div style="background:var(--terracotta-light);border-radius:var(--radius-sm);padding:14px;border-left:4px solid var(--terracotta);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--terracotta);margin-bottom:4px;">☕ Balance Estación 304</div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--terracotta);">${$pesos(balEstacion)}</div>
       </div>
     </div>
