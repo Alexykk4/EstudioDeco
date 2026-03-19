@@ -4313,7 +4313,7 @@
 
       // Line/area chart (single or multi series)
       function svgLineArea(items, series, maxH = 110) {
-        if (items.length < 2) return `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">Se necesitan al menos 2 períodos para mostrar la gráfica</div>`;
+        if (items.length < 2) return `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">Se necesitan datos de al menos 2 meses para mostrar esta gráfica</div>`;
         const tc = _tc();
         const W = Math.max(items.length * 38, 300), H = maxH + 28;
         const allV = items.flatMap(it => series.map(s => it[s.k] || 0));
