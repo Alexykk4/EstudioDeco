@@ -1397,5 +1397,39 @@ def obtener_estadisticas():
         row['tarjeta'] = tar
         row['por_tienda'] = {t: tienda_año_map.get(row['año'], {}).get(t, 0) for t in tiendas}
 
+    # Datos diarios del año en curso
+    año_actual = str(datetime.now().year)
+    ventas_dia = conn.execute("""
+        SELECT strftime('%Y-%m-%d', created_at) as dia,
+               COALESCE(SUM(total), 0) as ventas,
+               COALESCE(SUM(monto_efectivo), 0) as efectivo,
+               COALESCE(SUM(monto_tarjeta), 0) as tarjeta
+        FROM ventas
+        WHERE (cancelada IS NULL OR cancelada=0)
+          AND strftime('%Y', created_at) = ?
+        GROUP BY dia ORDER BY dia
+    """, (año_actual,)).fetchall()
+
+    gastos_dia = conn.execute("""
+        SELECT strftime('%Y-%m-%d', created_at) as dia,
+               COALESCE(SUM(monto), 0) as gastos
+        FROM gastos
+        WHERE strftime('%Y', created_at) = ?
+        GROUP BY dia ORDER BY dia
+    """, (año_actual,)).fetchall()
+    gastos_dia_map = {r['dia']: round(r['gastos'], 2) for r in gastos_dia}
+
+    por_dia = []
+    for row in ventas_dia:
+        d = row['dia']
+        por_dia.append({
+            'dia': d,
+            'label': d[5:],   # MM-DD
+            'ventas': round(row['ventas'], 2),
+            'efectivo': round(row['efectivo'], 2),
+            'tarjeta': round(row['tarjeta'], 2),
+            'gastos': round(gastos_dia_map.get(d, 0), 2),
+        })
+
     conn.close()
-    return {'por_mes': por_mes, 'por_año': por_año, 'tiendas': tiendas}
+    return {'por_mes': por_mes, 'por_año': por_año, 'tiendas': tiendas, 'por_dia': por_dia}
