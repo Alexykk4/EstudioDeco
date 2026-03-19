@@ -3602,8 +3602,9 @@
       if (usuario.perfil !== 'Administrador') { toast('⚠️', 'Solo Administrador', 'var(--gold)'); return; }
       const r = await api('/report/corte');
       const esp = r.efectivo_esperado;
-      const tarEsp = r.tarjeta_esperado || 0;
-      const totalEsp = r.total_esperado || 0;
+      const comTar = parseFloat(((r.total_tarjeta || 0) * 0.04).toFixed(2));
+      const tarNeta = parseFloat(((r.total_tarjeta || 0) - comTar).toFixed(2));
+      const totalEsp = parseFloat((esp + tarNeta).toFixed(2));
       const fondoApertura = r.fondo_apertura || 0;
       const desdeStr = r.desde ? r.desde.slice(11, 19) : '00:00:00';
       const sabroCard = '';
@@ -3632,13 +3633,17 @@
     <!-- Tarjetas de totales -->
     <div class="resumen-grid" style="margin-bottom:10px;grid-template-columns:repeat(3,1fr);">
       <div class="res-card"><div class="res-label">💵 Efectivo</div><div class="res-val v">$${(r.total_efectivo || 0).toFixed(2)}</div></div>
-      <div class="res-card"><div class="res-label">💳 Tarjeta</div><div class="res-val" style="color:var(--gold)">$${(r.total_tarjeta || 0).toFixed(2)}</div></div>
+      <div class="res-card">
+        <div class="res-label">💳 Tarjeta (bruto)</div>
+        <div class="res-val" style="color:var(--gold)">$${(r.total_tarjeta || 0).toFixed(2)}</div>
+        ${comTar > 0 ? `<div style="font-size:10px;color:var(--red);margin-top:2px;">− $${comTar.toFixed(2)} comisión 4%</div>` : ''}
+      </div>
       <div class="res-card"><div class="res-label">📦 Gastos</div><div class="res-val g">-$${r.total_gastos.toFixed(2)}</div></div>
     </div>
     <div class="resumen-grid" style="margin-bottom:12px;grid-template-columns:repeat(3,1fr);">
-      <div class="res-card" style="background:#E8F5E9"><div class="res-label" style="color:#2E7D32">Ef. en Caja</div><div class="res-val" style="color:#2E7D32">$${esp.toFixed(2)}</div></div>
-      <div class="res-card" style="background:#E3F2FD"><div class="res-label" style="color:#1565C0">Tarjeta Neta</div><div class="res-val" style="color:#1565C0">$${tarEsp.toFixed(2)}</div></div>
-      <div class="res-card" style="background:var(--sage-light)"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${totalEsp.toFixed(2)}</div></div>
+      <div class="res-card" style="background:var(--green-light);border:1px solid var(--sage);"><div class="res-label" style="color:var(--green-ok)">💵 Ef. en Caja</div><div class="res-val" style="color:var(--green-ok)">$${esp.toFixed(2)}</div></div>
+      <div class="res-card" style="background:var(--gold-light);border:1px solid var(--gold);"><div class="res-label" style="color:var(--gold)">💳 Tarjeta Neta</div><div class="res-val" style="color:var(--gold)">$${tarNeta.toFixed(2)}</div></div>
+      <div class="res-card" style="background:var(--sage-light);border:1px solid var(--sage);"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${totalEsp.toFixed(2)}</div></div>
     </div>
 
     <!-- Gráficas -->
