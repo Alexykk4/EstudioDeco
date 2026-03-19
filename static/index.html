@@ -3667,9 +3667,15 @@
       setTimeout(() => document.getElementById('iC')?.focus(), 100);
     }
     async function doIngreso() {
+      const tid = +document.getElementById('iT').value;
       const c = document.getElementById('iC').value.trim(), m = parseFloat(document.getElementById('iM').value), p = document.getElementById('iP').value;
       if (!c || !m || m <= 0) return;
-      await api('/ingresos', { method: 'POST', body: { usuario_id: usuario.id, concepto: c, monto: m, metodo_pago: p } });
+      const estacionT = tiendas.find(t => t.nombre === 'Estación 304');
+      if (estacionT && tid === estacionT.id) {
+        await api('/estacion/ingreso', { method: 'POST', body: { concepto: c, monto: m, metodo_pago: p } });
+      } else {
+        await api('/ingresos', { method: 'POST', body: { usuario_id: usuario.id, concepto: c, monto: m, metodo_pago: p } });
+      }
       closeModal(); toast('✅', `Ingreso: $${m.toFixed(2)} (${p})`, 'var(--green-ok)');
     }
 
