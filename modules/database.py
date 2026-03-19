@@ -379,15 +379,19 @@ def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0
     if abiertas_restantes == 0:
         cur.execute("UPDATE mesas SET estado='libre', nombre=CAST(numero AS TEXT) WHERE id=?", (mesa_id,))
         
-    # --- CALCULAR COMISIÓN TARJETA (4%) --- solo método Tarjeta
+    # --- CALCULAR COMISIÓN TARJETA (4%) ---
     if metodo_pago == 'Tarjeta':
         comision = round(total * 0.04, 2)
-        if comision > 0:
-            concepto_comision = f"Comisión Tarjeta 4% {folio}"
-            cur.execute("""
-                INSERT INTO gastos (usuario_id, categoria, tienda_id, concepto, monto, origen)
-                VALUES (?, 'General', NULL, ?, ?, 'Banco')
-            """, (usuario_id, concepto_comision, comision))
+    elif metodo_pago == 'Mixto' and monto_tarjeta > 0:
+        comision = round(monto_tarjeta * 0.04, 2)
+    else:
+        comision = 0.0
+    if comision > 0:
+        concepto_comision = f"Comisión Tarjeta 4% {folio}"
+        cur.execute("""
+            INSERT INTO gastos (usuario_id, categoria, tienda_id, concepto, monto, origen)
+            VALUES (?, 'General', NULL, ?, ?, 'Banco')
+        """, (usuario_id, concepto_comision, comision))
     # --------------------------------------
 
     conn.commit()
@@ -1055,8 +1059,8 @@ def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_ta
             if pid and not item.get("es_precio_abierto"):
                 cur.execute("UPDATE productos SET stock_local=stock_local-?, sincronizado=0 WHERE id=?", (item["cantidad"], pid))
             
-    # --- CALCULAR COMISIÓN TARJETA (4%) --- solo Tarjeta/Mixto, NO Transferencia
-    if monto_tarjeta > 0 and metodo_pago == 'Tarjeta':
+    # --- CALCULAR COMISIÓN TARJETA (4%) ---
+    if monto_tarjeta > 0 and metodo_pago in ('Tarjeta', 'Mixto'):
         comision = round(monto_tarjeta * 0.04, 2)
         if comision > 0:
             concepto_comision = f"Comisión Tarjeta 4% {folio}"

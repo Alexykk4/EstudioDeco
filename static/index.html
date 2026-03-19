@@ -2850,7 +2850,7 @@
     }
 
     /* ── ADD ITEM ── */
-    function prepareAddItem(prod, tienda) {
+    async function prepareAddItem(prod, tienda) {
       if (!usuario) return showNipModal(() => prepareAddItem(prod, tienda));
 
       if (prod.es_precio_abierto) {
@@ -2859,8 +2859,13 @@
     <div class="field"><label>Monto a cobrar</label><input type="number" id="paM" class="input" placeholder="0.00" step="0.01" onkeydown="if(event.key==='Enter')doAddItemAbierto(${prod.id}, ${tienda.id})"></div>
     <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="doAddItemAbierto(${prod.id}, ${tienda.id})">Agregar</button></div>`);
         setTimeout(() => document.getElementById('paM')?.focus(), 100);
+      } else if (prod.es_bundle) {
+        let comps = [];
+        try { comps = await api(`/bundle-components/${prod.id}`); } catch(e) {}
+        const tieneComp304 = comps.some(c => c.tienda_id === 1);
+        addItemFinal(prod, tienda, prod.nombre, prod.precio, false, tieneComp304);
       } else {
-        addItemFinal(prod, tienda, prod.nombre, prod.precio, false);
+        addItemFinal(prod, tienda, prod.nombre, prod.precio, false, false);
       }
     }
 
@@ -2880,9 +2885,10 @@
       addItemFinal(prod, tienda, d, m, true);
     }
 
-    async function addItemFinal(prod, tienda, nombre_hist, precio, abierto) {
+    async function addItemFinal(prod, tienda, nombre_hist, precio, abierto, tieneComp304 = false) {
       const cat = (prod.categoria_producto || "").trim().toLowerCase();
-      if (tienda.id === 1 && cat !== "extras" && !abierto && !nombre_hist.includes("(Frío)") && !nombre_hist.includes("(Caliente)")) {
+      const es304 = tienda.id === 1 || tieneComp304;
+      if (es304 && cat !== "extras" && !abierto && !nombre_hist.includes("(Frío)") && !nombre_hist.includes("(Caliente)")) {
         nombre_hist += " (Frío)";
       }
 
@@ -2909,7 +2915,7 @@
         if (abierto) {
           directCart.push({ producto_id: prod.id, tienda_id: tienda.id, nombre: nombre_hist, cantidad: 1, precio_unitario: precio, es_precio_abierto: true, categoria_producto: prod.categoria_producto });
         } else {
-          directCart.push({ producto_id: prod.id, tienda_id: tienda.id, nombre: nombre_hist, cantidad: 1, precio_unitario: precio, es_precio_abierto: false, categoria_producto: prod.categoria_producto });
+          directCart.push({ producto_id: prod.id, tienda_id: tienda.id, nombre: nombre_hist, cantidad: 1, precio_unitario: precio, es_precio_abierto: false, categoria_producto: prod.categoria_producto, tieneComp304 });
         }
         renderOrder();
         if (!abierto) {
@@ -3106,6 +3112,8 @@
       const cleanNombre = nombre.replace(" (Frío)", "").replace(" (Caliente)", "");
       const isC = nombre.includes("(Caliente)");
       const tienda_id = directCart[idx].tienda_id;
+      const tieneComp304 = directCart[idx].tieneComp304 || false;
+      const es304 = tienda_id === 1 || tieneComp304;
       const cat = (directCart[idx].categoria_producto || "").trim().toLowerCase();
 
       const parts = cleanNombre.split(" - ");
@@ -3113,7 +3121,7 @@
       const clienteNombre = parts.length > 1 ? parts.slice(1).join(" - ").trim() : "";
 
       let tempHtml = "";
-      if (tienda_id === 1 && cat !== "extras") {
+      if (es304 && cat !== "extras") {
         tempHtml = `
     <div class="field"><label>Temperatura</label>
       <select id="edTemp" class="input">
@@ -3125,7 +3133,7 @@
       }
 
       let extrasHtml = "";
-      if (tienda_id === 1) {
+      if (es304) {
         if (window.allExtrasTienda1.length > 0) {
           const opts = window.allExtrasTienda1.map(ex => `<option value="${ex.id}">${ex.nombre} (+$${ex.precio})</option>`).join('');
           extrasHtml = `
@@ -3138,7 +3146,7 @@
         }
       }
 
-      const labelClienteC = tienda_id === 1 ? 'Nombre en vaso / Cliente' : 'Nota / Cliente';
+      const labelClienteC = es304 ? 'Nombre en vaso / Cliente' : 'Nota / Cliente';
       showModal(`<div class="modal-title">✏️ Editar Artículo</div>
     <div class="field"><label>Descripción Base</label><input type="text" id="edN_base" class="input" value="${baseNombre}" readonly style="background:#f4f4f4; color:#888;"></div>
     <div class="field"><label>${labelClienteC}</label><input type="text" id="edN_cliente" class="input" value="${clienteNombre}"></div>
@@ -3564,7 +3572,7 @@
       const totalEsp = r.total_esperado || 0;
       const fondoApertura = r.fondo_apertura || 0;
       const desdeStr = r.desde ? r.desde.slice(11, 19) : '00:00:00';
-      const sabroCard = r.sabrodulce_roles > 0 ? `<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:var(--radius-sm);padding:8px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:#6D4C41;">🥐 Pago Sabrodulce · ${r.sabrodulce_roles} roles</span><span style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#E65100;">$${(r.sabrodulce_pago || 0).toFixed(2)}</span></div>` : '';
+      const sabroCard = '';
 
       // Charts data
       const segsPago = [
