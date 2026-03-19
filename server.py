@@ -1,7 +1,7 @@
 """
 server.py — Estudio Deco POS v2
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -139,7 +139,11 @@ class ProductReq(BaseModel):
 
 # ── Pages ──
 @app.get("/")
-async def root(): return FileResponse(str(STATIC / "index.html"))
+async def root():
+    r = FileResponse(str(STATIC / "index.html"))
+    r.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    r.headers["Pragma"] = "no-cache"
+    return r
 
 # ── Auth ──
 @app.post("/api/auth")
