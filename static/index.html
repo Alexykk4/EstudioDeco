@@ -4368,34 +4368,34 @@
           totI = rows.reduce((s, r) => s + r.ingresos, 0);
         const fmt$ = v => '$' + v.toLocaleString('es-MX', { minimumFractionDigits: 0 });
 
-        const kpis = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
-      <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:12px;text-align:center;border:1px solid var(--border-light);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:4px;">Ventas</div>
-        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);">${fmt$(totV)}</div>
+        const kpis = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
+      <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:2px;">Ventas</div>
+        <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);">${fmt$(totV)}</div>
       </div>
-      <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:12px;text-align:center;border:1px solid var(--border-light);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:4px;">Ingresos</div>
-        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--blue);">${fmt$(totI)}</div>
+      <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:2px;">Ingresos</div>
+        <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--blue);">${fmt$(totI)}</div>
       </div>
-      <div style="background:var(--red-light);border-radius:var(--radius-sm);padding:12px;text-align:center;border:1px solid var(--border-light);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red);margin-bottom:4px;">Gastos</div>
-        <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--red);">${fmt$(totG)}</div>
+      <div style="background:var(--red-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red);margin-bottom:2px;">Gastos</div>
+        <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--red);">${fmt$(totG)}</div>
       </div>
     </div>`;
 
         const bW = tab === 'mes' ? 20 : 36, gp = tab === 'mes' ? 6 : 16;
-        const chart1 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">📊 Ventas por ${tab}</div>
-      <div style="overflow-x:auto;">${svgBarsV(items.map(r => ({ label: r.label, value: r.ventas, color: '#7C9A7E' })), 120, bW, gp)}</div>
+        const chart1 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">📊 Ventas por ${tab}</div>
+      <div style="overflow-x:auto;">${svgBarsV(items.map(r => ({ label: r.label, value: r.ventas, color: '#7C9A7E' })), 90, bW, gp)}</div>
     </div>`;
 
-        const chart2 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">📉 Ventas vs Gastos</div>
-      <div style="display:flex;gap:14px;margin-bottom:8px;font-size:11px;">
-        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#7C9A7E;display:inline-block;"></span>Ventas</span>
-        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#EF9A9A;display:inline-block;"></span>Gastos</span>
+        const chart2 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">📉 Ventas vs Gastos (barras)</div>
+      <div style="display:flex;gap:12px;margin-bottom:6px;font-size:10px;">
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#7C9A7E;display:inline-block;"></span>Ventas</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#EF9A9A;display:inline-block;"></span>Gastos</span>
       </div>
-      <div style="overflow-x:auto;">${svgGrouped(items, { k: 'ventas', c: '#7C9A7E' }, { k: 'gastos', c: '#EF9A9A' }, 120, tab === 'mes' ? 13 : 28, tab === 'mes' ? 7 : 16)}</div>
+      <div style="overflow-x:auto;">${svgGrouped(items, { k: 'ventas', c: '#7C9A7E' }, { k: 'gastos', c: '#EF9A9A' }, 90, tab === 'mes' ? 13 : 28, tab === 'mes' ? 7 : 16)}</div>
     </div>`;
 
         // Gráfica ventas por tienda
@@ -4427,50 +4427,50 @@
           return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
         }
 
-        const chart5 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">💵 Balance Efectivo vs 💳 Tarjeta</div>
-      <div style="display:flex;gap:14px;margin-bottom:8px;font-size:11px;">
-        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#4CAF50;display:inline-block;"></span>Efectivo</span>
-        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#C9A84C;display:inline-block;"></span>Tarjeta</span>
+        const chart5 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">💵 Efectivo vs 💳 Tarjeta (diario)</div>
+      <div style="display:flex;gap:12px;margin-bottom:6px;font-size:10px;">
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#4CAF50;display:inline-block;"></span>Efectivo</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#C9A84C;display:inline-block;"></span>Tarjeta</span>
       </div>
-      <div style="overflow-x:auto;">${svgLineArea(diasItems, [{ k: 'efectivo', c: '#4CAF50' }, { k: 'tarjeta', c: '#C9A84C' }], 120)}</div>
+      <div style="overflow-x:auto;">${svgLineArea(diasItems, [{ k: 'efectivo', c: '#4CAF50' }, { k: 'tarjeta', c: '#C9A84C' }], 90)}</div>
     </div>`;
 
-        const chart3 = tiendas.length ? `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">🏪 Ventas por tienda</div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;font-size:11px;">
-        ${tiendaSeries.map(s => `<span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.k}</span>`).join('')}
+        const chart3 = tiendas.length ? `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">🏪 Ventas por tienda</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;font-size:10px;">
+        ${tiendaSeries.map(s => `<span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.k}</span>`).join('')}
       </div>
-      <div style="overflow-x:auto;">${svgMultiN(tiendaItems, tiendaSeries, 120)}</div>
+      <div style="overflow-x:auto;">${svgMultiN(tiendaItems, tiendaSeries, 90)}</div>
     </div>` : '';
 
-        const chart4 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">🍩 Distribución total</div>
-      <div style="display:flex;align-items:center;gap:20px;justify-content:center;">
-        ${svgDonut([{ label: 'Ventas', value: totV, color: '#7C9A7E' }, { label: 'Ingresos', value: totI, color: '#64B5F6' }, { label: 'Gastos', value: totG, color: '#EF9A9A' }].filter(s => s.value > 0), 110)}
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          ${[{ label: 'Ventas', v: totV, c: '#7C9A7E' }, { label: 'Ingresos', v: totI, c: '#64B5F6' }, { label: 'Gastos', v: totG, c: '#EF9A9A' }].map(s => `<div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="width:11px;height:11px;border-radius:3px;background:${s.c};display:inline-block;"></span>${s.label}: <strong>${fmt$(s.v)}</strong></div>`).join('')}
+        const chart4 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">🍩 Distribución total</div>
+      <div style="display:flex;align-items:center;gap:16px;justify-content:center;">
+        ${svgDonut([{ label: 'Ventas', value: totV, color: '#7C9A7E' }, { label: 'Ingresos', value: totI, color: '#64B5F6' }, { label: 'Gastos', value: totG, color: '#EF9A9A' }].filter(s => s.value > 0), 90)}
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          ${[{ label: 'Ventas', v: totV, c: '#7C9A7E' }, { label: 'Ingresos', v: totI, c: '#64B5F6' }, { label: 'Gastos', v: totG, c: '#EF9A9A' }].map(s => `<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:9px;height:9px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.label}: <strong>${fmt$(s.v)}</strong></div>`).join('')}
         </div>
       </div>
     </div>`;
 
-        const chart6 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">📈 Ventas vs Gastos</div>
-      <div style="display:flex;gap:14px;margin-bottom:8px;font-size:11px;">
-        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#7C9A7E;display:inline-block;"></span>Ventas</span>
-        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#EF9A9A;display:inline-block;"></span>Gastos</span>
+        const chart6 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">📈 Ventas vs Gastos (diario)</div>
+      <div style="display:flex;gap:12px;margin-bottom:6px;font-size:10px;">
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#7C9A7E;display:inline-block;"></span>Ventas</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#EF9A9A;display:inline-block;"></span>Gastos</span>
       </div>
-      <div style="overflow-x:auto;">${svgLineArea(diasItems, [{ k: 'ventas', c: '#7C9A7E' }, { k: 'gastos', c: '#EF9A9A' }], 120)}</div>
+      <div style="overflow-x:auto;">${svgLineArea(diasItems, [{ k: 'ventas', c: '#7C9A7E' }, { k: 'gastos', c: '#EF9A9A' }], 90)}</div>
     </div>`;
 
         // Balance acumulado diario caja vs banco
-        const chart7 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">💰 Balance Acumulado · Caja vs Banco</div>
-      <div style="display:flex;gap:14px;margin-bottom:8px;font-size:11px;">
-        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#4CAF50;display:inline-block;"></span>Caja (efectivo)</span>
-        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#90CAF9;display:inline-block;"></span>Banco (tarjeta)</span>
+        const chart7 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">💰 Balance Acumulado · Caja vs Banco</div>
+      <div style="display:flex;gap:12px;margin-bottom:6px;font-size:10px;">
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#4CAF50;display:inline-block;"></span>Caja</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#90CAF9;display:inline-block;"></span>Banco</span>
       </div>
-      <div style="overflow-x:auto;">${svgLineArea(diasBalAcc, [{ k: 'caja', c: '#4CAF50' }, { k: 'banco', c: '#90CAF9' }], 130)}</div>
+      <div style="overflow-x:auto;">${svgLineArea(diasBalAcc, [{ k: 'caja', c: '#4CAF50' }, { k: 'banco', c: '#90CAF9' }], 100)}</div>
     </div>`;
 
         const table = `<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Detalle</div>
