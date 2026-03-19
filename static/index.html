@@ -4904,6 +4904,9 @@
       const monto = parseFloat(document.getElementById('ptMonto').value);
       const metodo = document.getElementById('ptMetodo').value;
       if (!monto || monto <= 0) { toast('⚠️', 'Ingresa un monto válido', 'var(--gold)'); return; }
+      // Deshabilitar botón para evitar doble pago
+      const btn = document.querySelector('#modals .btn[onclick*="doPagoTienda"]');
+      if (btn) { btn.disabled = true; btn.textContent = 'Procesando...'; }
       try {
         await api('/pagos-tienda', {
           method: 'POST', body: {
@@ -4917,9 +4920,14 @@
             semana_fin: hasta
           }
         });
+        // Cerrar modal y refrescar
+        document.getElementById('modals').innerHTML = '';
         toast('✅', `Pago de $${monto.toFixed(2)} a ${tiendaNombre} registrado`, 'var(--green-ok)');
         showCorteSemanalModal();
-      } catch (e) { toast('❌', e.message, 'var(--red)'); }
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = '✓ Confirmar Pago'; }
+        toast('❌', e.message, 'var(--red)');
+      }
     }
 
 
