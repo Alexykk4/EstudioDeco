@@ -4331,7 +4331,7 @@
 
       // Line/area chart (single or multi series)
       function svgLineArea(items, series, maxH = 110) {
-        if (items.length < 2) return '';
+        if (items.length < 2) return `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">Se necesitan al menos 2 períodos para mostrar la gráfica</div>`;
         const tc = _tc();
         const W = Math.max(items.length * 38, 300), H = maxH + 28;
         const allV = items.flatMap(it => series.map(s => it[s.k] || 0));
@@ -4444,20 +4444,35 @@
       <div style="overflow-x:auto;">${svgMultiN(tiendaItems, tiendaSeries, 120)}</div>
     </div>` : '';
 
-        const chart4 = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">🍩 Distribución total</div>
-        <div style="display:flex;align-items:center;gap:14px;justify-content:center;">
-          ${svgDonut([{ label: 'Ventas', value: totV, color: '#7C9A7E' }, { label: 'Ingresos', value: totI, color: '#64B5F6' }, { label: 'Gastos', value: totG, color: '#EF9A9A' }].filter(s => s.value > 0), 100)}
-          <div style="display:flex;flex-direction:column;gap:7px;">
-            ${[{ label: 'Ventas', v: totV, c: '#7C9A7E' }, { label: 'Ingresos', v: totI, c: '#64B5F6' }, { label: 'Gastos', v: totG, c: '#EF9A9A' }].map(s => `<div style="display:flex;align-items:center;gap:6px;font-size:11px;"><span style="width:10px;height:10px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.label}: <strong>${fmt$(s.v)}</strong></div>`).join('')}
-          </div>
+        const chart4 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">🍩 Distribución total</div>
+      <div style="display:flex;align-items:center;gap:20px;justify-content:center;">
+        ${svgDonut([{ label: 'Ventas', value: totV, color: '#7C9A7E' }, { label: 'Ingresos', value: totI, color: '#64B5F6' }, { label: 'Gastos', value: totG, color: '#EF9A9A' }].filter(s => s.value > 0), 110)}
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${[{ label: 'Ventas', v: totV, c: '#7C9A7E' }, { label: 'Ingresos', v: totI, c: '#64B5F6' }, { label: 'Gastos', v: totG, c: '#EF9A9A' }].map(s => `<div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="width:11px;height:11px;border-radius:3px;background:${s.c};display:inline-block;"></span>${s.label}: <strong>${fmt$(s.v)}</strong></div>`).join('')}
         </div>
       </div>
-      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">📈 Ventas vs Gastos (línea)</div>
-        <div style="overflow-x:auto;">${svgLineArea(items, [{ k: 'ventas', c: '#7C9A7E' }, { k: 'gastos', c: '#EF9A9A' }], 100)}</div>
+    </div>`;
+
+        const chart6 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">📈 Ventas vs Gastos</div>
+      <div style="display:flex;gap:14px;margin-bottom:8px;font-size:11px;">
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#7C9A7E;display:inline-block;"></span>Ventas</span>
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#EF9A9A;display:inline-block;"></span>Gastos</span>
       </div>
+      <div style="overflow-x:auto;">${svgLineArea(items, [{ k: 'ventas', c: '#7C9A7E' }, { k: 'gastos', c: '#EF9A9A' }], 120)}</div>
+    </div>`;
+
+        // Balance acumulado caja vs banco
+        let efAcc = 0, tarAcc = 0;
+        const balAccItems = items.map(r => ({ label: r.label, caja: (efAcc += r.efectivo || 0), banco: (tarAcc += r.tarjeta || 0) }));
+        const chart7 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">💰 Balance Acumulado · Caja vs Banco</div>
+      <div style="display:flex;gap:14px;margin-bottom:8px;font-size:11px;">
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#4CAF50;display:inline-block;"></span>Caja (efectivo)</span>
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#90CAF9;display:inline-block;"></span>Banco (tarjeta)</span>
+      </div>
+      <div style="overflow-x:auto;">${svgLineArea(balAccItems, [{ k: 'caja', c: '#4CAF50' }, { k: 'banco', c: '#90CAF9' }], 130)}</div>
     </div>`;
 
         const table = `<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Detalle</div>
@@ -4485,7 +4500,7 @@
       </table>
     </div>`;
 
-        return kpis + chart5 + chart1 + chart2 + chart3 + chart4 + table;
+        return kpis + chart7 + chart5 + chart6 + chart1 + chart2 + chart3 + chart4 + table;
       }
 
       function renderModal(tab) {
