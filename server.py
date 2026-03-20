@@ -24,6 +24,7 @@ from modules.database import (
     obtener_balance_actual, ajustar_balance, limpiar_ingresos_gastos,
     registrar_nomina, listar_nominas,
     registrar_movimiento_estacion, obtener_balance_estacion, obtener_movimientos_estacion,
+    listar_gastos, anular_gasto, listar_ingresos, anular_ingreso,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf, generar_nomina_pdf
@@ -342,6 +343,13 @@ async def api_venta_directa(r: dict):
     return {"venta": venta, "impreso": impreso, "cajero": cajero}
 
 # ── Gastos ──
+@app.get("/api/gastos")
+async def api_listar_gastos(): return listar_gastos()
+
+@app.delete("/api/gastos/{gid}")
+async def api_anular_gasto(gid: int):
+    anular_gasto(gid); return {"ok": True}
+
 @app.post("/api/gastos")
 async def api_gasto(r: GastoReq):
     registrar_gasto(r.usuario_id, r.tienda_id, r.concepto, r.monto, r.origen)
@@ -367,6 +375,13 @@ async def api_gasto(r: GastoReq):
     return {"ok": True}
 
 # ── Ingresos ──
+@app.get("/api/ingresos")
+async def api_listar_ingresos(): return listar_ingresos()
+
+@app.delete("/api/ingresos/{iid}")
+async def api_anular_ingreso(iid: int):
+    anular_ingreso(iid); return {"ok": True}
+
 @app.post("/api/ingresos")
 async def api_ingreso(r: IngresoReq):
     registrar_ingreso(r.usuario_id, r.concepto, r.monto, r.metodo_pago)

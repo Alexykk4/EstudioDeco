@@ -2316,6 +2316,8 @@
       <div class="nav-section-label">Recursos</div>
       <button class="nav-item" onclick="openPage('👥 Nóminas', showNominasPage)"><span class="nav-icon">👥</span><span
           class="nav-label"> Nóminas</span></button>
+      <button class="nav-item" onclick="openPage('📋 Movimientos', showMovimientosPage)"><span class="nav-icon">📋</span><span
+          class="nav-label"> Movimientos</span></button>
       <div style="flex:1;"></div>
       <button class="nav-item" onclick="doLogout()" style="color:var(--red);margin-bottom:8px;"><span class="nav-icon">🚪</span><span class="nav-label"> Cerrar Sesión</span></button>
     </aside>
@@ -5029,6 +5031,101 @@
         document.getElementById('modals').innerHTML = '';
         if (wasFp) { _fpActive = true; _fpRendered = false; showNominasPage(); }
       } catch (e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    /* ── MOVIMIENTOS (Gastos e Ingresos) ── */
+    async function showMovimientosPage() {
+      if (!usuario) return showNipModal(() => showMovimientosPage());
+      if (usuario.perfil !== 'Administrador') { toast('⚠️', 'Solo Administrador', 'var(--gold)'); return; }
+      const [gastos, ingresos] = await Promise.all([
+        api('/gastos'), api('/ingresos')
+      ]);
+
+      function filaGasto(g) {
+        const fecha = (g.created_at || '').substring(0,16);
+        return `<tr>
+          <td style="padding:8px 10px;font-size:12px;color:var(--text-muted);">${fecha}</td>
+          <td style="padding:8px 10px;font-size:13px;">${g.concepto}</td>
+          <td style="padding:8px 10px;font-size:12px;color:var(--text-secondary);">${g.tienda}</td>
+          <td style="padding:8px 10px;font-size:12px;color:var(--text-secondary);">${g.origen}</td>
+          <td style="padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--red);text-align:right;">-$${g.monto.toFixed(2)}</td>
+          <td style="padding:8px 6px;text-align:center;"><button onclick="anularGasto(${g.id})" style="padding:4px 10px;font-size:11px;background:var(--red-light);color:var(--red);border:none;border-radius:6px;cursor:pointer;font-weight:600;">Anular</button></td>
+        </tr>`;
+      }
+
+      function filaIngreso(i) {
+        const fecha = (i.created_at || '').substring(0,16);
+        return `<tr>
+          <td style="padding:8px 10px;font-size:12px;color:var(--text-muted);">${fecha}</td>
+          <td style="padding:8px 10px;font-size:13px;">${i.concepto}</td>
+          <td style="padding:8px 10px;font-size:12px;color:var(--text-secondary);">${i.metodo_pago}</td>
+          <td style="padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--green-ok);text-align:right;">+$${i.monto.toFixed(2)}</td>
+          <td style="padding:8px 6px;text-align:center;"><button onclick="anularIngreso(${i.id})" style="padding:4px 10px;font-size:11px;background:var(--red-light);color:var(--red);border:none;border-radius:6px;cursor:pointer;font-weight:600;">Anular</button></td>
+        </tr>`;
+      }
+
+      const tablaEstilo = `width:100%;border-collapse:collapse;font-size:13px;`;
+      const thEstilo = `padding:8px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);border-bottom:2px solid var(--border);`;
+
+      showModal(`<div class="modal-body">
+        <div style="padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between;">
+          <div><div class="modal-title" style="margin:0;">📋 Movimientos</div><div class="modal-sub">Gastos e ingresos registrados</div></div>
+          <button class="btn btn-ghost" onclick="closeModal()">✕ Cerrar</button>
+        </div>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:24px;overflow-y:auto;max-height:70vh;">
+
+          <!-- GASTOS -->
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--red);margin-bottom:10px;">💸 Gastos (${gastos.length})</div>
+            ${gastos.length === 0 ? '<div style="color:var(--text-muted);font-size:13px;">Sin gastos registrados</div>' : `
+            <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <table style="${tablaEstilo}">
+                <thead><tr>
+                  <th style="${thEstilo}">Fecha</th><th style="${thEstilo}">Concepto</th>
+                  <th style="${thEstilo}">Tienda</th><th style="${thEstilo}">Origen</th>
+                  <th style="${thEstilo};text-align:right;">Monto</th><th style="${thEstilo}"></th>
+                </tr></thead>
+                <tbody>${gastos.map(filaGasto).join('')}</tbody>
+              </table>
+            </div>`}
+          </div>
+
+          <!-- INGRESOS -->
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--green-ok);margin-bottom:10px;">💰 Ingresos (${ingresos.length})</div>
+            ${ingresos.length === 0 ? '<div style="color:var(--text-muted);font-size:13px;">Sin ingresos registrados</div>' : `
+            <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <table style="${tablaEstilo}">
+                <thead><tr>
+                  <th style="${thEstilo}">Fecha</th><th style="${thEstilo}">Concepto</th>
+                  <th style="${thEstilo}">Método</th>
+                  <th style="${thEstilo};text-align:right;">Monto</th><th style="${thEstilo}"></th>
+                </tr></thead>
+                <tbody>${ingresos.map(filaIngreso).join('')}</tbody>
+              </table>
+            </div>`}
+          </div>
+
+        </div>
+      </div>`);
+    }
+
+    async function anularGasto(id) {
+      if (!confirm('¿Anular este gasto? Se eliminará del sistema.')) return;
+      await api(`/gastos/${id}`, { method: 'DELETE' });
+      toast('✅', 'Gasto anulado', 'var(--green-ok)');
+      const wasFp = _fpActive;
+      document.getElementById('modals').innerHTML = '';
+      if (wasFp) { _fpActive = true; _fpRendered = false; showMovimientosPage(); }
+    }
+
+    async function anularIngreso(id) {
+      if (!confirm('¿Anular este ingreso? Se eliminará del sistema.')) return;
+      await api(`/ingresos/${id}`, { method: 'DELETE' });
+      toast('✅', 'Ingreso anulado', 'var(--green-ok)');
+      const wasFp = _fpActive;
+      document.getElementById('modals').innerHTML = '';
+      if (wasFp) { _fpActive = true; _fpRendered = false; showMovimientosPage(); }
     }
 
     function toggleTheme() {

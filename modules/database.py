@@ -463,7 +463,42 @@ def registrar_gasto(usuario_id, tienda_id, concepto, monto, origen="Caja"):
                  (usuario_id, categoria, tienda_id, concepto, monto, origen))
     conn.commit(); conn.close()
 
+def listar_gastos(limit=200):
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT g.id, g.concepto, g.monto, g.origen, g.categoria, g.created_at,
+               COALESCE(u.nombre,'?') as usuario, COALESCE(t.nombre,'General') as tienda
+        FROM gastos g
+        LEFT JOIN usuarios u ON u.id = g.usuario_id
+        LEFT JOIN tiendas  t ON t.id = g.tienda_id
+        ORDER BY g.created_at DESC LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def anular_gasto(gasto_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM gastos WHERE id=?", (gasto_id,))
+    conn.commit(); conn.close()
+
 # ── INGRESOS ──
+def listar_ingresos(limit=200):
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT i.id, i.concepto, i.monto, i.metodo_pago, i.created_at,
+               COALESCE(u.nombre,'?') as usuario
+        FROM ingresos i
+        LEFT JOIN usuarios u ON u.id = i.usuario_id
+        ORDER BY i.created_at DESC LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def anular_ingreso(ingreso_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM ingresos WHERE id=?", (ingreso_id,))
+    conn.commit(); conn.close()
+
 def registrar_ingreso(usuario_id, concepto, monto, metodo_pago="Efectivo"):
     conn = get_connection()
     conn.execute("INSERT INTO ingresos (usuario_id, concepto, monto, metodo_pago) VALUES (?,?,?,?)",
