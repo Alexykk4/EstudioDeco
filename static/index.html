@@ -2298,10 +2298,6 @@
       <div class="nav-section-label">Caja</div>
       <button class="nav-item" onclick="showFondoModal()"><span class="nav-icon">🏦</span><span class="nav-label"> Abrir
           Caja</span></button>
-      <button class="nav-item" onclick="showIngresoModal()"><span class="nav-icon">💰</span><span class="nav-label">
-          Ingreso</span></button>
-      <button class="nav-item" onclick="showGastoModal()"><span class="nav-icon">💸</span><span class="nav-label">
-          Gasto</span></button>
       <div class="nav-section-label">Reportes</div>
       <button class="nav-item" onclick="showVentasHoyModal()"><span class="nav-icon">📋</span><span class="nav-label">
           Ventas del Día</span></button>
@@ -2316,8 +2312,8 @@
       <div class="nav-section-label">Recursos</div>
       <button class="nav-item" onclick="openPage('👥 Nóminas', showNominasPage)"><span class="nav-icon">👥</span><span
           class="nav-label"> Nóminas</span></button>
-      <button class="nav-item" onclick="openPage('📋 Movimientos', showMovimientosPage)"><span class="nav-icon">📋</span><span
-          class="nav-label"> Movimientos</span></button>
+      <button class="nav-item" onclick="openPage('💼 Gastos e Ingresos', showMovimientosPage)"><span class="nav-icon">💼</span><span
+          class="nav-label"> Gastos e Ingresos</span></button>
       <div style="flex:1;"></div>
       <button class="nav-item" onclick="doLogout()" style="color:var(--red);margin-bottom:8px;"><span class="nav-icon">🚪</span><span class="nav-label"> Cerrar Sesión</span></button>
     </aside>
@@ -5036,73 +5032,85 @@
     /* ── MOVIMIENTOS (Gastos e Ingresos) ── */
     async function showMovimientosPage() {
       if (!usuario) return showNipModal(() => showMovimientosPage());
-      if (usuario.perfil !== 'Administrador') { toast('⚠️', 'Solo Administrador', 'var(--gold)'); return; }
-      const [gastos, ingresos] = await Promise.all([
-        api('/gastos'), api('/ingresos')
-      ]);
+      const esAdmin = usuario.perfil === 'Administrador';
+      const [gastos, ingresos] = await Promise.all([api('/gastos'), api('/ingresos')]);
 
-      function filaGasto(g) {
-        const fecha = (g.created_at || '').substring(0,16);
-        return `<tr>
-          <td style="padding:8px 10px;font-size:12px;color:var(--text-muted);">${fecha}</td>
-          <td style="padding:8px 10px;font-size:13px;">${g.concepto}</td>
-          <td style="padding:8px 10px;font-size:12px;color:var(--text-secondary);">${g.tienda}</td>
-          <td style="padding:8px 10px;font-size:12px;color:var(--text-secondary);">${g.origen}</td>
-          <td style="padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--red);text-align:right;">-$${g.monto.toFixed(2)}</td>
-          <td style="padding:8px 6px;text-align:center;"><button onclick="anularGasto(${g.id})" style="padding:4px 10px;font-size:11px;background:var(--red-light);color:var(--red);border:none;border-radius:6px;cursor:pointer;font-weight:600;">Anular</button></td>
+      const ingresoTiendas = tiendas.filter(t => t.nombre === 'Estudio Deco' || t.nombre === 'Estación 304');
+      const ingOpts = ingresoTiendas.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('');
+      const gastoTiendas = tiendas.filter(t => t.nombre === 'Estudio Deco' || t.nombre === 'Estación 304');
+      const gasOpts = gastoTiendas.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('');
+
+      const th = `padding:8px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);border-bottom:2px solid var(--border);`;
+      const tbl = `width:100%;border-collapse:collapse;font-size:13px;`;
+
+      const filaG = g => {
+        const f = (g.created_at||'').substring(0,16);
+        return `<tr style="border-bottom:1px solid var(--border-light);">
+          <td style="padding:8px 10px;font-size:12px;color:var(--text-muted);">${f}</td>
+          <td style="padding:8px 10px;">${g.concepto}</td>
+          <td style="padding:8px 10px;font-size:12px;color:var(--text-secondary);">${g.tienda} · ${g.origen}</td>
+          <td style="padding:8px 10px;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--red);text-align:right;">-$${g.monto.toFixed(2)}</td>
+          ${esAdmin ? `<td style="padding:8px 6px;text-align:center;"><button onclick="anularGasto(${g.id})" style="padding:3px 9px;font-size:11px;background:var(--red-light);color:var(--red);border:none;border-radius:6px;cursor:pointer;font-weight:600;">Anular</button></td>` : '<td></td>'}
         </tr>`;
-      }
-
-      function filaIngreso(i) {
-        const fecha = (i.created_at || '').substring(0,16);
-        return `<tr>
-          <td style="padding:8px 10px;font-size:12px;color:var(--text-muted);">${fecha}</td>
-          <td style="padding:8px 10px;font-size:13px;">${i.concepto}</td>
+      };
+      const filaI = i => {
+        const f = (i.created_at||'').substring(0,16);
+        return `<tr style="border-bottom:1px solid var(--border-light);">
+          <td style="padding:8px 10px;font-size:12px;color:var(--text-muted);">${f}</td>
+          <td style="padding:8px 10px;">${i.concepto}</td>
           <td style="padding:8px 10px;font-size:12px;color:var(--text-secondary);">${i.metodo_pago}</td>
-          <td style="padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--green-ok);text-align:right;">+$${i.monto.toFixed(2)}</td>
-          <td style="padding:8px 6px;text-align:center;"><button onclick="anularIngreso(${i.id})" style="padding:4px 10px;font-size:11px;background:var(--red-light);color:var(--red);border:none;border-radius:6px;cursor:pointer;font-weight:600;">Anular</button></td>
+          <td style="padding:8px 10px;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--green-ok);text-align:right;">+$${i.monto.toFixed(2)}</td>
+          ${esAdmin ? `<td style="padding:8px 6px;text-align:center;"><button onclick="anularIngreso(${i.id})" style="padding:3px 9px;font-size:11px;background:var(--red-light);color:var(--red);border:none;border-radius:6px;cursor:pointer;font-weight:600;">Anular</button></td>` : '<td></td>'}
         </tr>`;
-      }
-
-      const tablaEstilo = `width:100%;border-collapse:collapse;font-size:13px;`;
-      const thEstilo = `padding:8px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);border-bottom:2px solid var(--border);`;
+      };
 
       showModal(`<div class="modal-body">
-        <div style="padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between;">
-          <div><div class="modal-title" style="margin:0;">📋 Movimientos</div><div class="modal-sub">Gastos e ingresos registrados</div></div>
-          <button class="btn btn-ghost" onclick="closeModal()">✕ Cerrar</button>
-        </div>
-        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:24px;overflow-y:auto;max-height:70vh;">
+        <div style="padding:18px 20px 0;"><div class="modal-title" style="margin:0;">💼 Gastos e Ingresos</div></div>
+        <div style="padding:14px 20px;display:flex;flex-direction:column;gap:20px;overflow-y:auto;max-height:80vh;">
+
+          <!-- FORMULARIOS -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <!-- Nuevo Gasto -->
+            <div style="background:var(--red-light);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:8px;">
+              <div style="font-size:13px;font-weight:700;color:var(--red);">💸 Nuevo Gasto</div>
+              <select id="mv_gOrigen" class="input" style="font-size:13px;padding:7px 10px;"><option value="Caja">Caja / Efectivo</option><option value="Banco">Banco / Transferencia</option></select>
+              <select id="mv_gTienda" class="input" style="font-size:13px;padding:7px 10px;">${gasOpts}</select>
+              <input id="mv_gConcepto" class="input" placeholder="Concepto" style="font-size:13px;padding:7px 10px;">
+              <input id="mv_gMonto" type="number" class="input" placeholder="Monto" step="0.01" style="font-size:13px;padding:7px 10px;">
+              <button onclick="mvGuardarGasto()" style="padding:8px;background:var(--red);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;">Guardar Gasto</button>
+            </div>
+            <!-- Nuevo Ingreso -->
+            <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:8px;">
+              <div style="font-size:13px;font-weight:700;color:var(--green-ok);">💰 Nuevo Ingreso</div>
+              <select id="mv_iDestino" class="input" style="font-size:13px;padding:7px 10px;">${ingOpts}</select>
+              <select id="mv_iMetodo" class="input" style="font-size:13px;padding:7px 10px;"><option value="Efectivo">Efectivo</option><option value="Tarjeta">Tarjeta / Transferencia</option></select>
+              <input id="mv_iConcepto" class="input" placeholder="Concepto" style="font-size:13px;padding:7px 10px;">
+              <input id="mv_iMonto" type="number" class="input" placeholder="Monto" step="0.01" style="font-size:13px;padding:7px 10px;">
+              <button onclick="mvGuardarIngreso()" style="padding:8px;background:var(--green-ok);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;">Guardar Ingreso</button>
+            </div>
+          </div>
 
           <!-- GASTOS -->
           <div>
-            <div style="font-size:14px;font-weight:700;color:var(--red);margin-bottom:10px;">💸 Gastos (${gastos.length})</div>
-            ${gastos.length === 0 ? '<div style="color:var(--text-muted);font-size:13px;">Sin gastos registrados</div>' : `
-            <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
-              <table style="${tablaEstilo}">
-                <thead><tr>
-                  <th style="${thEstilo}">Fecha</th><th style="${thEstilo}">Concepto</th>
-                  <th style="${thEstilo}">Tienda</th><th style="${thEstilo}">Origen</th>
-                  <th style="${thEstilo};text-align:right;">Monto</th><th style="${thEstilo}"></th>
-                </tr></thead>
-                <tbody>${gastos.map(filaGasto).join('')}</tbody>
-              </table>
+            <div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:8px;">💸 Historial de Gastos (${gastos.length})</div>
+            ${gastos.length === 0 ? '<div style="color:var(--text-muted);font-size:13px;">Sin gastos</div>' :
+            `<div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <table style="${tbl}"><thead><tr>
+                <th style="${th}">Fecha</th><th style="${th}">Concepto</th><th style="${th}">Tienda · Origen</th>
+                <th style="${th};text-align:right;">Monto</th><th style="${th}"></th>
+              </tr></thead><tbody>${gastos.map(filaG).join('')}</tbody></table>
             </div>`}
           </div>
 
           <!-- INGRESOS -->
           <div>
-            <div style="font-size:14px;font-weight:700;color:var(--green-ok);margin-bottom:10px;">💰 Ingresos (${ingresos.length})</div>
-            ${ingresos.length === 0 ? '<div style="color:var(--text-muted);font-size:13px;">Sin ingresos registrados</div>' : `
-            <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
-              <table style="${tablaEstilo}">
-                <thead><tr>
-                  <th style="${thEstilo}">Fecha</th><th style="${thEstilo}">Concepto</th>
-                  <th style="${thEstilo}">Método</th>
-                  <th style="${thEstilo};text-align:right;">Monto</th><th style="${thEstilo}"></th>
-                </tr></thead>
-                <tbody>${ingresos.map(filaIngreso).join('')}</tbody>
-              </table>
+            <div style="font-size:13px;font-weight:700;color:var(--green-ok);margin-bottom:8px;">💰 Historial de Ingresos (${ingresos.length})</div>
+            ${ingresos.length === 0 ? '<div style="color:var(--text-muted);font-size:13px;">Sin ingresos</div>' :
+            `<div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <table style="${tbl}"><thead><tr>
+                <th style="${th}">Fecha</th><th style="${th}">Concepto</th><th style="${th}">Método</th>
+                <th style="${th};text-align:right;">Monto</th><th style="${th}"></th>
+              </tr></thead><tbody>${ingresos.map(filaI).join('')}</tbody></table>
             </div>`}
           </div>
 
@@ -5110,22 +5118,46 @@
       </div>`);
     }
 
+    async function mvGuardarGasto() {
+      const origen = document.getElementById('mv_gOrigen').value;
+      const tienda_id = +document.getElementById('mv_gTienda').value;
+      const concepto = document.getElementById('mv_gConcepto').value.trim();
+      const monto = parseFloat(document.getElementById('mv_gMonto').value);
+      if (!concepto || !monto || monto <= 0) { toast('⚠️', 'Completa concepto y monto', 'var(--gold)'); return; }
+      await api('/gastos', { method: 'POST', body: { usuario_id: usuario.id, tienda_id, concepto, monto, origen } });
+      toast('✅', `Gasto $${monto.toFixed(2)} registrado`, 'var(--green-ok)');
+      _fpRendered = false; showMovimientosPage();
+    }
+
+    async function mvGuardarIngreso() {
+      const tid = +document.getElementById('mv_iDestino').value;
+      const metodo_pago = document.getElementById('mv_iMetodo').value;
+      const concepto = document.getElementById('mv_iConcepto').value.trim();
+      const monto = parseFloat(document.getElementById('mv_iMonto').value);
+      if (!concepto || !monto || monto <= 0) { toast('⚠️', 'Completa concepto y monto', 'var(--gold)'); return; }
+      const estacionT = tiendas.find(t => t.nombre === 'Estación 304');
+      if (estacionT && tid === estacionT.id) {
+        const hoy = new Date().toISOString().split('T')[0];
+        await api('/pagos-tienda', { method: 'POST', body: { tienda_id: tid, tienda_nombre: 'Estación 304', monto, metodo_pago, concepto, es_interno: true, semana_inicio: hoy, semana_fin: hoy }});
+      } else {
+        await api('/ingresos', { method: 'POST', body: { usuario_id: usuario.id, concepto, monto, metodo_pago } });
+      }
+      toast('✅', `Ingreso $${monto.toFixed(2)} registrado`, 'var(--green-ok)');
+      _fpRendered = false; showMovimientosPage();
+    }
+
     async function anularGasto(id) {
       if (!confirm('¿Anular este gasto? Se eliminará del sistema.')) return;
       await api(`/gastos/${id}`, { method: 'DELETE' });
       toast('✅', 'Gasto anulado', 'var(--green-ok)');
-      const wasFp = _fpActive;
-      document.getElementById('modals').innerHTML = '';
-      if (wasFp) { _fpActive = true; _fpRendered = false; showMovimientosPage(); }
+      _fpRendered = false; showMovimientosPage();
     }
 
     async function anularIngreso(id) {
       if (!confirm('¿Anular este ingreso? Se eliminará del sistema.')) return;
       await api(`/ingresos/${id}`, { method: 'DELETE' });
       toast('✅', 'Ingreso anulado', 'var(--green-ok)');
-      const wasFp = _fpActive;
-      document.getElementById('modals').innerHTML = '';
-      if (wasFp) { _fpActive = true; _fpRendered = false; showMovimientosPage(); }
+      _fpRendered = false; showMovimientosPage();
     }
 
     function toggleTheme() {
