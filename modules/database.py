@@ -453,15 +453,22 @@ def _generar_folio(conn):
 # ── GASTOS ──
 def registrar_gasto(usuario_id, tienda_id, concepto, monto, origen="Caja"):
     categoria = "General"
+    tienda_nombre = None
     if tienda_id:
         conn = get_connection()
-        row = conn.execute("SELECT categoria FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
+        row = conn.execute("SELECT categoria, nombre FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
         conn.close()
-        if row: categoria = row["categoria"]
+        if row:
+            categoria = row["categoria"]
+            tienda_nombre = row["nombre"]
     conn = get_connection()
     conn.execute("INSERT INTO gastos (usuario_id,categoria,tienda_id,concepto,monto,origen) VALUES (?,?,?,?,?,?)",
                  (usuario_id, categoria, tienda_id, concepto, monto, origen))
     conn.commit(); conn.close()
+    # Si el gasto es de Estación 304, también reflejarlo en su balance
+    if tienda_nombre and 'Estaci' in tienda_nombre:
+        metodo = 'Transferencia' if origen == 'Banco' else 'Efectivo'
+        registrar_movimiento_estacion('gasto', concepto, monto, metodo)
 
 def listar_gastos(limit=200):
     conn = get_connection()
