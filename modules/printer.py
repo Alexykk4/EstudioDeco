@@ -306,7 +306,9 @@ def imprimir_comanda(mesa_numero, items) -> bool:
         b  = bytearray(INIT + CP437)
         b += ALIGN_C + BOLD_ON + DBL_HW
         b += _txt(f'{mesa_numero}\n')
-        b += NORMAL + BOLD_OFF + ALIGN_L
+        b += NORMAL + BOLD_OFF + ALIGN_C + FONT_B
+        b += _txt(datetime.now().strftime('%d/%m/%Y  %H:%M') + '\n')
+        b += FONT_A + ALIGN_L
         b += _txt(('─' * ANCHO) + '\n')
         for i in items:
             b += BOLD_ON  + _txt(f'  x{i["cantidad"]}  ')

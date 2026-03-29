@@ -2724,17 +2724,33 @@
 
     function showAccountsModal(m) {
       const acts = m.ordenes.map(o => `
-    <button class="btn btn-ghost" style="width:100%; justify-content:space-between; padding:16px; margin-bottom:8px; border-radius:10px" onclick="closeModal(); openAccountView(${m.id}, ${o.id})">
-      <span style="font-weight:700">Cuenta: ${o.nombre_cliente || 'Sin nombre'}</span>
-      <span>Entrar →</span>
-    </button>`).join('');
+    <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
+      <button class="btn btn-ghost" style="flex:1; justify-content:space-between; padding:14px; border-radius:10px" onclick="closeModal(); openAccountView(${m.id}, ${o.id})">
+        <span style="font-weight:700">Cuenta: ${o.nombre_cliente || 'Sin nombre'}</span>
+        <span>Entrar →</span>
+      </button>
+      <button onclick="cancelarCuentaDesdeModal(${o.id}, ${m.id})" title="Eliminar cuenta" style="padding:10px 12px;background:var(--red-light);color:var(--red);border:none;border-radius:10px;cursor:pointer;font-size:16px;flex-shrink:0;">🗑️</button>
+    </div>`).join('');
 
       showModal(`<div class="modal-title">👥 Varias Cuentas</div><div class="modal-sub">Mesa ${m.numero}</div>
     <div style="max-height:300px; overflow-y:auto; margin-bottom:14px;">${acts}</div>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
       <button class="btn btn-sage" onclick="closeModal(); createNewAccountFromModal(${m.id})">+ Nueva Cuenta</button>
     </div>`);
+    }
+
+    async function cancelarCuentaDesdeModal(ordenId, mesaId) {
+      if (!confirm('¿Eliminar esta cuenta? Se borrarán todos sus artículos.')) return;
+      try {
+        await api(`/ordenes/${ordenId}`, { method: 'DELETE' });
+        await refreshMesas();
+        const m = mesas.find(x => x.id === mesaId);
+        closeModal();
+        if (m && m.ordenes && m.ordenes.length > 0) {
+          showAccountsModal(m);
+        }
+      } catch (e) { toast('❌', e.message, 'var(--red)'); }
     }
 
     async function createNewAccountFromModal(mesa_id) {
@@ -3033,9 +3049,6 @@
           currentOrden = todas.find(x => x.id === selectedOrden.id);
           selectedOrden = currentOrden;
           renderOrder();
-          if (!abierto && res.item_id) {
-            showEditItemModalDb(res.item_id, nombre_hist, precio, tienda.id, prod.id);
-          }
         } catch (e) { toast('❌', e.message, 'var(--red)'); return; }
       } else {
         // Direct sale mode
@@ -3045,9 +3058,6 @@
           directCart.push({ producto_id: prod.id, tienda_id: tienda.id, nombre: nombre_hist, cantidad: 1, precio_unitario: precio, es_precio_abierto: false, categoria_producto: prod.categoria_producto, tieneComp304 });
         }
         renderOrder();
-        if (!abierto) {
-          showEditItemModalCart(directCart.length - 1);
-        }
       }
       if (!abierto && prod.stock_local <= prod.stock_minimo && prod.stock_local > 0) toast('⚠️', `Stock bajo: ${prod.nombre}`, 'var(--gold)');
     }
@@ -3861,7 +3871,7 @@
       showModal(`<div class="modal-title">${p ? '✏️ Editar' : '📦 Nuevo'} Producto</div>
     <div class="resumen-grid" style="grid-template-columns:1fr 1fr; margin:0 0 10px 0;">
       <div class="field" style="margin:0"><label>Tienda</label><select id="catTienda" class="input" onchange="onCatTiendaChange()">${opts}</select></div>
-      <div class="field" style="margin:0"><label>Categoría</label><select id="catCat" class="input"><option value="">Ninguna</option><option value="roles" ${p && p.categoria_producto === 'roles' ? 'selected' : ''}>Roles</option><option value="talleres" ${p && p.categoria_producto === 'talleres' ? 'selected' : ''}>Talleres</option><option value="productos" ${p && p.categoria_producto === 'productos' ? 'selected' : ''}>Productos</option></select></div>
+      <div class="field" style="margin:0"><label>Categoría</label><select id="catCat" class="input"><option value="">Ninguna</option><option value="Bebidas" ${p && p.categoria_producto === 'Bebidas' ? 'selected' : ''}>Bebidas</option><option value="Extras" ${p && p.categoria_producto === 'Extras' ? 'selected' : ''}>Extras</option><option value="roles" ${p && p.categoria_producto === 'roles' ? 'selected' : ''}>Roles</option><option value="talleres" ${p && p.categoria_producto === 'talleres' ? 'selected' : ''}>Talleres</option><option value="productos" ${p && p.categoria_producto === 'productos' ? 'selected' : ''}>Productos</option></select></div>
     </div>
     <div class="field"><label>Nombre del paquete / producto</label><input type="text" id="catNombre" class="input" value="${p ? p.nombre : ''}"></div>
     <div class="resumen-grid" style="grid-template-columns:1fr 1fr; margin:0 0 10px 0;">
