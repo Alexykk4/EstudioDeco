@@ -1,12 +1,12 @@
 """
 server.py — Estudio Deco POS v2
 """
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pathlib import Path
-import uvicorn
+import uvicorn, hashlib, secrets
 
 from modules.database import (
     init_db, listar_tiendas, obtener_productos, validar_nip,
@@ -25,6 +25,11 @@ from modules.database import (
     registrar_nomina, listar_nominas,
     registrar_movimiento_estacion, obtener_balance_estacion, obtener_movimientos_estacion,
     listar_gastos, anular_gasto, listar_ingresos, anular_ingreso,
+    listar_ingredientes, calcular_porciones_disponibles, descontar_ingredientes_bebida,
+    restock_ingrediente, ajustar_stock_ingrediente, ajustar_stock_minimo, obtener_log_consumo,
+    registrar_compra_insumo, listar_entradas_ingrediente, listar_todas_entradas, crear_ingrediente,
+    listar_recetas, obtener_receta_detalle, crear_receta, actualizar_nombre_receta,
+    eliminar_receta, agregar_ingrediente_receta, quitar_ingrediente_receta,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf, generar_nomina_pdf
@@ -35,10 +40,17 @@ init_db(); sync_worker.start()
 app = FastAPI(title="Estudio Deco POS", version="2.0")
 
 # ── System users (login) ──
+# S-1: contraseñas almacenadas como hash SHA-256 (nunca en texto plano)
+def _hash_pw(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
+
 SYSTEM_USERS = {
-    "estudiodeco": {"password": "19jul",    "role": "deco"},
-    "estacion304": {"password": "telefono", "role": "estacion"},
+    "estudiodeco": {"password_hash": _hash_pw("19jul"),    "role": "deco"},
+    "estacion304": {"password_hash": _hash_pw("telefono"), "role": "estacion"},
 }
+
+# S-2: tokens de sesión en memoria (se invalidan al reiniciar el servidor)
+_active_tokens: dict[str, dict] = {}
 
 STATIC = Path(__file__).parent / "static"
 ASSETS = Path(__file__).parent / "assets"
@@ -116,6 +128,37 @@ class EstacionGastoReq(BaseModel):
     monto: float
     metodo_pago: str = "Efectivo"
 
+class RestockReq(BaseModel):
+    cantidad: float
+
+class AjustarStockReq(BaseModel):
+    nuevo_stock: float
+
+class AjustarMinimoReq(BaseModel):
+    stock_minimo: float
+
+class BebidaVendidaReq(BaseModel):
+    nombre_bebida: str
+
+class NuevoIngredienteReq(BaseModel):
+    nombre: str
+    unidad: str = "g"
+    stock_inicial: float = 0
+    stock_minimo: float = 0
+
+class CompraInsumoReq(BaseModel):
+    ingrediente_id: int
+    cantidad: float
+    costo_total: float
+    nota: str = ""
+
+class RecetaNombreReq(BaseModel):
+    nombre: str
+
+class RecetaIngredienteReq(BaseModel):
+    ingrediente_id: int
+    cantidad: float
+
 class PagoTiendaReq(BaseModel):
     tienda_id: int
     tienda_nombre: str
@@ -137,6 +180,7 @@ class ProductReq(BaseModel):
     es_precio_abierto: bool = False
     es_bundle: int = 0
     categoria_producto: str = ""
+    receta_key: str = ""
 
 # ── Pages ──
 @app.get("/")
@@ -156,9 +200,17 @@ async def auth(r: NipReq):
 @app.post("/api/login")
 async def login(r: LoginReq):
     user = SYSTEM_USERS.get(r.username)
-    if not user or user["password"] != r.password:
+    if not user or user["password_hash"] != _hash_pw(r.password):
         raise HTTPException(401, "Usuario o contraseña incorrectos")
-    return {"ok": True, "role": user["role"], "username": r.username}
+    token = secrets.token_urlsafe(32)
+    _active_tokens[token] = {"username": r.username, "role": user["role"]}
+    return {"ok": True, "role": user["role"], "username": r.username, "token": token}
+
+@app.post("/api/logout")
+async def logout(x_auth_token: str | None = Header(default=None)):
+    if x_auth_token and x_auth_token in _active_tokens:
+        del _active_tokens[x_auth_token]
+    return {"ok": True}
 
 # ── Estación 304 admin ──
 @app.get("/api/estacion/balance")
@@ -177,6 +229,75 @@ async def api_estacion_ingreso(r: EstacionGastoReq):
     registrar_movimiento_estacion('ingreso', r.concepto, r.monto, r.metodo_pago)
     return {"ok": True}
 
+# ── Inventario Estación 304 ──
+@app.get("/api/estacion/inventario")
+async def api_inventario():
+    return listar_ingredientes()
+
+@app.post("/api/estacion/inventario")
+async def api_crear_ingrediente(r: NuevoIngredienteReq):
+    try:
+        return crear_ingrediente(r.nombre, r.unidad, r.stock_inicial, r.stock_minimo)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/estacion/porciones")
+async def api_porciones():
+    return calcular_porciones_disponibles()
+
+@app.post("/api/estacion/inventario/{iid}/restock")
+async def api_restock(iid: int, r: RestockReq):
+    try:
+        restock_ingrediente(iid, r.cantidad)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.put("/api/estacion/inventario/{iid}")
+async def api_ajustar_stock(iid: int, r: AjustarStockReq):
+    try:
+        ajustar_stock_ingrediente(iid, r.nuevo_stock)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.put("/api/estacion/inventario/{iid}/minimo")
+async def api_ajustar_minimo(iid: int, r: AjustarMinimoReq):
+    try:
+        ajustar_stock_minimo(iid, r.stock_minimo)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/estacion/bebida-vendida")
+async def api_bebida_vendida(r: BebidaVendidaReq):
+    """Descuenta los ingredientes de una bebida al registrar su venta."""
+    try:
+        descontar_ingredientes_bebida(r.nombre_bebida)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/estacion/consumo-log")
+async def api_consumo_log():
+    return obtener_log_consumo()
+
+@app.post("/api/estacion/compras")
+async def api_registrar_compra(r: CompraInsumoReq):
+    try:
+        entrada = registrar_compra_insumo(r.ingrediente_id, r.cantidad, r.costo_total, r.nota)
+        return entrada
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/estacion/compras")
+async def api_todas_entradas():
+    return listar_todas_entradas()
+
+@app.get("/api/estacion/compras/{iid}")
+async def api_entradas_ingrediente(iid: int):
+    return listar_entradas_ingrediente(iid)
+
 # ── Data ──
 @app.get("/api/tiendas")
 async def api_tiendas(): return listar_tiendas()
@@ -190,12 +311,56 @@ async def api_get_catalog(): return obtener_todos_los_productos()
 
 @app.post("/api/catalog")
 async def api_post_catalog(r: ProductReq):
-    pid = crear_producto(r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo, 1 if r.es_precio_abierto else 0, r.es_bundle, r.categoria_producto)
+    pid = crear_producto(r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo, 1 if r.es_precio_abierto else 0, r.es_bundle, r.categoria_producto, r.receta_key)
     return {"id": pid}
 
 @app.put("/api/catalog/{pid}")
 async def api_put_catalog(pid: int, r: ProductReq):
-    actualizar_producto(pid, r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo, 1 if r.es_precio_abierto else 0, r.es_bundle, r.categoria_producto)
+    actualizar_producto(pid, r.tienda_id, r.nombre, r.precio, r.costo, r.stock_local, r.stock_minimo, r.codigo, 1 if r.es_precio_abierto else 0, r.es_bundle, r.categoria_producto, r.receta_key)
+    return {"ok": True}
+
+@app.get("/api/estacion/recetas")
+async def api_recetas():
+    return listar_recetas()
+
+@app.get("/api/estacion/recetas/{rid}")
+async def api_receta_detalle(rid: int):
+    r = obtener_receta_detalle(rid)
+    if r is None:
+        raise HTTPException(404, "Receta no encontrada")
+    return r
+
+@app.post("/api/estacion/recetas")
+async def api_crear_receta(r: RecetaNombreReq):
+    try:
+        return crear_receta(r.nombre)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.put("/api/estacion/recetas/{rid}")
+async def api_actualizar_receta(rid: int, r: RecetaNombreReq):
+    try:
+        actualizar_nombre_receta(rid, r.nombre)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.delete("/api/estacion/recetas/{rid}")
+async def api_eliminar_receta(rid: int):
+    eliminar_receta(rid)
+    return {"ok": True}
+
+@app.post("/api/estacion/recetas/{rid}/ingredientes")
+async def api_agregar_ing_receta(rid: int, r: RecetaIngredienteReq):
+    try:
+        agregar_ingrediente_receta(rid, r.ingrediente_id, r.cantidad)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.delete("/api/estacion/recetas/{rid}/ingredientes/{iid}")
+async def api_quitar_ing_receta(rid: int, iid: int):
+    quitar_ingrediente_receta(rid, iid)
     return {"ok": True}
 
 @app.delete("/api/catalog/{pid}")
@@ -206,31 +371,51 @@ async def api_del_catalog(pid: int):
 # ── MESAS / ORDENES ──
 @app.get("/api/mesas")
 async def api_mesas():
-    # listar_mesas needs to show how many orders are open per mesa
+    """Lista todas las mesas con sus órdenes e items usando 3 queries en total (S-8)."""
     conn = get_connection()
     mesas_raw = conn.execute("SELECT * FROM mesas").fetchall()
-    
+
+    # Query única para todas las órdenes abiertas
+    ordenes_raw = conn.execute(
+        "SELECT id, mesa_id, nombre_cliente FROM ordenes WHERE estado='abierta'"
+    ).fetchall()
+
+    # Query única para todos los items de esas órdenes
+    items_raw = []
+    if ordenes_raw:
+        orden_ids = [o["id"] for o in ordenes_raw]
+        ph = ",".join("?" * len(orden_ids))
+        items_raw = conn.execute(
+            f"SELECT orden_id, cantidad, precio_unitario FROM orden_items WHERE orden_id IN ({ph})",
+            orden_ids
+        ).fetchall()
+
+    conn.close()
+
+    # Construir mapas de lookup
+    items_by_orden = {}
+    for it in items_raw:
+        items_by_orden.setdefault(it["orden_id"], []).append(it)
+
+    ordenes_by_mesa = {}
+    for o in ordenes_raw:
+        ordenes_by_mesa.setdefault(o["mesa_id"], []).append(o)
+
     mesas = []
     for m in mesas_raw:
         m_dict = dict(m)
-        ordenes = conn.execute("SELECT id, nombre_cliente FROM ordenes WHERE mesa_id=? AND estado='abierta'", (m["id"],)).fetchall()
-        m_dict["ordenes"] = [dict(o) for o in ordenes]
-        m_dict["num_items"] = 0 # To conform to older API if needed, or recalculate
-        
-        # Calculate totals if needed
+        ordenes = ordenes_by_mesa.get(m["id"], [])
         total_orden = 0
         num_items = 0
         for o in ordenes:
-            items = conn.execute("SELECT cantidad, precio_unitario FROM orden_items WHERE orden_id=?", (o["id"],)).fetchall()
-            for it in items:
+            for it in items_by_orden.get(o["id"], []):
                 num_items += it["cantidad"]
                 total_orden += it["cantidad"] * it["precio_unitario"]
-        
+        m_dict["ordenes"] = [{"id": o["id"], "nombre_cliente": o["nombre_cliente"]} for o in ordenes]
         m_dict["total_orden"] = total_orden
         m_dict["num_items"] = num_items
         mesas.append(m_dict)
-        
-    conn.close()
+
     return mesas
 
 @app.post("/api/mesas/{mid}/abrir")
@@ -290,6 +475,30 @@ async def api_cancelar_orden(oid: int):
     if not ok: raise HTTPException(404, "Orden no encontrada")
     return {"ok": True}
 
+def _descontar_bebidas_venta(items: list):
+    """Descuenta ingredientes usando receta_key del producto. Opera silenciosamente."""
+    conn = get_connection()
+    for it in items:
+        prod_id   = it.get("producto_id")
+        receta_key = ""
+        if prod_id:
+            row = conn.execute("SELECT receta_key FROM productos WHERE id=?", (prod_id,)).fetchone()
+            if row:
+                receta_key = (row["receta_key"] or "").strip()
+        # Fallback: comparar nombre en mayúsculas (compatibilidad con productos sin receta asignada)
+        if not receta_key:
+            receta_key = (it.get("nombre_producto") or it.get("nombre") or "").strip().upper()
+        if not receta_key:
+            continue
+        cantidad = int(it.get("cantidad", 1))
+        for _ in range(cantidad):
+            try:
+                descontar_ingredientes_bebida(receta_key)
+            except Exception:
+                pass
+    conn.close()
+
+
 @app.post("/api/ordenes/{oid}/cerrar")
 async def api_cerrar(oid: int, r: CerrarMesaReq):
     # Obtener items de comanda ANTES de cerrar (items de barra no impresos)
@@ -297,6 +506,9 @@ async def api_cerrar(oid: int, r: CerrarMesaReq):
 
     venta = cerrar_mesa(oid, r.usuario_id, r.metodo_pago, r.monto_efectivo, r.monto_tarjeta, r.efectivo_recibido)
     if not venta: raise HTTPException(400, "No se pudo cerrar")
+
+    # Descontar ingredientes del inventario para bebidas de Estación 304
+    _descontar_bebidas_venta(venta.get("items", []))
 
     conn = get_connection()
     row = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (r.usuario_id,)).fetchone()
@@ -328,6 +540,8 @@ async def api_venta_directa(r: dict):
     row = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (r["usuario_id"],)).fetchone()
     conn.close()
     cajero = row["nombre"] if row else "?"
+    # Descontar ingredientes del inventario para bebidas de Estación 304
+    _descontar_bebidas_venta(venta.get("items", []))
     impreso = imprimir_ticket(venta, cajero)
     # Imprimir comanda automática para items de barra (tienda_id=1)
     # Consultamos venta_detalle (ya expandida con componentes de bundles)
@@ -344,7 +558,8 @@ async def api_venta_directa(r: dict):
 
 # ── Gastos ──
 @app.get("/api/gastos")
-async def api_listar_gastos(): return listar_gastos()
+async def api_listar_gastos(limit: int = 50, offset: int = 0):
+    return listar_gastos(limit=limit, offset=offset)
 
 @app.delete("/api/gastos/{gid}")
 async def api_anular_gasto(gid: int):
@@ -376,7 +591,8 @@ async def api_gasto(r: GastoReq):
 
 # ── Ingresos ──
 @app.get("/api/ingresos")
-async def api_listar_ingresos(): return listar_ingresos()
+async def api_listar_ingresos(limit: int = 50, offset: int = 0):
+    return listar_ingresos(limit=limit, offset=offset)
 
 @app.delete("/api/ingresos/{iid}")
 async def api_anular_ingreso(iid: int):
@@ -453,8 +669,8 @@ async def api_limpiar_semana(r: dict):
     return limpiar_ingresos_gastos(r['fecha_inicio'], r['fecha_fin'])
 
 @app.get("/api/nominas")
-async def api_listar_nominas():
-    return listar_nominas()
+async def api_listar_nominas(limit: int = 50, offset: int = 0):
+    return listar_nominas(limit=limit, offset=offset)
 
 @app.post("/api/nominas")
 async def api_registrar_nomina(r: dict):
