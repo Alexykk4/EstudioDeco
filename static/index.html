@@ -2204,7 +2204,7 @@
   <!-- ═══════════════════════════════════════════════════════════════
        ESTACIÓN 304 — ADMIN
   ═══════════════════════════════════════════════════════════════ -->
-  <div id="estacionApp" style="display:none;min-height:100vh;background:var(--bg);padding:0;">
+  <div id="estacionApp" style="display:none;height:100vh;background:var(--bg);padding:0;overflow-y:auto;">
     <!-- Header -->
     <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;">
       <span style="font-size:22px;">☕</span>
@@ -2212,8 +2212,20 @@
       <button id="themeToggleE" onclick="toggleTheme()" title="Cambiar tema" style="width:34px;height:34px;border:none;border-radius:50%;background:var(--bg-warm);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:var(--transition);">🌙</button>
       <button onclick="doLogout()" style="padding:8px 16px;background:var(--red-light);color:var(--red);border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:var(--transition);">Salir</button>
     </div>
-    <!-- Content -->
-    <div style="max-width:680px;margin:0 auto;padding:24px 16px;display:flex;flex-direction:column;gap:20px;">
+    <!-- Tab nav -->
+    <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;gap:0;">
+      <button id="estTab-finanzas" onclick="estSwitchTab('finanzas')"
+        style="padding:12px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid var(--sage);color:var(--sage);">
+        💰 Finanzas
+      </button>
+      <button id="estTab-inventario" onclick="estSwitchTab('inventario')"
+        style="padding:12px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--text-secondary);">
+        📦 Inventario
+      </button>
+    </div>
+
+    <!-- ── TAB FINANZAS ── -->
+    <div id="estPane-finanzas" style="max-width:680px;margin:0 auto;padding:24px 16px;display:flex;flex-direction:column;gap:20px;">
       <!-- Balance card -->
       <div id="estBalanceCard" style="background:var(--surface);border-radius:var(--radius-lg);padding:28px 24px;box-shadow:var(--shadow);text-align:center;">
         <div style="font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Balance Actual</div>
@@ -2257,6 +2269,57 @@
         <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:14px;">Historial de Movimientos</div>
         <div id="estMovimientos" style="display:flex;flex-direction:column;gap:8px;">
           <div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px;">Cargando...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB INVENTARIO ── -->
+    <div id="estPane-inventario" style="display:none;max-width:720px;margin:0 auto;padding:24px 16px;display:none;flex-direction:column;gap:20px;">
+      <!-- Porciones disponibles -->
+      <div style="background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;color:var(--text);">Bebidas disponibles</div>
+          <button onclick="loadInventarioEstacion()" style="padding:6px 12px;background:var(--bg-warm);color:var(--text);border:none;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;">↻ Actualizar</button>
+        </div>
+        <div id="estPorciones" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">
+          <div style="color:var(--text-muted);font-size:13px;">Cargando...</div>
+        </div>
+      </div>
+      <!-- Stock de ingredientes -->
+      <div style="background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:14px;font-weight:700;color:var(--text);">Stock de ingredientes</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button onclick="estVerHistorialCompras()" style="padding:6px 12px;background:var(--bg-warm);color:var(--text);border:none;border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;">📋 Historial</button>
+            <button onclick="estNuevoIngrediente()" style="padding:6px 12px;background:var(--bg-warm);color:var(--text);border:none;border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;">+ Nuevo</button>
+            <button onclick="estReponerTodo()" style="padding:6px 12px;background:var(--sage);color:#fff;border:none;border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;">+ Compra masiva</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">🛒 Comprar · Toca el nombre para ajustar stock o mínimo</div>
+        <div id="estIngredientes" style="display:flex;flex-direction:column;gap:6px;">
+          <div style="color:var(--text-muted);font-size:13px;">Cargando...</div>
+        </div>
+      </div>
+      <!-- Recetas -->
+      <div style="background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:14px;font-weight:700;color:var(--text);">📋 Recetas</div>
+          <button onclick="estNuevaReceta()" style="padding:6px 12px;background:var(--sage);color:#fff;border:none;border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;">+ Nueva receta</button>
+        </div>
+        <div id="estRecetasList" style="display:flex;flex-direction:column;gap:6px;">
+          <div style="color:var(--text-muted);font-size:13px;">Cargando...</div>
+        </div>
+      </div>
+      <!-- Venta manual (descuento de insumos) -->
+      <div style="background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);">
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:14px;">Registrar venta (descontar insumos)</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <select id="estBebidaSel" style="flex:1;min-width:160px;padding:11px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;outline:none;">
+            <option value="">Seleccionar bebida…</option>
+          </select>
+          <button onclick="estRegistrarVentaBebida()" style="padding:11px 18px;background:var(--sage);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;">
+            Descontar
+          </button>
         </div>
       </div>
     </div>
@@ -2484,9 +2547,11 @@
 
   <!-- Full-page view -->
   <div id="fullpage" class="hidden"></div>
-  <div id="modals"></div>
 
   </div><!-- /#decoApp -->
+
+  <!-- Modal container fuera de decoApp para que sea visible en sesión Estación también -->
+  <div id="modals"></div>
 
   <script>
     /* ═══════════════════════════════════════════════
@@ -2496,6 +2561,7 @@
     let currentView = 'mesas', selectedMesa = null, selectedOrden = null, currentOrden = null;
     let directCart = [];
     let currentProducts = [], currentTienda = null, searchFilter = "", categoryFilter = "";
+    let porcionesEstacion = {}; // {NOMBRE_BEBIDA: {porciones, cuello_de_botella}}
     let allProductsGlobal = null; // caché de todos los productos de todas las tiendas
     let propinaPct = 10; // porcentaje activo (0 = monto personalizado)
 
@@ -2869,6 +2935,14 @@
       }
       const prods = await api(`/productos/${t.id}`);
       currentProducts = prods;
+      // Si es Estación 304, cargar porciones del inventario de materia prima
+      if (t.nombre.toLowerCase().includes('estaci')) {
+        try {
+          porcionesEstacion = await fetch('/api/estacion/porciones').then(r => r.json());
+        } catch { porcionesEstacion = {}; }
+      } else {
+        porcionesEstacion = {};
+      }
 
       if (!prods.length) { sc.innerHTML = `<div class="mack-center"><div class="mack-sub">Sin productos en ${t.nombre}</div></div>`; document.getElementById('catFilters').style.display = 'none'; return; }
 
@@ -2976,11 +3050,23 @@
     }
 
     function renderProd(p, t) {
-      const out = p.stock_local <= 0, low = !out && p.stock_local <= p.stock_minimo;
       const isAbierto = p.es_precio_abierto;
-      const isBundle = p.es_bundle;
-      let sc = 'stock-ok', st = `${p.stock_local}`;
-      if (out) { sc = 'stock-out'; st = 'Agotado'; } else if (low) { sc = 'stock-low'; st = `⚠ ${p.stock_local}`; }
+      const isBundle  = p.es_bundle;
+      const esEstacion = t && t.nombre.toLowerCase().includes('estaci');
+
+      // Para productos de Estación 304, usar porciones del inventario en vez de stock_local
+      let efectivoStock = p.stock_local;
+      let porcionInfo = null;
+      if (esEstacion && Object.keys(porcionesEstacion).length) {
+        const key = (p.receta_key || p.nombre).toUpperCase().trim();
+        porcionInfo = porcionesEstacion[key] || null;
+        if (porcionInfo) efectivoStock = porcionInfo.porciones;
+      }
+
+      const out = efectivoStock <= 0, low = !out && efectivoStock <= p.stock_minimo && p.stock_minimo > 0;
+      let sc = 'stock-ok', st = esEstacion && porcionInfo ? `${efectivoStock} porc.` : `${efectivoStock}`;
+      if (out) { sc = 'stock-out'; st = esEstacion && porcionInfo ? 'Sin insumos' : 'Agotado'; }
+      else if (low) { sc = 'stock-low'; st = esEstacion && porcionInfo ? `⚠ ${efectivoStock} porc.` : `⚠ ${efectivoStock}`; }
       if (isAbierto) st = 'Abierto';
       if (isBundle) st = '📦 Paquete';
       const canAdd = !out || isAbierto || isBundle;
@@ -3865,15 +3951,26 @@
       } catch (e) { toast('❌', e.message, 'var(--red)'); }
     }
 
-    function showCatalogModal(p = null) {
+    async function showCatalogModal(p = null) {
       const isPromo = p ? (tiendas.find(t => t.id === p.tienda_id)?.nombre === 'Promociones') : false;
       const opts = tiendas.map(t => `<option value="${t.id}" ${p && p.tienda_id === t.id ? 'selected' : ''}>${t.nombre}</option>`).join('');
+      // Cargar recetas disponibles
+      let recetasOpts = '<option value="">— Sin receta —</option>';
+      try {
+        const recetas = await fetch('/api/estacion/recetas').then(r => r.json());
+        recetasOpts += recetas.map(r => `<option value="${r.nombre}" ${p && p.receta_key === r.nombre ? 'selected' : ''}>${r.nombre}</option>`).join('');
+      } catch {}
       showModal(`<div class="modal-title">${p ? '✏️ Editar' : '📦 Nuevo'} Producto</div>
     <div class="resumen-grid" style="grid-template-columns:1fr 1fr; margin:0 0 10px 0;">
       <div class="field" style="margin:0"><label>Tienda</label><select id="catTienda" class="input" onchange="onCatTiendaChange()">${opts}</select></div>
       <div class="field" style="margin:0"><label>Categoría</label><select id="catCat" class="input"><option value="">Ninguna</option><option value="Bebidas" ${p && p.categoria_producto === 'Bebidas' ? 'selected' : ''}>Bebidas</option><option value="Extras" ${p && p.categoria_producto === 'Extras' ? 'selected' : ''}>Extras</option><option value="roles" ${p && p.categoria_producto === 'roles' ? 'selected' : ''}>Roles</option><option value="talleres" ${p && p.categoria_producto === 'talleres' ? 'selected' : ''}>Talleres</option><option value="productos" ${p && p.categoria_producto === 'productos' ? 'selected' : ''}>Productos</option></select></div>
     </div>
     <div class="field"><label>Nombre del paquete / producto</label><input type="text" id="catNombre" class="input" value="${p ? p.nombre : ''}"></div>
+    <div class="field" id="catRecetaRow">
+      <label>Receta de inventario</label>
+      <select id="catReceta" class="input">${recetasOpts}</select>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Solo para Estación 304 — descuenta insumos al vender esta bebida</div>
+    </div>
     <div class="resumen-grid" style="grid-template-columns:1fr 1fr; margin:0 0 10px 0;">
       <div class="field" style="margin:0"><label>Precio de Venta</label><input type="number" id="catPrecio" class="input" step="0.01" value="${p ? p.precio : ''}"></div>
       <div class="field" style="margin:0"><label>Costo (Inversión)</label><input type="number" id="catCosto" class="input" step="0.01" value="${p ? (p.costo || 0) : ''}"></div>
@@ -3921,11 +4018,12 @@
       const cat = document.getElementById('catCat').value;
       const ab = document.getElementById('catAbierto').checked;
       const isBundle = document.getElementById('catBundle').checked;
+      const receta_key = document.getElementById('catReceta')?.value || '';
 
       if (!n || isNaN(p) || isNaN(tid)) return toast('⚠️', 'Llena los datos principales');
 
       try {
-        const body = { tienda_id: tid, nombre: n, precio: p, costo: c, stock_local: s, stock_minimo: m, codigo: "", es_precio_abierto: ab, es_bundle: isBundle ? 1 : 0, categoria_producto: cat };
+        const body = { tienda_id: tid, nombre: n, precio: p, costo: c, stock_local: s, stock_minimo: m, codigo: "", es_precio_abierto: ab, es_bundle: isBundle ? 1 : 0, categoria_producto: cat, receta_key };
         if (id) {
           await api(`/catalog/${id}`, { method: 'PUT', body });
           toast('✅', 'Producto actualizado');
@@ -5300,6 +5398,505 @@
         document.getElementById('estGastoMonto').value = '';
         toast('✅', 'Gasto registrado', 'var(--green-ok)');
         loadEstacionData();
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    // ── TABS ESTACIÓN ──────────────────────────────────────────────
+    function estSwitchTab(tab) {
+      ['finanzas', 'inventario'].forEach(t => {
+        const btn  = document.getElementById(`estTab-${t}`);
+        const pane = document.getElementById(`estPane-${t}`);
+        const active = t === tab;
+        btn.style.borderBottomColor  = active ? 'var(--sage)' : 'transparent';
+        btn.style.color              = active ? 'var(--sage)' : 'var(--text-secondary)';
+        pane.style.display           = active ? 'flex'        : 'none';
+      });
+      if (tab === 'inventario') loadInventarioEstacion();
+    }
+
+    // ── INVENTARIO ESTACIÓN 304 ────────────────────────────────────
+    async function loadInventarioEstacion() {
+      try {
+        const [porciones, ingredientes, recetas] = await Promise.all([
+          fetch('/api/estacion/porciones').then(r => r.json()),
+          fetch('/api/estacion/inventario').then(r => r.json()),
+          fetch('/api/estacion/recetas').then(r => r.json()),
+        ]);
+        renderPorcionesEstacion(porciones);
+        renderIngredientesEstacion(ingredientes);
+        // Poblar el selector de venta manual con recetas de BD
+        const sel = document.getElementById('estBebidaSel');
+        if (sel) {
+          sel.innerHTML = '<option value="">Seleccionar bebida…</option>' +
+            recetas.map(r => `<option value="${r.nombre}">${r.nombre}</option>`).join('');
+        }
+      } catch(e) { console.error('loadInventarioEstacion', e); }
+      loadRecetasEstacion();
+    }
+
+    function renderPorcionesEstacion(porciones) {
+      const el = document.getElementById('estPorciones');
+      if (!el) return;
+      const entries = Object.entries(porciones).sort((a,b) => b[1].porciones - a[1].porciones);
+      el.innerHTML = entries.map(([bebida, info]) => {
+        const n = info.porciones;
+        const color = n === 0 ? 'var(--red)' : n <= 2 ? 'var(--gold)' : 'var(--green-ok)';
+        const bg    = n === 0 ? 'var(--red-light)' : n <= 2 ? '#fff8e1' : 'var(--bg-warm)';
+        const cuello = info.faltantes?.length
+          ? `Sin: ${info.faltantes.join(', ')}`
+          : (info.cuello_de_botella ? `Límite: ${info.cuello_de_botella}` : '');
+        return `<div style="background:${bg};border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:2px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${bebida}</div>
+          <div style="font-size:22px;font-weight:800;color:${color};">${n}</div>
+          ${cuello ? `<div style="font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cuello}">${cuello}</div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    function renderIngredientesEstacion(ingredientes) {
+      const el = document.getElementById('estIngredientes');
+      if (!el) return;
+      el.innerHTML = ingredientes.map(ing => {
+        const bajo    = ing.stock_minimo > 0 && ing.stock_actual <= ing.stock_minimo;
+        const agotado = ing.stock_actual <= 0;
+        const bgColor  = agotado ? 'var(--red-light)' : bajo ? '#fff8e1' : 'var(--bg-warm)';
+        const numColor = agotado ? 'var(--red)' : bajo ? 'var(--gold)' : 'var(--text)';
+        const unidad   = ing.unidad === 'unidad' ? 'uds' : ing.unidad;
+        const costo    = ing.costo_unitario > 0 ? `$${ing.costo_unitario.toFixed(2)}/${unidad}` : '';
+        const nomEsc   = ing.nombre.replace(/'/g,"\\'");
+        return `<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:${bgColor};border-radius:var(--radius-sm);">
+          <div onclick="estEditarIngrediente(${ing.id},'${nomEsc}',${ing.stock_actual},${ing.stock_minimo},'${ing.unidad}')"
+            style="flex:1;cursor:pointer;display:flex;flex-direction:column;gap:1px;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);">${ing.nombre}</div>
+            ${costo ? `<div style="font-size:11px;color:var(--text-muted);">CPP: ${costo}</div>` : ''}
+          </div>
+          <div style="font-size:13px;font-weight:700;color:${numColor};white-space:nowrap;">${ing.stock_actual.toFixed(0)} ${unidad}</div>
+          ${agotado ? '<div style="font-size:10px;font-weight:700;color:var(--red);background:var(--red-light);padding:2px 6px;border-radius:4px;">AGOTADO</div>' : bajo ? '<div style="font-size:10px;font-weight:700;color:var(--gold);background:#fff8e1;padding:2px 6px;border-radius:4px;">BAJO</div>' : ''}
+          <button onclick="estModalCompra(${ing.id},'${nomEsc}','${ing.unidad}')" title="Registrar compra"
+            style="padding:6px 10px;background:var(--sage);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;cursor:pointer;flex-shrink:0;">🛒</button>
+        </div>`;
+      }).join('');
+    }
+
+    // ── RECETAS ──────────────────────────────────────────────────────
+    async function loadRecetasEstacion() {
+      const el = document.getElementById('estRecetasList');
+      if (!el) return;
+      try {
+        const recetas = await fetch('/api/estacion/recetas').then(r => r.json());
+        if (!recetas.length) {
+          el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Sin recetas.</div>';
+          return;
+        }
+        el.innerHTML = recetas.map(r => `
+          <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg-warm);border-radius:var(--radius-sm);">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:600;color:var(--text);">${r.nombre}</div>
+              <div style="font-size:11px;color:var(--text-muted);">${r.num_ingredientes} ingrediente${r.num_ingredientes !== 1 ? 's' : ''}</div>
+            </div>
+            <button onclick="estEditarReceta(${r.id}, '${r.nombre.replace(/'/g,"&#39;")}')" title="Editar" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:13px;">✏️</button>
+            <button onclick="estEliminarReceta(${r.id}, '${r.nombre.replace(/'/g,"&#39;")}')" title="Eliminar" style="padding:6px 10px;background:var(--red-light);color:var(--red);border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;">🗑️</button>
+          </div>`).join('');
+      } catch(e) { el.innerHTML = '<div style="color:var(--red);font-size:13px;">Error al cargar recetas.</div>'; }
+    }
+
+    function estNuevaReceta() {
+      showModal(`
+        <div class="modal-title">📋 Nueva Receta</div>
+        <div class="modal-simple" style="display:flex;flex-direction:column;gap:12px;margin-top:12px;">
+          <div class="field">
+            <label>Nombre de la receta</label>
+            <input id="recNombre" type="text" class="input" placeholder="Ej. LATTE ESPECIAL" style="width:100%;">
+          </div>
+        </div>
+        <div class="modal-btns" style="margin-top:16px;">
+          <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-sage" onclick="estGuardarNombreReceta(null)">Crear</button>
+        </div>`);
+    }
+
+    async function estEditarReceta(id, nombre) {
+      let detalle;
+      try {
+        detalle = await fetch(`/api/estacion/recetas/${id}`).then(r => r.json());
+      } catch(e) { toast('❌', 'Error al cargar receta', 'var(--red)'); return; }
+
+      let ings = [];
+      try {
+        ings = await fetch('/api/estacion/inventario').then(r => r.json());
+      } catch(e) {}
+
+      const ingOpts = ings.map(i => `<option value="${i.id}">${i.nombre} (${i.unidad === 'unidad' ? 'uds' : i.unidad})</option>`).join('');
+      const ingRows = detalle.ingredientes.map(i => `
+        <tr>
+          <td style="padding:6px 8px;">${i.ingrediente_nombre}</td>
+          <td style="padding:6px 8px;">${i.cantidad} ${i.unidad === 'unidad' ? 'uds' : i.unidad}</td>
+          <td style="padding:6px 8px;text-align:right;">
+            <button onclick="estQuitarIngReceta(${id}, ${i.ingrediente_id})" style="padding:3px 8px;background:var(--red-light);color:var(--red);border:none;border-radius:4px;cursor:pointer;font-size:12px;">✕</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="3" style="padding:8px;color:var(--text-muted);font-size:12px;">Sin ingredientes</td></tr>';
+
+      showModal(`
+        <div class="modal-title">✏️ Editar Receta</div>
+        <div class="modal-simple" style="display:flex;flex-direction:column;gap:14px;margin-top:12px;">
+          <div style="display:flex;gap:8px;align-items:flex-end;">
+            <div class="field" style="flex:1;margin:0;">
+              <label>Nombre</label>
+              <input id="recNombre" type="text" class="input" value="${detalle.nombre}" style="width:100%;">
+            </div>
+            <button class="btn btn-sage" style="white-space:nowrap;" onclick="estGuardarNombreReceta(${id})">Guardar nombre</button>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;">Ingredientes</div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;" id="recIngTable">
+              <thead><tr style="background:var(--bg-warm);">
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-secondary);">Ingrediente</th>
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-secondary);">Cantidad</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="recIngBody">${ingRows}</tbody>
+            </table>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:10px;background:var(--bg-warm);border-radius:var(--radius-sm);">
+            <div class="field" style="flex:2;min-width:140px;margin:0;">
+              <label>Ingrediente</label>
+              <select id="recIngSel" class="input">${ingOpts}</select>
+            </div>
+            <div class="field" style="flex:1;min-width:80px;margin:0;">
+              <label>Cantidad</label>
+              <input id="recIngCant" type="number" min="0.01" step="0.01" class="input" placeholder="g / uds">
+            </div>
+            <button class="btn btn-sage" style="white-space:nowrap;" onclick="estAgregarIngReceta(${id})">Agregar</button>
+          </div>
+        </div>
+        <div class="modal-btns" style="margin-top:16px;">
+          <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+        </div>`);
+    }
+
+    async function estGuardarNombreReceta(id) {
+      const nombre = (document.getElementById('recNombre')?.value || '').trim();
+      if (!nombre) { toast('⚠️', 'Ingresa un nombre', 'var(--gold)'); return; }
+      try {
+        if (id) {
+          const res = await fetch(`/api/estacion/recetas/${id}`, {
+            method: 'PUT', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ nombre })
+          });
+          if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error'); }
+          toast('✅', 'Nombre actualizado', 'var(--green-ok)');
+        } else {
+          const res = await fetch('/api/estacion/recetas', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ nombre })
+          });
+          if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error'); }
+          const nueva = await res.json();
+          closeModal();
+          toast('✅', 'Receta creada', 'var(--green-ok)');
+          estEditarReceta(nueva.id, nueva.nombre);
+        }
+        loadRecetasEstacion();
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    async function estAgregarIngReceta(recetaId) {
+      const ingrediente_id = parseInt(document.getElementById('recIngSel')?.value);
+      const cantidad = parseFloat(document.getElementById('recIngCant')?.value);
+      if (!ingrediente_id || !cantidad || cantidad <= 0) {
+        toast('⚠️', 'Selecciona un ingrediente y cantidad válida', 'var(--gold)'); return;
+      }
+      try {
+        const res = await fetch(`/api/estacion/recetas/${recetaId}/ingredientes`, {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ ingrediente_id, cantidad })
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error'); }
+        toast('✅', 'Ingrediente agregado', 'var(--green-ok)');
+        estEditarReceta(recetaId, '');
+        loadRecetasEstacion();
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    async function estQuitarIngReceta(recetaId, ingredienteId) {
+      try {
+        await fetch(`/api/estacion/recetas/${recetaId}/ingredientes/${ingredienteId}`, { method: 'DELETE' });
+        toast('✅', 'Ingrediente eliminado', 'var(--green-ok)');
+        estEditarReceta(recetaId, '');
+        loadRecetasEstacion();
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    async function estEliminarReceta(id, nombre) {
+      if (!confirm(`¿Eliminar la receta "${nombre}"? Esta acción no se puede deshacer.`)) return;
+      try {
+        await fetch(`/api/estacion/recetas/${id}`, { method: 'DELETE' });
+        toast('✅', `Receta "${nombre}" eliminada`, 'var(--green-ok)');
+        loadRecetasEstacion();
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    function estEditarIngrediente(id, nombre, stockActual, stockMinimo, unidad) {
+      const u = unidad === 'unidad' ? 'unidades' : 'g/ml';
+      showModal(`
+        <div class="modal-title">📦 ${nombre}</div>
+        <div class="modal-sub">Stock actual: ${stockActual.toFixed(0)} ${u}</div>
+        <div class="modal-simple" style="margin-top:14px;display:flex;flex-direction:column;gap:12px;">
+          <div class="field">
+            <label>Reponer (sumar al stock)</label>
+            <input id="invRestockAmt" type="number" min="0" step="1" placeholder="Cantidad a agregar"
+              class="input" style="width:100%;">
+          </div>
+          <div class="field">
+            <label>Ajustar stock exacto (inventario físico)</label>
+            <input id="invAjusteAmt" type="number" min="0" step="1" placeholder="Nuevo total"
+              class="input" style="width:100%;" value="${stockActual}">
+          </div>
+          <div class="field">
+            <label>Stock mínimo de alerta</label>
+            <input id="invMinimoAmt" type="number" min="0" step="1" placeholder="0"
+              class="input" style="width:100%;" value="${stockMinimo}">
+          </div>
+        </div>
+        <div class="modal-btns" style="margin-top:16px;">
+          <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-sage" onclick="estGuardarIngrediente(${id})">Guardar</button>
+        </div>`);
+    }
+
+    async function estGuardarIngrediente(id) {
+      const restock = parseFloat(document.getElementById('invRestockAmt').value) || 0;
+      const ajuste  = parseFloat(document.getElementById('invAjusteAmt').value);
+      const minimo  = parseFloat(document.getElementById('invMinimoAmt').value) || 0;
+      try {
+        const promises = [];
+        if (restock > 0) {
+          promises.push(fetch(`/api/estacion/inventario/${id}/restock`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ cantidad: restock })
+          }));
+        } else {
+          promises.push(fetch(`/api/estacion/inventario/${id}`, {
+            method: 'PUT', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ nuevo_stock: ajuste })
+          }));
+        }
+        promises.push(fetch(`/api/estacion/inventario/${id}/minimo`, {
+          method: 'PUT', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ stock_minimo: minimo })
+        }));
+        await Promise.all(promises);
+        closeModal();
+        toast('✅', 'Stock actualizado', 'var(--green-ok)');
+        loadInventarioEstacion();
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    async function estRegistrarVentaBebida() {
+      const sel = document.getElementById('estBebidaSel');
+      const bebida = sel?.value;
+      if (!bebida) { toast('⚠️', 'Selecciona una bebida', 'var(--gold)'); return; }
+      try {
+        const res = await fetch('/api/estacion/bebida-vendida', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ nombre_bebida: bebida })
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error'); }
+        sel.value = '';
+        toast('✅', `${bebida} descontada`, 'var(--green-ok)');
+        loadInventarioEstacion();
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    function estReponerTodo() {
+      showModal(`
+        <div class="modal-title">📦 Ingreso masivo de stock</div>
+        <div class="modal-sub">Introduce las cantidades que ingresan por ingrediente</div>
+        <div class="modal-simple" style="max-height:55vh;overflow-y:auto;margin-top:14px;" id="masivoCont">
+          <div style="color:var(--text-muted);font-size:13px;">Cargando...</div>
+        </div>
+        <div class="modal-btns" style="margin-top:16px;">
+          <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-sage" onclick="estGuardarMasivo()">Guardar todo</button>
+        </div>`);
+      fetch('/api/estacion/inventario').then(r => r.json()).then(ings => {
+        document.getElementById('masivoCont').innerHTML = ings.map(ing => {
+          const u = ing.unidad === 'unidad' ? 'uds' : 'g';
+          return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <label style="flex:1;font-size:13px;font-weight:600;">${ing.nombre} <span style="font-weight:400;color:var(--text-muted);">(${ing.stock_actual.toFixed(0)} ${u})</span></label>
+            <input data-id="${ing.id}" type="number" min="0" step="1" placeholder="+0"
+              style="width:80px;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:13px;text-align:right;">
+          </div>`;
+        }).join('');
+      });
+    }
+
+    // ── NUEVO INGREDIENTE ──────────────────────────────────────────
+    function estNuevoIngrediente() {
+      showModal(`
+        <div class="modal-title">➕ Nuevo ingrediente</div>
+        <div class="modal-simple" style="margin-top:14px;display:flex;flex-direction:column;gap:12px;">
+          <div class="field">
+            <label>Nombre</label>
+            <input id="nuevoIngNombre" type="text" placeholder="ej. Canela, Polvo de cacao…"
+              class="input" style="width:100%;" autofocus>
+          </div>
+          <div class="field">
+            <label>Unidad de medida</label>
+            <select id="nuevoIngUnidad" class="input" style="width:100%;">
+              <option value="g">Gramos / ml</option>
+              <option value="unidad">Unidades (piezas)</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <div class="field" style="flex:1;">
+              <label>Stock inicial (opcional)</label>
+              <input id="nuevoIngStock" type="number" min="0" step="1" placeholder="0"
+                class="input" style="width:100%;">
+            </div>
+            <div class="field" style="flex:1;">
+              <label>Stock mínimo de alerta</label>
+              <input id="nuevoIngMinimo" type="number" min="0" step="1" placeholder="0"
+                class="input" style="width:100%;">
+            </div>
+          </div>
+        </div>
+        <div class="modal-btns" style="margin-top:16px;">
+          <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-sage" onclick="estGuardarNuevoIngrediente()">Crear</button>
+        </div>`);
+    }
+
+    async function estGuardarNuevoIngrediente() {
+      const nombre  = document.getElementById('nuevoIngNombre').value.trim();
+      const unidad  = document.getElementById('nuevoIngUnidad').value;
+      const stock   = parseFloat(document.getElementById('nuevoIngStock').value) || 0;
+      const minimo  = parseFloat(document.getElementById('nuevoIngMinimo').value) || 0;
+      if (!nombre) { toast('⚠️', 'Escribe un nombre', 'var(--gold)'); return; }
+      try {
+        const res = await fetch('/api/estacion/inventario', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ nombre, unidad, stock_inicial: stock, stock_minimo: minimo })
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error'); }
+        closeModal();
+        toast('✅', `"${nombre}" agregado al inventario`, 'var(--green-ok)');
+        loadInventarioEstacion();
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    // ── COMPRAS DE INSUMOS ─────────────────────────────────────────
+    function estModalCompra(id, nombre, unidad) {
+      const u = unidad === 'unidad' ? 'unidades' : 'g/ml';
+      showModal(`
+        <div class="modal-title">🛒 Registrar compra</div>
+        <div class="modal-sub">${nombre}</div>
+        <div class="modal-simple" style="margin-top:14px;display:flex;flex-direction:column;gap:12px;">
+          <div class="field">
+            <label>Cantidad comprada (${u})</label>
+            <input id="compraCantidad" type="number" min="0.01" step="1" placeholder="ej. 1000"
+              class="input" style="width:100%;" autofocus>
+          </div>
+          <div class="field">
+            <label>Costo total de la compra ($)</label>
+            <input id="compraCosto" type="number" min="0" step="0.01" placeholder="ej. 85.00"
+              class="input" style="width:100%;">
+          </div>
+          <div id="compraCppPreview" style="font-size:12px;color:var(--text-muted);min-height:16px;"></div>
+          <div class="field">
+            <label>Nota (opcional)</label>
+            <input id="compraNota" type="text" placeholder="ej. Lala 1L, Walmart"
+              class="input" style="width:100%;">
+          </div>
+        </div>
+        <div class="modal-btns" style="margin-top:16px;">
+          <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-sage" onclick="estGuardarCompra(${id})">Guardar compra</button>
+        </div>`);
+
+      // Preview de costo unitario en tiempo real
+      const preview = () => {
+        const cant  = parseFloat(document.getElementById('compraCantidad')?.value) || 0;
+        const costo = parseFloat(document.getElementById('compraCosto')?.value) || 0;
+        const el    = document.getElementById('compraCppPreview');
+        if (el && cant > 0 && costo > 0)
+          el.textContent = `Costo unitario: $${(costo/cant).toFixed(4)}/${u}`;
+        else if (el) el.textContent = '';
+      };
+      setTimeout(() => {
+        document.getElementById('compraCantidad')?.addEventListener('input', preview);
+        document.getElementById('compraCosto')?.addEventListener('input', preview);
+      }, 50);
+    }
+
+    async function estGuardarCompra(id) {
+      const cantidad   = parseFloat(document.getElementById('compraCantidad').value);
+      const costo      = parseFloat(document.getElementById('compraCosto').value);
+      const nota       = document.getElementById('compraNota').value.trim();
+      if (!cantidad || cantidad <= 0) { toast('⚠️', 'Ingresa la cantidad', 'var(--gold)'); return; }
+      if (isNaN(costo) || costo < 0)  { toast('⚠️', 'Ingresa el costo', 'var(--gold)'); return; }
+      try {
+        const res = await fetch('/api/estacion/compras', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ ingrediente_id: id, cantidad, costo_total: costo, nota })
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error'); }
+        closeModal();
+        toast('✅', 'Compra registrada', 'var(--green-ok)');
+        loadInventarioEstacion();
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    async function estVerHistorialCompras(ingId = null) {
+      const url = ingId ? `/api/estacion/compras/${ingId}` : '/api/estacion/compras';
+      try {
+        const entradas = await fetch(url).then(r => r.json());
+        const filas = entradas.length
+          ? entradas.map(e => {
+              const u = e.unidad === 'unidad' ? 'uds' : e.unidad;
+              const fecha = e.created_at?.slice(0,16).replace('T',' ') || e.created_at;
+              return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:6px 12px;padding:10px 0;border-bottom:1px solid var(--border);align-items:start;">
+                <div>
+                  <div style="font-size:13px;font-weight:600;">${e.ingrediente}</div>
+                  ${e.nota ? `<div style="font-size:11px;color:var(--text-muted);">${e.nota}</div>` : ''}
+                  <div style="font-size:11px;color:var(--text-muted);">${fecha}</div>
+                </div>
+                <div style="text-align:right;font-size:13px;font-weight:600;white-space:nowrap;">+${e.cantidad.toFixed(0)} ${u}</div>
+                <div style="text-align:right;font-size:13px;white-space:nowrap;">
+                  <div style="font-weight:700;color:var(--sage);">$${e.costo_total.toFixed(2)}</div>
+                  <div style="font-size:11px;color:var(--text-muted);">$${e.costo_unitario.toFixed(4)}/${u}</div>
+                </div>
+              </div>`;
+            }).join('')
+          : '<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px;">Sin compras registradas</div>';
+
+        showModal(`
+          <div class="modal-title">📋 Historial de compras</div>
+          <div style="max-height:60vh;overflow-y:auto;margin-top:12px;">${filas}</div>
+          <div class="modal-btns" style="margin-top:14px;">
+            <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+          </div>`);
+      } catch(e) { toast('❌', e.message, 'var(--red)'); }
+    }
+
+    async function estGuardarMasivo() {
+      const inputs = document.querySelectorAll('#masivoCont input[data-id]');
+      const ops = [];
+      inputs.forEach(inp => {
+        const v = parseFloat(inp.value) || 0;
+        if (v > 0) ops.push({ id: parseInt(inp.dataset.id), cantidad: v });
+      });
+      if (!ops.length) { closeModal(); return; }
+      try {
+        await Promise.all(ops.map(op =>
+          fetch(`/api/estacion/inventario/${op.id}/restock`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ cantidad: op.cantidad })
+          })
+        ));
+        closeModal();
+        toast('✅', `${ops.length} ingrediente(s) reabastecido(s)`, 'var(--green-ok)');
+        loadInventarioEstacion();
       } catch(e) { toast('❌', e.message, 'var(--red)'); }
     }
 
