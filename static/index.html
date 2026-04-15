@@ -5049,7 +5049,7 @@
     async function showNominasPage() {
       if (!usuario) return showNipModal(() => openPage('👥 Nóminas', showNominasPage));
       let nominas = [];
-      try { nominas = await api('/nominas'); } catch (e) { }
+      try { const _r = await api('/nominas'); nominas = Array.isArray(_r) ? _r : (_r.items ?? []); } catch (e) { }
 
       const metIcon = m => m === 'Efectivo' ? '💵' : '💳';
       const rows = nominas.length ? nominas.map(n => `
@@ -5141,7 +5141,9 @@
     async function showMovimientosPage() {
       if (!usuario) return showNipModal(() => showMovimientosPage());
       const esAdmin = usuario.perfil === 'Administrador';
-      const [gastos, ingresos] = await Promise.all([api('/gastos'), api('/ingresos')]);
+      const [_gastosResp, _ingresosResp] = await Promise.all([api('/gastos'), api('/ingresos')]);
+      const gastos = Array.isArray(_gastosResp) ? _gastosResp : (_gastosResp.items ?? []);
+      const ingresos = Array.isArray(_ingresosResp) ? _ingresosResp : (_ingresosResp.items ?? []);
 
       const ingresoTiendas = tiendas.filter(t => t.nombre === 'Estudio Deco' || t.nombre === 'Estación 304');
       const ingOpts = ingresoTiendas.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('');
