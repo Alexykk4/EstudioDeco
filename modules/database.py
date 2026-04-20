@@ -891,14 +891,19 @@ def obtener_resumen_dia(fecha=None):
         "SELECT COALESCE(SUM(monto_efectivo), 0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
         (fecha, desde)
     ).fetchone()
+    # Solo Tarjeta y Mixto tienen comisión; Transferencia es independiente
     tarjeta_row = conn.execute(
-        "SELECT COALESCE(SUM(monto_tarjeta), 0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
+        "SELECT COALESCE(SUM(monto_tarjeta), 0) as monto FROM ventas WHERE metodo_pago IN ('Tarjeta','Mixto') AND DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
         (fecha, desde)
     ).fetchone()
     transferencia_row = conn.execute(
         "SELECT COALESCE(SUM(total), 0) as monto FROM ventas WHERE metodo_pago='Transferencia' AND DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
         (fecha, desde)
     ).fetchone()
+    conteo_metodos = conn.execute(
+        "SELECT metodo_pago, COUNT(*) as n, COALESCE(SUM(total),0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0) GROUP BY metodo_pago",
+        (fecha, desde)
+    ).fetchall()
 
     # Ingresos del día activos (excluye anulados, S-6)
     ing_row = conn.execute(
@@ -919,14 +924,15 @@ def obtener_resumen_dia(fecha=None):
     if transferencia_row["monto"] > 0: metodos.append({"metodo_pago": "Transferencia", "monto": transferencia_row["monto"]})
 
     # Totales con ingresos incluidos
-    total_ef  = efectivo_row["monto"] + (ing_row["ef"] if ing_row else 0)
-    total_tar = tarjeta_row["monto"] + (ing_row["tar"] if ing_row else 0)
-    # Gastos de Caja se restan de efectivo, gastos de Banco se restan de tarjeta
-    gastos_caja  = gc["gastos_caja"] if gc else 0
-    gastos_banco = rg["total_gastos"] - gastos_caja
-    efectivo_esperado = total_ef - gastos_caja
-    tarjeta_esperado  = total_tar - gastos_banco
-    total_esperado    = efectivo_esperado + tarjeta_esperado
+    total_ef           = efectivo_row["monto"] + (ing_row["ef"] if ing_row else 0)
+    total_tar          = tarjeta_row["monto"] + (ing_row["tar"] if ing_row else 0)
+    total_transfer     = transferencia_row["monto"]
+    # Gastos de Caja se restan de efectivo, gastos de Banco (comisiones) se restan de tarjeta
+    gastos_caja        = gc["gastos_caja"] if gc else 0
+    gastos_banco       = rg["total_gastos"] - gastos_caja
+    efectivo_esperado  = total_ef - gastos_caja
+    tarjeta_esperado   = total_tar - gastos_banco
+    total_esperado     = efectivo_esperado + tarjeta_esperado + total_transfer
 
     sabro_roles = int(sabro["roles"]) if sabro else 0
     sabro_pago  = round(sabro["pago_total"], 2) if sabro else 0.0
@@ -949,12 +955,14 @@ def obtener_resumen_dia(fecha=None):
         "ingresos_detalle": [dict(r) for r in ing_det],
         "total_efectivo": total_ef,
         "total_tarjeta": total_tar,
+        "total_transferencia": total_transfer,
         "efectivo_esperado": efectivo_esperado,
         "tarjeta_esperado": tarjeta_esperado,
         "total_esperado": total_esperado,
         "inversion": inv["inversion"],
         "utilidad": rv["total_ventas"] - inv["inversion"] - rg["total_gastos"],
         "metodos_pago": metodos,
+        "conteo_metodos": [dict(r) for r in conteo_metodos],
         "fondo_apertura": get_fondo_apertura(),
         "sabrodulce_roles": sabro_roles,
         "sabrodulce_pago": sabro_pago,

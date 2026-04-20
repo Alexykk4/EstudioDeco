@@ -1386,24 +1386,31 @@
     .denom-row {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: 5px;
+      gap: 6px;
+      margin-bottom: 2px;
     }
 
     .denom-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text);
-      min-width: 55px;
+      min-width: 48px;
     }
 
     .denom-input {
-      width: 80px !important;
-      padding: 5px 8px !important;
+      width: 54px !important;
+      padding: 3px 6px !important;
       text-align: center !important;
       font-family: 'JetBrains Mono', monospace !important;
-      font-size: 13px !important;
+      font-size: 12px !important;
+    }
+
+    .denom-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      min-width: 52px;
     }
 
     /* ── RECEIPT ── */
@@ -3804,10 +3811,18 @@
       const esp = r.efectivo_esperado;
       const comTar = parseFloat(((r.total_tarjeta || 0) * 0.04).toFixed(2));
       const tarNeta = parseFloat(((r.total_tarjeta || 0) - comTar).toFixed(2));
-      const totalEsp = parseFloat((esp + tarNeta).toFixed(2));
+      const totalTransfer = r.total_transferencia || 0;
+      const totalEsp = parseFloat((esp + tarNeta + totalTransfer).toFixed(2));
       const fondoApertura = r.fondo_apertura || 0;
       const desdeStr = r.desde ? r.desde.slice(11, 19) : '00:00:00';
       const sabroCard = '';
+
+      // Conteo ventas por método
+      const conteo = r.conteo_metodos || [];
+      const conteoHtml = conteo.map(c => {
+        const icon = c.metodo_pago === 'Efectivo' ? '💵' : c.metodo_pago === 'Tarjeta' ? '💳' : c.metodo_pago === 'Transferencia' ? '🏦' : '⚖️';
+        return `<span style="background:var(--bg-warm);border:1px solid var(--border);border-radius:20px;padding:2px 10px;font-size:11px;white-space:nowrap;">${icon} ${c.metodo_pago} <strong>${c.n}</strong> · $${c.monto.toFixed(0)}</span>`;
+      }).join('');
 
       // Charts data
       const segsPago = [
@@ -3824,11 +3839,12 @@
       const canceladasBadge = r.num_canceladas > 0 ? `<span style="background:var(--red);color:white;border-radius:4px;padding:1px 7px;font-size:11px;margin-left:8px;">${r.num_canceladas} cancelada(s)</span>` : '';
 
       const BILLS = [1000, 500, 200, 100, 50, 20], COINS = [10, 5, 2, 1, 0.5];
-      const bRows = BILLS.map(d => `<div class="denom-row"><span class="denom-label">$${d.toLocaleString()}</span><input type="number" id="b${d}" class="input denom-input" value="0" min="0" oninput="calcCorte(${esp})"></div>`).join('');
-      const cRows = COINS.map(d => `<div class="denom-row"><span class="denom-label">$${d % 1 ? d : Math.trunc(d)}</span><input type="number" id="m${d}" class="input denom-input" value="0" min="0" oninput="calcCorte(${esp})"></div>`).join('');
+      const bRows = BILLS.map(d => `<div class="denom-row"><span class="denom-label">$${d.toLocaleString()}</span><input type="number" id="b${d}" class="input denom-input" value="0" min="0" oninput="calcCorte(${esp})"><span class="denom-sub" id="bs${d}"></span></div>`).join('');
+      const cRows = COINS.map(d => `<div class="denom-row"><span class="denom-label">$${d % 1 ? d : Math.trunc(d)}</span><input type="number" id="m${d}" class="input denom-input" value="0" min="0" oninput="calcCorte(${esp})"><span class="denom-sub" id="ms${d}"></span></div>`).join('');
       showModal(`<div class="modal-body">
     <div class="modal-title">📊 Corte de Caja</div>
     <div class="modal-sub">Turno desde ${desdeStr} · ${r.num_ventas} ticket${r.num_ventas !== 1 ? 's' : ''}${canceladasBadge}</div>
+    ${conteoHtml ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 10px;">${conteoHtml}</div>` : ''}
 
     <!-- Tarjetas de totales -->
     <div class="resumen-grid" style="margin-bottom:10px;grid-template-columns:repeat(3,1fr);">
@@ -3840,9 +3856,10 @@
       </div>
       <div class="res-card"><div class="res-label">📦 Gastos</div><div class="res-val g">-$${r.total_gastos.toFixed(2)}</div></div>
     </div>
-    <div class="resumen-grid" style="margin-bottom:12px;grid-template-columns:repeat(3,1fr);">
+    <div class="resumen-grid" style="margin-bottom:12px;grid-template-columns:repeat(${totalTransfer > 0 ? 4 : 3},1fr);">
       <div class="res-card" style="background:var(--green-light);border:1px solid var(--sage);"><div class="res-label" style="color:var(--green-ok)">💵 Ef. en Caja</div><div class="res-val" style="color:var(--green-ok)">$${esp.toFixed(2)}</div></div>
       <div class="res-card" style="background:var(--gold-light);border:1px solid var(--gold);"><div class="res-label" style="color:var(--gold)">💳 Tarjeta Neta</div><div class="res-val" style="color:var(--gold)">$${tarNeta.toFixed(2)}</div></div>
+      ${totalTransfer > 0 ? `<div class="res-card" style="background:#E0F2F1;border:1px solid #26A69A;"><div class="res-label" style="color:#00796B">🏦 Transferencia</div><div class="res-val" style="color:#00796B">$${totalTransfer.toFixed(2)}</div></div>` : ''}
       <div class="res-card" style="background:var(--sage-light);border:1px solid var(--sage);"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${totalEsp.toFixed(2)}</div></div>
     </div>
 
@@ -3894,8 +3911,18 @@
     function calcCorte(esp) {
       const BILLS = [1000, 500, 200, 100, 50, 20], COINS = [10, 5, 2, 1, 0.5];
       let total = 0;
-      BILLS.forEach(d => { total += d * (parseInt(document.getElementById('b' + d)?.value) || 0); });
-      COINS.forEach(d => { total += d * (parseInt(document.getElementById('m' + d)?.value) || 0); });
+      BILLS.forEach(d => {
+        const q = parseInt(document.getElementById('b' + d)?.value) || 0;
+        const sub = d * q; total += sub;
+        const el = document.getElementById('bs' + d);
+        if (el) el.textContent = q > 0 ? '= $' + sub.toLocaleString() : '';
+      });
+      COINS.forEach(d => {
+        const q = parseInt(document.getElementById('m' + d)?.value) || 0;
+        const sub = d * q; total += sub;
+        const el = document.getElementById('ms' + d);
+        if (el) el.textContent = q > 0 ? '= $' + sub.toFixed(2) : '';
+      });
       const fondo = parseFloat(document.getElementById('cFondo')?.value) || 0;
       const real = total - fondo, dif = real - esp;
       document.getElementById('cTotalCont').textContent = '$' + total.toFixed(2);
@@ -4074,8 +4101,11 @@
         <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--text-muted);flex-shrink:0;">$${it.subtotal.toFixed(2)}</span>
       </div>`).join('');
 
+        const comisionTar = (v.metodo_pago === 'Tarjeta' || v.metodo_pago === 'Mixto') && v.monto_tarjeta > 0
+          ? parseFloat((v.monto_tarjeta * 0.04).toFixed(2)) : 0;
         let pagoInfo = `${metIcon(v.metodo_pago)} ${v.metodo_pago}`;
         if (v.metodo_pago === 'Mixto') pagoInfo = `⚖️ Mixto: 💵$${v.monto_efectivo.toFixed(2)} + 💳$${v.monto_tarjeta.toFixed(2)}`;
+        if (comisionTar > 0) pagoInfo += ` <span style="font-size:10px;color:var(--red);margin-left:4px;">−$${comisionTar.toFixed(2)} com.</span>`;
 
         const bgHead = isCancelled ? '#FFF3F3' : 'var(--bg-warm)';
         const borderColor = isCancelled ? 'var(--red)' : 'var(--border)';
