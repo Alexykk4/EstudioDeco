@@ -992,7 +992,11 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         SELECT COALESCE(SUM(monto),0) as total
         FROM gastos WHERE DATE(created_at) < ? AND (anulado IS NULL OR anulado=0)
     """, (fecha_inicio,)).fetchone()
-    saldo_anterior = (prev_ventas['total'] + prev_ingresos['total']) - prev_gastos['total']
+    prev_pagos_ext = conn.execute("""
+        SELECT COALESCE(SUM(monto),0) as total
+        FROM pagos_tienda WHERE DATE(created_at) < ? AND (es_interno=0 OR es_interno IS NULL)
+    """, (fecha_inicio,)).fetchone()
+    saldo_anterior = (prev_ventas['total'] + prev_ingresos['total']) - prev_gastos['total'] - prev_pagos_ext['total']
 
     rv = conn.execute("""
         SELECT COALESCE(SUM(total),0) as total_ventas,
@@ -1195,9 +1199,11 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         t_row['total'] for t_row in vt if 'estaci' in t_row['tienda'].lower()
     )
     total_pagos_internos = sum(p['monto'] for p in pagos_semana if p.get('es_interno'))
+    total_pagos_externos = sum(p['monto'] for p in pagos_semana if not p.get('es_interno'))
     acumulado_semana = total_semana + total_ingresos - gastos['total']
     balance_estacion = estacion_ventas + total_pagos_internos
-    balance_estudio = acumulado_semana - balance_estacion
+    # Restar pagos a tiendas externas (Sabrodulce, proveedores, etc.) del balance de Estudio Deco
+    balance_estudio = acumulado_semana - balance_estacion - total_pagos_externos
 
     conn.close()
     return {
@@ -1229,6 +1235,7 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         # Balances y pagos
         'balance_estudio_deco': balance_estudio,
         'balance_estacion_304': balance_estacion,
+        'total_pagos_externos': total_pagos_externos,
         'pagos_semana': pagos_semana,
         'detalle_por_tienda': detalle_por_tienda,
     }
