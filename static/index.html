@@ -5733,9 +5733,13 @@
           method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ nombre_bebida: bebida })
         });
-        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error'); }
+        const d = await res.json();
         sel.value = '';
-        toast('✅', `${bebida} descontada`, 'var(--green-ok)');
+        if (d.warning) {
+          toast('⚠️', d.warning, 'var(--gold)');
+        } else {
+          toast('✅', `${bebida} descontada`, 'var(--green-ok)');
+        }
         loadInventarioEstacion();
       } catch(e) { toast('❌', e.message, 'var(--red)'); }
     }

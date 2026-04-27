@@ -271,12 +271,12 @@ async def api_ajustar_minimo(iid: int, r: AjustarMinimoReq):
 
 @app.post("/api/estacion/bebida-vendida")
 async def api_bebida_vendida(r: BebidaVendidaReq):
-    """Descuenta los ingredientes de una bebida al registrar su venta."""
+    """Descuenta los ingredientes de una bebida. Si el stock es insuficiente, avisa pero no bloquea."""
     try:
         descontar_ingredientes_bebida(r.nombre_bebida)
         return {"ok": True}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return {"ok": False, "warning": str(e)}
 
 @app.get("/api/estacion/consumo-log")
 async def api_consumo_log():
