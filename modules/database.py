@@ -1656,6 +1656,16 @@ def obtener_estadisticas():
     """).fetchall()
     gastos_map = {r['mes']: r['gastos'] for r in gastos_mes}
 
+    # Pagos a tiendas externas por mes
+    pagos_mes = conn.execute("""
+        SELECT strftime('%Y-%m', created_at) as mes,
+               COALESCE(SUM(monto),0) as pagos
+        FROM pagos_tienda
+        WHERE (es_interno=0 OR es_interno IS NULL)
+        GROUP BY mes ORDER BY mes
+    """).fetchall()
+    pagos_map = {r['mes']: r['pagos'] for r in pagos_mes}
+
     por_mes = []
     for row in meses:
         m = row['mes']
@@ -1665,6 +1675,7 @@ def obtener_estadisticas():
             'num_ventas': int(row['num_ventas']),
             'ingresos': round(ingresos_map.get(m, 0), 2),
             'gastos': round(gastos_map.get(m, 0), 2),
+            'pagos': round(pagos_map.get(m, 0), 2),
         })
 
     # Por año
@@ -1690,6 +1701,16 @@ def obtener_estadisticas():
     """).fetchall()
     gastos_año_map = {r['año']: r['gastos'] for r in gastos_año}
 
+    # Pagos a tiendas externas por año
+    pagos_año = conn.execute("""
+        SELECT strftime('%Y', created_at) as año,
+               COALESCE(SUM(monto),0) as pagos
+        FROM pagos_tienda
+        WHERE (es_interno=0 OR es_interno IS NULL)
+        GROUP BY año
+    """).fetchall()
+    pagos_año_map = {r['año']: r['pagos'] for r in pagos_año}
+
     por_año = []
     for row in años:
         a = row['año']
@@ -1699,6 +1720,7 @@ def obtener_estadisticas():
             'num_ventas': int(row['num_ventas']),
             'ingresos': round(ingresos_año_map.get(a, 0), 2),
             'gastos': round(gastos_año_map.get(a, 0), 2),
+            'pagos': round(pagos_año_map.get(a, 0), 2),
         })
 
     # Ventas por tienda por mes
@@ -1792,6 +1814,17 @@ def obtener_estadisticas():
     """, (año_actual,)).fetchall()
     gastos_dia_map = {r['dia']: round(r['gastos'], 2) for r in gastos_dia}
 
+    # Pagos a tiendas externas por día (año en curso)
+    pagos_dia = conn.execute("""
+        SELECT strftime('%Y-%m-%d', created_at) as dia,
+               COALESCE(SUM(monto), 0) as pagos
+        FROM pagos_tienda
+        WHERE (es_interno=0 OR es_interno IS NULL)
+          AND strftime('%Y', created_at) = ?
+        GROUP BY dia ORDER BY dia
+    """, (año_actual,)).fetchall()
+    pagos_dia_map = {r['dia']: round(r['pagos'], 2) for r in pagos_dia}
+
     por_dia = []
     for row in ventas_dia:
         d = row['dia']
@@ -1802,6 +1835,7 @@ def obtener_estadisticas():
             'efectivo': round(row['efectivo'], 2),
             'tarjeta': round(row['tarjeta'], 2),
             'gastos': round(gastos_dia_map.get(d, 0), 2),
+            'pagos': round(pagos_dia_map.get(d, 0), 2),
         })
 
     conn.close()

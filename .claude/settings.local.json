@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add modules/database.py modules/sync_sheets.py server.py static/index.html schema.sql)",
+      "Bash(git commit:*)",
+      "Bash(git push origin deco)",
+      "Bash(git add static/index.html)",
+      "Bash(git add modules/database.py)",
+      "Bash(python -c \"from modules.database import init_db; print\\(''DB OK''\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(git push)",
+      "Bash(cmd.exe /c \"taskkill /F /IM python.exe 2>nul & exit 0\")",
+      "Bash(python server.py)",
+      "Bash(ls modules/__pycache__/database*.pyc)",
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(TaskOutput b5e4cz7r5)",
+      "Bash(cmd.exe /c \"for /f \"\"tokens=5\"\" %a in \\(''netstat -aon ^| findstr :8001''\\) do taskkill /PID %a /F\")",
+      "Bash(cmd.exe /c \"netstat -aon | findstr :8001\")",
+      "Bash(cmd.exe /c \"netstat -ano | findstr \"\"8001\"\"\")",
+      "Bash(cmd.exe /c \"taskkill /PID 12488 /F\")",
+      "Bash(git add static/index.html server.py)",
+      "Bash(git add modules/database.py server.py static/index.html)",
+      "Bash(git add modules/database.py modules/pdf_report.py modules/email_sender.py server.py static/index.html)",
+      "Bash(git add modules/database.py static/index.html)",
+      "Bash(git add static/index.html modules/database.py)",
+      "Bash(python -c \"from modules.database import obtener_estadisticas; print\\(''OK''\\)\")",
+      "Bash(python -c \"from modules.database import obtener_estadisticas; import json; d = obtener_estadisticas\\(\\); print\\(json.dumps\\({k: len\\(v\\) if isinstance\\(v,list\\) else v for k,v in d.items\\(\\)}\\)\\)\")",
+      "Bash(git revert HEAD --no-edit)",
+      "Bash(python -c \"import sqlite3; conn=sqlite3.connect\\(''pos_estudio_deco.db''\\); rows=conn.execute\\(''SELECT id,nombre FROM tiendas ORDER BY id''\\).fetchall\\(\\); [print\\(r\\) for r in rows]\")",
+      "Bash(python -c \"from modules.database import calcular_porciones_disponibles, descontar_ingredientes_bebida, listar_ingredientes, restock_ingrediente, ajustar_stock_ingrediente, ajustar_stock_minimo, obtener_log_consumo, RECETAS_BEBIDAS; print\\(''DB OK -'', len\\(RECETAS_BEBIDAS\\), ''recetas''\\)\")",
+      "Bash(python -c \"import server; print\\(''''Server OK''''\\)\")",
+      "Bash(python -c \"import server; print\\(''''OK''''\\)\")",
+      "Bash(python -c \"import modules.database; print\\(''database.py OK''\\)\")",
+      "Bash(python -c \"import server; print\\(''server.py OK''\\)\")"
+    ]
+  }
+}

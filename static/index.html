@@ -4611,7 +4611,7 @@
         const fmt = l => tab === 'mes' ? fmtMes(l) : l;
         if (!rows.length) return '<div style="padding:40px;text-align:center;color:var(--text-muted);">Sin datos registrados</div>';
 
-        const items = rows.map(r => ({ ...r, label: fmt(r[lk]), balance: r.ventas + r.ingresos - r.gastos }));
+        const items = rows.map(r => ({ ...r, label: fmt(r[lk]), balance: r.ventas + r.ingresos - r.gastos - (r.pagos || 0) }));
         let acc = 0; const accItems = items.map(r => ({ ...r, acumulado: (acc += r.balance) }));
 
         // Datos diarios del año en curso para gráficas de línea
@@ -4620,10 +4620,10 @@
         const diasBalAcc = diasItems.map(r => ({ label: r.label, caja: (efAcc2 += r.efectivo || 0), banco: (tarAcc2 += r.tarjeta || 0) }));
 
         const totV = rows.reduce((s, r) => s + r.ventas, 0), totG = rows.reduce((s, r) => s + r.gastos, 0),
-          totI = rows.reduce((s, r) => s + r.ingresos, 0);
+          totI = rows.reduce((s, r) => s + r.ingresos, 0), totP = rows.reduce((s, r) => s + (r.pagos || 0), 0);
         const fmt$ = v => '$' + v.toLocaleString('es-MX', { minimumFractionDigits: 0 });
 
-        const kpis = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
+        const kpis = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
       <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:2px;">Ventas</div>
         <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);">${fmt$(totV)}</div>
@@ -4635,6 +4635,10 @@
       <div style="background:var(--red-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red);margin-bottom:2px;">Gastos</div>
         <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--red);">${fmt$(totG)}</div>
+      </div>
+      <div style="background:var(--terracotta-light,#FFF3E0);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--terracotta,#E65100);margin-bottom:2px;">Pagos Tiendas</div>
+        <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--terracotta,#E65100);">${fmt$(totP)}</div>
       </div>
     </div>`;
 
@@ -4702,9 +4706,9 @@
         const chart4 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">🍩 Distribución total</div>
       <div style="display:flex;align-items:center;gap:16px;justify-content:center;">
-        ${svgDonut([{ label: 'Ventas', value: totV, color: '#7C9A7E' }, { label: 'Ingresos', value: totI, color: '#64B5F6' }, { label: 'Gastos', value: totG, color: '#EF9A9A' }].filter(s => s.value > 0), 90)}
+        ${svgDonut([{ label: 'Ventas', value: totV, color: '#7C9A7E' }, { label: 'Ingresos', value: totI, color: '#64B5F6' }, { label: 'Gastos', value: totG, color: '#EF9A9A' }, { label: 'Pagos', value: totP, color: '#E65100' }].filter(s => s.value > 0), 90)}
         <div style="display:flex;flex-direction:column;gap:6px;">
-          ${[{ label: 'Ventas', v: totV, c: '#7C9A7E' }, { label: 'Ingresos', v: totI, c: '#64B5F6' }, { label: 'Gastos', v: totG, c: '#EF9A9A' }].map(s => `<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:9px;height:9px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.label}: <strong>${fmt$(s.v)}</strong></div>`).join('')}
+          ${[{ label: 'Ventas', v: totV, c: '#7C9A7E' }, { label: 'Ingresos', v: totI, c: '#64B5F6' }, { label: 'Gastos', v: totG, c: '#EF9A9A' }, { label: 'Pagos', v: totP, c: '#E65100' }].map(s => `<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:9px;height:9px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.label}: <strong>${fmt$(s.v)}</strong></div>`).join('')}
         </div>
       </div>
     </div>`;
@@ -4737,17 +4741,19 @@
           <th style="padding:7px 10px;text-align:right;"># Tickets</th>
           <th style="padding:7px 10px;text-align:right;">Ingresos</th>
           <th style="padding:7px 10px;text-align:right;color:var(--red);">Gastos</th>
+          <th style="padding:7px 10px;text-align:right;color:var(--terracotta,#E65100);">Pagos</th>
           <th style="padding:7px 10px;text-align:right;">Balance</th>
         </tr></thead>
         <tbody>${rows.map((r, i) => {
-          const b = r.ventas + r.ingresos - r.gastos;
+          const b = r.ventas + r.ingresos - r.gastos - (r.pagos || 0);
           return `<tr style="border-top:1px solid var(--border-light);${i % 2 === 1 ? 'background:var(--bg-warm);' : ''}">
             <td style="padding:7px 10px;font-weight:600;">${fmt(r[lk])}</td>
             <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;">${fmt$(r.ventas)}</td>
             <td style="padding:7px 10px;text-align:right;color:var(--text-secondary);">${r.num_ventas}</td>
             <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:#2E7D32;">${fmt$(r.ingresos)}</td>
             <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--red);">${fmt$(r.gastos)}</td>
-            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:800;color:${b >= 0 ? 'var(--sage-dark)' : 'var(--red)'};">${fmt$(b)}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--terracotta,#E65100);">${fmt$(r.pagos || 0)}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:800;color:${b >= 0 ? 'var(--sage-dark)' : 'var(--red)'}">${fmt$(b)}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>
