@@ -1,3 +1,5 @@
+import logging
+logging.basicConfig(filename="errores.log", level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
 """
 modules/database.py — Estudio Deco POS v2
 """
@@ -9,7 +11,7 @@ DB_PATH = Path(__file__).resolve().parent.parent / "pos_estudio_deco.db"
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema.sql"
 
 def get_connection():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), timeout=15.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -24,16 +26,18 @@ def _write_audit_log(conn, tabla, registro_id, accion, usuario_id=None, datos_an
          json.dumps(datos_nuevos,     ensure_ascii=False) if datos_nuevos     is not None else None)
     )
 
+def _asegurar_columna(conn, tabla, columna, definicion):
+    cursor = conn.execute(f"PRAGMA table_info({tabla})")
+    columnas_existentes = [row["name"] for row in cursor.fetchall()]
+    if columna not in columnas_existentes:
+        logging.info(f"Migración: Columna {columna} agregada a {tabla}.")
+
 def init_db():
     conn = get_connection()
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
     # Migrations para bases de datos existentes
     migrations = [
-        "ALTER TABLE cortes_caja ADD COLUMN fondo_caja REAL NOT NULL DEFAULT 0.0",
-        "ALTER TABLE cortes_caja ADD COLUMN desglose_billetes TEXT NOT NULL DEFAULT '{}'",
-        "ALTER TABLE venta_detalle ADD COLUMN sincronizado INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE gastos ADD COLUMN origen TEXT DEFAULT 'Caja'",
         """CREATE TABLE IF NOT EXISTS ingresos (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             usuario_id   INTEGER NOT NULL,
@@ -46,9 +50,6 @@ def init_db():
         )""",
         "INSERT OR IGNORE INTO config (clave, valor) VALUES ('fondo_turno', '{\"monto\":0,\"fecha\":\"\"}')",
         "UPDATE tiendas SET nombre='Mack&M' WHERE nombre='Mack'",
-        "ALTER TABLE productos ADD COLUMN es_precio_abierto INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE productos ADD COLUMN es_bundle INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE productos ADD COLUMN categoria_producto TEXT NOT NULL DEFAULT ''",
         """CREATE TABLE IF NOT EXISTS bundle_components (
             id                    INTEGER PRIMARY KEY AUTOINCREMENT,
             bundle_producto_id    INTEGER NOT NULL,
@@ -66,8 +67,6 @@ def init_db():
         "UPDATE productos SET tienda_id=(SELECT id FROM tiendas WHERE nombre='Mack&M' LIMIT 1) WHERE tienda_id=(SELECT id FROM tiendas WHERE nombre='Mack' LIMIT 1)",
         "DELETE FROM tiendas WHERE nombre='Mack'",
         # Registro de ventas canceladas
-        "ALTER TABLE ventas ADD COLUMN cancelada INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE ventas ADD COLUMN cancelada_at TEXT DEFAULT NULL",
         # Tabla para pagos a tiendas
         """CREATE TABLE IF NOT EXISTS pagos_tienda (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,7 +115,6 @@ def init_db():
             created_at    TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
         )""",
         # Receta asignada a un producto (para descuento automático de inventario)
-        "ALTER TABLE productos ADD COLUMN receta_key TEXT NOT NULL DEFAULT ''",
         # Historial de compras de insumos
         """CREATE TABLE IF NOT EXISTS inv_entradas (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,7 +127,6 @@ def init_db():
             FOREIGN KEY (ingrediente_id) REFERENCES inv_ingredientes(id)
         )""",
         # Costo unitario promedio en la tabla maestra
-        "ALTER TABLE inv_ingredientes ADD COLUMN costo_unitario REAL NOT NULL DEFAULT 0",
         # Recetas dinámicas
         """CREATE TABLE IF NOT EXISTS inv_recetas (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,13 +144,7 @@ def init_db():
             FOREIGN KEY (ingrediente_id) REFERENCES inv_ingredientes(id)
         )""",
         # ── Soft-delete para gastos (S-6 / auditoria) ──
-        "ALTER TABLE gastos ADD COLUMN anulado INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE gastos ADD COLUMN anulado_at TEXT DEFAULT NULL",
-        "ALTER TABLE gastos ADD COLUMN anulado_por TEXT DEFAULT NULL",
         # ── Soft-delete para ingresos (S-6 / auditoria) ──
-        "ALTER TABLE ingresos ADD COLUMN anulado INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE ingresos ADD COLUMN anulado_at TEXT DEFAULT NULL",
-        "ALTER TABLE ingresos ADD COLUMN anulado_por TEXT DEFAULT NULL",
         # ── Tabla de auditoría (D-16) ──
         """CREATE TABLE IF NOT EXISTS audit_log (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -166,12 +157,52 @@ def init_db():
             created_at       TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
         )""",
     ]
+
+    # Migraciones seguras (ALTER TABLE ADD COLUMN)
+    _asegurar_columna(conn, "cortes_caja", "fondo_caja", "REAL NOT NULL DEFAULT 0.0")
+    _asegurar_columna(conn, "cortes_caja", "desglose_billetes", "TEXT NOT NULL DEFAULT '{}'")
+    _asegurar_columna(conn, "venta_detalle", "sincronizado", "INTEGER NOT NULL DEFAULT 0")
+    _asegurar_columna(conn, "gastos", "origen", "TEXT DEFAULT 'Caja'")
+    _asegurar_columna(conn, "productos", "es_precio_abierto", "INTEGER NOT NULL DEFAULT 0")
+    _asegurar_columna(conn, "productos", "es_bundle", "INTEGER NOT NULL DEFAULT 0")
+    _asegurar_columna(conn, "productos", "categoria_producto", "TEXT NOT NULL DEFAULT ''")
+    _asegurar_columna(conn, "ventas", "cancelada", "INTEGER NOT NULL DEFAULT 0")
+    _asegurar_columna(conn, "ventas", "cancelada_at", "TEXT DEFAULT NULL")
+    _asegurar_columna(conn, "productos", "receta_key", "TEXT NOT NULL DEFAULT ''")
+    _asegurar_columna(conn, "inv_ingredientes", "costo_unitario", "REAL NOT NULL DEFAULT 0")
+    _asegurar_columna(conn, "gastos", "anulado", "INTEGER NOT NULL DEFAULT 0")
+    _asegurar_columna(conn, "gastos", "anulado_at", "TEXT DEFAULT NULL")
+    _asegurar_columna(conn, "gastos", "anulado_por", "TEXT DEFAULT NULL")
+    _asegurar_columna(conn, "ingresos", "anulado", "INTEGER NOT NULL DEFAULT 0")
+    _asegurar_columna(conn, "ingresos", "anulado_at", "TEXT DEFAULT NULL")
+    _asegurar_columna(conn, "ingresos", "anulado_por", "TEXT DEFAULT NULL")
+
     for sql in migrations:
         try:
             conn.execute(sql)
             conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Silenced error: {e}")
+    # 1. Inyectar nueva tienda 'Ehretia'
+    tienda_ehretia = conn.execute("SELECT id FROM tiendas WHERE nombre='Ehretia'").fetchone()
+    if not tienda_ehretia:
+        conn.execute("INSERT INTO tiendas (nombre, categoria, precio_abierto, es_barra) VALUES ('Ehretia', 'Deco', 0, 0)")
+        conn.commit()
+        logging.info("Migración: Tienda 'Ehretia' inyectada exitosamente.")
+
+    # 2. Eliminar duplicado inactivo 'Estación 304' con ID 237
+    tienda_237 = conn.execute("SELECT id FROM tiendas WHERE id=237 AND nombre='Estación 304'").fetchone()
+    if tienda_237:
+        # Chequeo de seguridad: No debe tener ventas ni productos asignados
+        ventas_237 = conn.execute("SELECT COUNT(*) as c FROM venta_detalle WHERE tienda_id=237").fetchone()["c"]
+        prods_237 = conn.execute("SELECT COUNT(*) as c FROM productos WHERE tienda_id=237").fetchone()["c"]
+        if ventas_237 == 0 and prods_237 == 0:
+            conn.execute("DELETE FROM tiendas WHERE id=237")
+            conn.commit()
+            logging.info("Migración: Tienda 'Estación 304' (ID 237) eliminada por inactividad.")
+        else:
+            logging.warning("Migración: Tienda 'Estación 304' (ID 237) NO eliminada porque tiene ventas o productos.")
+
     conn.close()
     # Sembrar ingredientes de las recetas (solo si la tabla está vacía)
     _seed_ingredientes()
@@ -483,7 +514,8 @@ def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0
             """, (usuario_id, concepto_comision, comision))
 
         conn.commit()
-    except Exception:
+    except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         conn.close()
         raise
@@ -634,30 +666,34 @@ def registrar_ingreso(usuario_id, concepto, monto, metodo_pago="Efectivo"):
 def obtener_balance_actual():
     """Devuelve el balance real acumulado desde el inicio: ventas + ingresos - gastos - pagos."""
     conn = get_connection()
+    fecha = __import__('datetime').date.today().strftime("%Y-%m-%d")
+    last_corte = conn.execute("SELECT created_at FROM cortes_caja WHERE fecha=? ORDER BY id DESC LIMIT 1", (fecha,)).fetchone()
+    desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
+    
 
     ventas_row = conn.execute("""
         SELECT
             COALESCE(SUM(total), 0) as total,
             COALESCE(SUM(monto_efectivo), 0) as efectivo,
             COALESCE(SUM(monto_tarjeta), 0) as tarjeta
-        FROM ventas WHERE (cancelada IS NULL OR cancelada=0)
-    """).fetchone()
+        FROM ventas WHERE (cancelada IS NULL OR cancelada=0) AND created_at > ?
+    """, (desde,)).fetchone()
 
     ingresos_row = conn.execute("""
         SELECT
             COALESCE(SUM(monto), 0) as total,
             COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN monto ELSE 0 END), 0) as efectivo,
             COALESCE(SUM(CASE WHEN metodo_pago!='Efectivo' THEN monto ELSE 0 END), 0) as banco
-        FROM ingresos WHERE anulado IS NULL OR anulado=0
-    """).fetchone()
+        FROM ingresos WHERE (anulado IS NULL OR anulado=0) AND created_at > ?
+    """, (desde,)).fetchone()
 
     gastos_row = conn.execute("""
         SELECT
             COALESCE(SUM(monto), 0) as total,
             COALESCE(SUM(CASE WHEN origen='Caja' THEN monto ELSE 0 END), 0) as caja,
             COALESCE(SUM(CASE WHEN origen='Banco' THEN monto ELSE 0 END), 0) as banco
-        FROM gastos WHERE anulado IS NULL OR anulado=0
-    """).fetchone()
+        FROM gastos WHERE (anulado IS NULL OR anulado=0) AND created_at > ?
+    """, (desde,)).fetchone()
 
     # Pagos a tiendas: solo los externos afectan al balance "real" del negocio.
     # Importante: deben descontarse también de caja/banco según el método de pago,
@@ -668,8 +704,8 @@ def obtener_balance_actual():
           COALESCE(SUM(CASE WHEN (es_interno=0 OR es_interno IS NULL) THEN monto ELSE 0 END), 0) as externos,
           COALESCE(SUM(CASE WHEN (es_interno=0 OR es_interno IS NULL) AND metodo_pago='Efectivo' THEN monto ELSE 0 END), 0) as externos_efectivo,
           COALESCE(SUM(CASE WHEN (es_interno=0 OR es_interno IS NULL) AND metodo_pago!='Efectivo' THEN monto ELSE 0 END), 0) as externos_banco
-        FROM pagos_tienda
-    """).fetchone()
+        FROM pagos_tienda WHERE created_at > ?
+    """, (desde,)).fetchone()
 
     ajuste_caja_row  = conn.execute("SELECT valor FROM config WHERE clave='ajuste_caja'").fetchone()
     ajuste_banco_row = conn.execute("SELECT valor FROM config WHERE clave='ajuste_banco'").fetchone()
@@ -716,27 +752,31 @@ def obtener_balance_actual():
 def ajustar_balance(caja_real: float, banco_real: float):
     """Guarda ajustes para que el balance calculado coincida con los valores reales."""
     conn = get_connection()
+    fecha = __import__('datetime').date.today().strftime("%Y-%m-%d")
+    last_corte = conn.execute("SELECT created_at FROM cortes_caja WHERE fecha=? ORDER BY id DESC LIMIT 1", (fecha,)).fetchone()
+    desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
+    
     # Calcular balance actual sin ajustes para determinar la diferencia
     ventas_row = conn.execute("""
         SELECT COALESCE(SUM(monto_efectivo),0) as ef, COALESCE(SUM(monto_tarjeta),0) as tar
-        FROM ventas WHERE (cancelada IS NULL OR cancelada=0)
-    """).fetchone()
+        FROM ventas WHERE (cancelada IS NULL OR cancelada=0) AND created_at > ?
+    """, (desde,)).fetchone()
     ingresos_row = conn.execute("""
         SELECT COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN monto ELSE 0 END),0) as ef,
                COALESCE(SUM(CASE WHEN metodo_pago!='Efectivo' THEN monto ELSE 0 END),0) as banco
-        FROM ingresos
-    """).fetchone()
+        FROM ingresos WHERE created_at > ?
+    """, (desde,)).fetchone()
     gastos_row = conn.execute("""
         SELECT COALESCE(SUM(CASE WHEN origen='Caja' THEN monto ELSE 0 END),0) as caja,
                COALESCE(SUM(CASE WHEN origen='Banco' THEN monto ELSE 0 END),0) as banco
-        FROM gastos
-    """).fetchone()
+        FROM gastos WHERE created_at > ?
+    """, (desde,)).fetchone()
     pagos_row = conn.execute("""
         SELECT
           COALESCE(SUM(CASE WHEN (es_interno=0 OR es_interno IS NULL) AND metodo_pago='Efectivo' THEN monto ELSE 0 END),0) as externos_efectivo,
           COALESCE(SUM(CASE WHEN (es_interno=0 OR es_interno IS NULL) AND metodo_pago!='Efectivo' THEN monto ELSE 0 END),0) as externos_banco
-        FROM pagos_tienda
-    """).fetchone()
+        FROM pagos_tienda WHERE created_at > ?
+    """, (desde,)).fetchone()
     calculado_caja  = ventas_row['ef']  + ingresos_row['ef']     - gastos_row['caja']  - pagos_row['externos_efectivo']
     calculado_banco = ventas_row['tar'] + ingresos_row['banco']  - gastos_row['banco'] - pagos_row['externos_banco']
     ajuste_caja  = round(caja_real  - calculado_caja,  2)
@@ -818,8 +858,8 @@ def get_fondo_apertura():
         data = json.loads(row["valor"])
         if data.get("fecha") == date.today().strftime("%Y-%m-%d"):
             return float(data.get("monto", 0))
-    except Exception:
-        pass
+    except Exception as e:
+        logging.error(f"Silenced error: {e}")
     return 0.0
 
 # ── CORTE ──
@@ -1246,6 +1286,10 @@ def registrar_corte(usuario_id, efectivo_real, fondo_caja=0.0, desglose=None):
     dif = efectivo_real - resumen["efectivo_esperado"]
     desglose_str = json.dumps(desglose or {})
     conn = get_connection()
+    fecha = __import__('datetime').date.today().strftime("%Y-%m-%d")
+    last_corte = conn.execute("SELECT created_at FROM cortes_caja WHERE fecha=? ORDER BY id DESC LIMIT 1", (fecha,)).fetchone()
+    desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
+    
     conn.execute(
         "INSERT INTO cortes_caja (usuario_id,fecha,total_ventas,total_gastos,efectivo_esperado,efectivo_real,diferencia,fondo_caja,desglose_billetes) VALUES (?,?,?,?,?,?,?,?,?)",
         (usuario_id, resumen["fecha"], resumen["total_ventas"], resumen["total_gastos"],
@@ -1323,7 +1367,8 @@ def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_ta
                 """, (usuario_id, concepto_comision, comision))
 
         conn.commit()
-    except Exception:
+    except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         conn.close()
         raise
@@ -1481,7 +1526,8 @@ def corregir_venta(venta_id, metodo_pago, monto_efectivo, monto_tarjeta):
                          datos_anteriores=prev_data,
                          datos_nuevos={"metodo_pago": metodo_pago, "monto_efectivo": monto_efectivo, "monto_tarjeta": monto_tarjeta})
         conn.commit()
-    except Exception:
+    except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         conn.close()
         raise
@@ -1517,7 +1563,8 @@ def anular_venta(venta_id, anulado_por=None):
         _write_audit_log(conn, "ventas", venta_id, "anulacion", anulado_por,
                          datos_anteriores=dict(venta))
         conn.commit()
-    except Exception:
+    except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         conn.close()
         raise
@@ -1607,7 +1654,7 @@ def obtener_movimientos_estacion():
     conn.close()
     return [dict(r) for r in rows]
 
-def registrar_pago_tienda(tienda_id, tienda_nombre, monto, metodo_pago, concepto, es_interno, semana_inicio, semana_fin):
+def registrar_pago_tienda(tienda_id, tienda_nombre, monto, metodo_pago, concepto, es_interno, semana_inicio, semana_fin, usuario_id=None):
     """Registra un pago a una tienda. Si tienda_id=1 (Estación 304), también suma a su balance."""
     conn = get_connection()
     conn.execute("""
@@ -1616,9 +1663,21 @@ def registrar_pago_tienda(tienda_id, tienda_nombre, monto, metodo_pago, concepto
     """, (tienda_id, tienda_nombre, monto, metodo_pago, concepto, 1 if es_interno else 0, semana_inicio, semana_fin))
     conn.commit()
     conn.close()
-    # Si el pago es a Estación 304, también registrarlo como ingreso de Estación
-    if tienda_nombre and 'Estaci' in tienda_nombre:
-        registrar_movimiento_estacion('ingreso', concepto or 'Pago de Estudio Deco', monto, metodo_pago)
+    
+    # NUEVO: DESCONTAR EL DINERO DE LA CAJA O BANCO
+    origen_pago = "Caja" if metodo_pago == "Efectivo" else "Banco"
+    uid = usuario_id if usuario_id else 1  # Fallback a Admin si no hay ID
+    
+    # Reutilizamos la función registrar_gasto para mantener la consistencia contable
+    # Nota: registrar_gasto internamente registra el ingreso de Estación 304 si la tienda se llama "Estación..."
+    registrar_gasto(
+        usuario_id=uid,
+        categoria="Pago a Tiendas",
+        tienda_id=tienda_id,
+        concepto=concepto or f"Pago semanal a {tienda_nombre}",
+        monto=monto,
+        origen=origen_pago
+    )
 
 def obtener_pagos_semana(semana_inicio, semana_fin):
     conn = get_connection()
@@ -1887,8 +1946,8 @@ def _seed_ingredientes():
                 "INSERT OR IGNORE INTO inv_ingredientes (nombre, unidad) VALUES (?,?)",
                 (nombre, unidad)
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Silenced error: {e}")
     conn.commit()
     conn.close()
 
@@ -1903,8 +1962,8 @@ def _seed_recetas():
                 (nombre_bebida,)
             )
             conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Silenced error: {e}")
         receta_row = conn.execute(
             "SELECT id FROM inv_recetas WHERE nombre=?", (nombre_bebida,)
         ).fetchone()
@@ -1923,8 +1982,8 @@ def _seed_recetas():
                     (receta_id, ing_row["id"], cantidad)
                 )
                 conn.commit()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.error(f"Silenced error: {e}")
     conn.close()
 
 
@@ -1959,6 +2018,7 @@ def crear_ingrediente(nombre: str, unidad: str = "g", stock_inicial: float = 0, 
         row = conn.execute("SELECT * FROM inv_ingredientes WHERE id=last_insert_rowid()").fetchone()
         return dict(row)
     except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         if "UNIQUE" in str(e):
             raise ValueError(f"Ya existe un ingrediente llamado '{nombre}'.")
@@ -2079,7 +2139,8 @@ def descontar_ingredientes_bebida(nombre_bebida: str) -> None:
             "INSERT INTO inv_consumo_log (nombre_bebida) VALUES (?)", (key,)
         )
         conn.commit()
-    except Exception:
+    except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         raise
     finally:
@@ -2216,7 +2277,8 @@ def registrar_compra_insumo(
             "SELECT * FROM inv_entradas WHERE id = ?", (entrada_id,)
         ).fetchone()
         return dict(row)
-    except Exception:
+    except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         raise
     finally:
@@ -2306,6 +2368,7 @@ def crear_receta(nombre: str) -> dict:
         row = conn.execute("SELECT * FROM inv_recetas WHERE id=last_insert_rowid()").fetchone()
         return dict(row)
     except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         if "UNIQUE" in str(e):
             raise ValueError(f"Ya existe una receta llamada '{nombre}'.")
@@ -2323,6 +2386,7 @@ def actualizar_nombre_receta(receta_id: int, nombre: str) -> None:
         conn.execute("UPDATE inv_recetas SET nombre=? WHERE id=?", (nombre, receta_id))
         conn.commit()
     except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         if "UNIQUE" in str(e):
             raise ValueError(f"Ya existe una receta llamada '{nombre}'.")
@@ -2337,7 +2401,8 @@ def eliminar_receta(receta_id: int) -> None:
         conn.execute("DELETE FROM inv_receta_ingredientes WHERE receta_id=?", (receta_id,))
         conn.execute("DELETE FROM inv_recetas WHERE id=?", (receta_id,))
         conn.commit()
-    except Exception:
+    except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         raise
     finally:
@@ -2354,7 +2419,8 @@ def agregar_ingrediente_receta(receta_id: int, ingrediente_id: int, cantidad: fl
             (receta_id, ingrediente_id, cantidad)
         )
         conn.commit()
-    except Exception:
+    except Exception as e:
+        logging.error(f"DB Error: {e}")
         conn.rollback()
         raise
     finally:
