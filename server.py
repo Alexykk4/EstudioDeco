@@ -1,10 +1,12 @@
+import logging
+logging.basicConfig(filename="errores.log", level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
 """
 server.py — Estudio Deco POS v2
 """
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pathlib import Path
 import uvicorn, hashlib, secrets
 
@@ -64,18 +66,18 @@ class AddItemReq(BaseModel):
     producto_id: int | None = None
     tienda_id: int
     nombre: str
-    cantidad: int = 1
-    precio_unitario: float
+    cantidad: int = Field(default=1, ge=1)
+    precio_unitario: float = Field(ge=0.0)
     es_precio_abierto: bool = False
 class EditItemReq(BaseModel):
     nombre: str
-    precio_unitario: float
+    precio_unitario: float = Field(ge=0.0)
 class CerrarMesaReq(BaseModel):
     usuario_id: int
     metodo_pago: str
-    monto_efectivo: float = 0.0
-    monto_tarjeta: float = 0.0
-    efectivo_recibido: float = 0.0
+    monto_efectivo: float = Field(default=0.0, ge=0.0)
+    monto_tarjeta: float = Field(default=0.0, ge=0.0)
+    efectivo_recibido: float = Field(default=0.0, ge=0.0)
 
 class MesaNombreReq(BaseModel):
     nombre: str
@@ -89,35 +91,35 @@ class GastoReq(BaseModel):
     categoria: str | None = None
     tienda_id: int | None = None
     concepto: str
-    monto: float
+    monto: float = Field(ge=0.0)
     origen: str = "Caja"
 class CorteReq(BaseModel):
     usuario_id: int
-    efectivo_real: float
-    fondo_caja: float = 0.0
+    efectivo_real: float = Field(ge=0.0)
+    fondo_caja: float = Field(default=0.0, ge=0.0)
     desglose: dict = {}
 
 class IngresoReq(BaseModel):
     usuario_id: int
     concepto: str = "Ingreso"
-    monto: float
+    monto: float = Field(ge=0.0)
     metodo_pago: str = "Efectivo"
 
 class FondoReq(BaseModel):
-    monto: float
+    monto: float = Field(ge=0.0)
 
 class ImprimirCorteReq(BaseModel):
     usuario_id: int
 
 class CorregirVentaReq(BaseModel):
     metodo_pago: str
-    monto_efectivo: float = 0.0
-    monto_tarjeta: float = 0.0
+    monto_efectivo: float = Field(default=0.0, ge=0.0)
+    monto_tarjeta: float = Field(default=0.0, ge=0.0)
 
 class BundleComponentReq(BaseModel):
     componente_id: int
-    cantidad: int = 1
-    precio_asignado: float
+    cantidad: int = Field(default=1, ge=1)
+    precio_asignado: float = Field(ge=0.0)
 
 class LoginReq(BaseModel):
     username: str
@@ -125,17 +127,17 @@ class LoginReq(BaseModel):
 
 class EstacionGastoReq(BaseModel):
     concepto: str
-    monto: float
+    monto: float = Field(ge=0.0)
     metodo_pago: str = "Efectivo"
 
 class RestockReq(BaseModel):
-    cantidad: float
+    cantidad: float = Field(ge=0.0)
 
 class AjustarStockReq(BaseModel):
-    nuevo_stock: float
+    nuevo_stock: float = Field(ge=0.0)
 
 class AjustarMinimoReq(BaseModel):
-    stock_minimo: float
+    stock_minimo: float = Field(ge=0.0)
 
 class BebidaVendidaReq(BaseModel):
     nombre_bebida: str
@@ -143,13 +145,13 @@ class BebidaVendidaReq(BaseModel):
 class NuevoIngredienteReq(BaseModel):
     nombre: str
     unidad: str = "g"
-    stock_inicial: float = 0
-    stock_minimo: float = 0
+    stock_inicial: float = Field(default=0.0, ge=0.0)
+    stock_minimo: float = Field(default=0.0, ge=0.0)
 
 class CompraInsumoReq(BaseModel):
     ingrediente_id: int
-    cantidad: float
-    costo_total: float
+    cantidad: float = Field(ge=0.0)
+    costo_total: float = Field(ge=0.0)
     nota: str = ""
 
 class RecetaNombreReq(BaseModel):
@@ -157,12 +159,13 @@ class RecetaNombreReq(BaseModel):
 
 class RecetaIngredienteReq(BaseModel):
     ingrediente_id: int
-    cantidad: float
+    cantidad: float = Field(ge=0.0)
 
 class PagoTiendaReq(BaseModel):
+    usuario_id: int | None = None
     tienda_id: int
     tienda_nombre: str
-    monto: float
+    monto: float = Field(ge=0.0)
     metodo_pago: str = "Efectivo"
     concepto: str = ""
     es_interno: bool = False
@@ -172,10 +175,10 @@ class PagoTiendaReq(BaseModel):
 class ProductReq(BaseModel):
     tienda_id: int
     nombre: str
-    precio: float
-    costo: float = 0.0
-    stock_local: int
-    stock_minimo: int
+    precio: float = Field(ge=0.0)
+    costo: float = Field(default=0.0, ge=0.0)
+    stock_local: int = Field(ge=0)
+    stock_minimo: int = Field(ge=0)
     codigo: str = ""
     es_precio_abierto: bool = False
     es_bundle: int = 0
@@ -494,8 +497,8 @@ def _descontar_bebidas_venta(items: list):
         for _ in range(cantidad):
             try:
                 descontar_ingredientes_bebida(receta_key)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.error(f"Silenced error in server: {e}")
     conn.close()
 
 
@@ -690,7 +693,8 @@ async def api_registrar_nomina(r: dict):
 async def api_pago_tienda(r: PagoTiendaReq):
     registrar_pago_tienda(
         r.tienda_id, r.tienda_nombre, r.monto, r.metodo_pago,
-        r.concepto, r.es_interno, r.semana_inicio, r.semana_fin
+        r.concepto, r.es_interno, r.semana_inicio, r.semana_fin,
+        usuario_id=r.usuario_id
     )
     return {"ok": True}
 
