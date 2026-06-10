@@ -197,9 +197,12 @@ def init_db():
         ventas_237 = conn.execute("SELECT COUNT(*) as c FROM venta_detalle WHERE tienda_id=237").fetchone()["c"]
         prods_237 = conn.execute("SELECT COUNT(*) as c FROM productos WHERE tienda_id=237").fetchone()["c"]
         if ventas_237 == 0 and prods_237 == 0:
+            # Reasignar gastos y pagos_tienda de la tienda 237 a la tienda activa 1
+            conn.execute("UPDATE gastos SET tienda_id=1 WHERE tienda_id=237")
+            conn.execute("UPDATE pagos_tienda SET tienda_id=1 WHERE tienda_id=237")
             conn.execute("DELETE FROM tiendas WHERE id=237")
             conn.commit()
-            logging.info("Migración: Tienda 'Estación 304' (ID 237) eliminada por inactividad.")
+            logging.info("Migración: Tienda 'Estación 304' (ID 237) combinada con ID 1 y eliminada.")
         else:
             logging.warning("Migración: Tienda 'Estación 304' (ID 237) NO eliminada porque tiene ventas o productos.")
 
@@ -725,17 +728,15 @@ def obtener_balance_actual():
         ventas_row['efectivo']
         + ingresos_row['efectivo']
         - gastos_row['caja']
-        - pagos_efectivo
         + ajuste_caja
     )
     banco = (
         ventas_row['tarjeta']
         + ingresos_row['banco']
         - gastos_row['banco']
-        - pagos_banco
         + ajuste_banco
     )
-    neto = total_ventas + total_ingresos - total_gastos - total_pagos + ajuste_caja + ajuste_banco
+    neto = total_ventas + total_ingresos - total_gastos + ajuste_caja + ajuste_banco
 
     return {
         'total':          round(neto, 2),
@@ -771,14 +772,8 @@ def ajustar_balance(caja_real: float, banco_real: float):
                COALESCE(SUM(CASE WHEN origen='Banco' THEN monto ELSE 0 END),0) as banco
         FROM gastos WHERE created_at > ?
     """, (desde,)).fetchone()
-    pagos_row = conn.execute("""
-        SELECT
-          COALESCE(SUM(CASE WHEN (es_interno=0 OR es_interno IS NULL) AND metodo_pago='Efectivo' THEN monto ELSE 0 END),0) as externos_efectivo,
-          COALESCE(SUM(CASE WHEN (es_interno=0 OR es_interno IS NULL) AND metodo_pago!='Efectivo' THEN monto ELSE 0 END),0) as externos_banco
-        FROM pagos_tienda WHERE created_at > ?
-    """, (desde,)).fetchone()
-    calculado_caja  = ventas_row['ef']  + ingresos_row['ef']     - gastos_row['caja']  - pagos_row['externos_efectivo']
-    calculado_banco = ventas_row['tar'] + ingresos_row['banco']  - gastos_row['banco'] - pagos_row['externos_banco']
+    calculado_caja  = ventas_row['ef']  + ingresos_row['ef']     - gastos_row['caja']
+    calculado_banco = ventas_row['tar'] + ingresos_row['banco']  - gastos_row['banco']
     ajuste_caja  = round(caja_real  - calculado_caja,  2)
     ajuste_banco = round(banco_real - calculado_banco, 2)
     conn.execute("INSERT OR REPLACE INTO config (clave,valor) VALUES ('ajuste_caja',?)",  (str(ajuste_caja),))
@@ -1668,16 +1663,27 @@ def registrar_pago_tienda(tienda_id, tienda_nombre, monto, metodo_pago, concepto
     origen_pago = "Caja" if metodo_pago == "Efectivo" else "Banco"
     uid = usuario_id if usuario_id else 1  # Fallback a Admin si no hay ID
     
-    # Reutilizamos la función registrar_gasto para mantener la consistencia contable
-    # Nota: registrar_gasto internamente registra el ingreso de Estación 304 si la tienda se llama "Estación..."
-    registrar_gasto(
-        usuario_id=uid,
-        categoria="Pago a Tiendas",
-        tienda_id=tienda_id,
-        concepto=concepto or f"Pago semanal a {tienda_nombre}",
-        monto=monto,
-        origen=origen_pago
-    )
+    # Reutilizamos la función registrar_gasto para mantener la consistencia contable.
+    # Si el pago es a Estación 304 (tienda_id=1), no registramos el gasto con tienda_id=1
+    # para evitar que registrar_gasto lo descuente de su propio balance local (como si fuera un gasto interno de la Estación).
+    # En su lugar, lo registramos como gasto general y sumamos un ingreso a la Estación.
+    if tienda_id == 1 or (tienda_nombre and 'Estaci' in tienda_nombre):
+        registrar_gasto(
+            usuario_id=uid,
+            tienda_id=None,
+            concepto=concepto or f"Transferencia interna a {tienda_nombre}",
+            monto=monto,
+            origen=origen_pago
+        )
+        registrar_movimiento_estacion('ingreso', concepto or f"Transferencia interna de Estudio Deco", monto, metodo_pago)
+    else:
+        registrar_gasto(
+            usuario_id=uid,
+            tienda_id=tienda_id,
+            concepto=concepto or f"Pago semanal a {tienda_nombre}",
+            monto=monto,
+            origen=origen_pago
+        )
 
 def obtener_pagos_semana(semana_inicio, semana_fin):
     conn = get_connection()
