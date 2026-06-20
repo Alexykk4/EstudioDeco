@@ -3382,3 +3382,151 @@
 
     initTheme();
     initSession();
+
+    /* ── Notas Flotantes ── */
+    let _notesTimeout = {};
+
+    async function loadNotes() {
+      try {
+        const res = await fetch('/api/notas');
+        if (!res.ok) return;
+        const data = await res.json();
+        const container = document.getElementById('notesContainer');
+        container.innerHTML = '';
+        data.forEach(note => renderNote(note));
+      } catch (e) { console.error('Error loading notes:', e); }
+    }
+
+    async function createNote() {
+      try {
+        const body = { texto: "", pos_x: window.innerWidth / 2 - 110, pos_y: window.innerHeight / 2 - 60, color: "#fef3c7" };
+        const res = await fetch('/api/notas', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) return;
+        const { id } = await res.json();
+        renderNote({ id, ...body });
+      } catch (e) { console.error('Error creating note:', e); }
+    }
+
+    function renderNote(note) {
+      const el = document.createElement('div');
+      el.className = 'floating-note';
+      el.id = `note-${note.id}`;
+      el.style.left = `${note.pos_x}px`;
+      el.style.top = `${note.pos_y}px`;
+      el.style.backgroundColor = note.color;
+
+      const colors = ['#fef3c7', '#dcfce7', '#dbeafe', '#fce7f3', '#f3f4f6'];
+      const colorBtns = colors.map(c => 
+        `<button class="note-color-btn" style="background:${c};" onclick="changeNoteColor(${note.id}, '${c}')"></button>`
+      ).join('');
+
+      el.innerHTML = `
+        <div class="note-header" onmousedown="startDrag(event, ${note.id})" ontouchstart="startDrag(event, ${note.id})">
+          <div class="note-colors">${colorBtns}</div>
+          <button class="note-del-btn" onclick="deleteNote(${note.id})">✕</button>
+        </div>
+        <textarea class="note-textarea" oninput="handleNoteInput(${note.id}, this)">${note.texto}</textarea>
+      `;
+
+      document.getElementById('notesContainer').appendChild(el);
+    }
+
+    function removeEmojis(text) {
+      return text.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '');
+    }
+
+    function handleNoteInput(id, textarea) {
+      const orig = textarea.value;
+      const clean = removeEmojis(orig);
+      if (orig !== clean) {
+        textarea.value = clean;
+      }
+      debounceUpdateNote(id);
+    }
+
+    function changeNoteColor(id, color) {
+      const el = document.getElementById(`note-${id}`);
+      if (el) el.style.backgroundColor = color;
+      debounceUpdateNote(id);
+    }
+
+    async function deleteNote(id) {
+      document.getElementById(`note-${id}`)?.remove();
+      try {
+        await fetch(`/api/notas/${id}`, { method: 'DELETE' });
+      } catch (e) { console.error('Error deleting note:', e); }
+    }
+
+    function debounceUpdateNote(id) {
+      if (_notesTimeout[id]) clearTimeout(_notesTimeout[id]);
+      _notesTimeout[id] = setTimeout(() => updateNote(id), 500);
+    }
+
+    async function updateNote(id) {
+      const el = document.getElementById(`note-${id}`);
+      if (!el) return;
+      const texto = el.querySelector('textarea').value;
+      const pos_x = parseFloat(el.style.left) || 0;
+      const pos_y = parseFloat(el.style.top) || 0;
+      const color = el.style.backgroundColor || '#fef3c7';
+
+      try {
+        await fetch(`/api/notas/${id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texto, pos_x, pos_y, color })
+        });
+      } catch (e) { console.error('Error updating note:', e); }
+    }
+
+    let _dragNoteId = null;
+    let _dragOffsetX = 0;
+    let _dragOffsetY = 0;
+
+    function startDrag(e, id) {
+      if (e.target.tagName.toLowerCase() === 'button') return;
+      _dragNoteId = id;
+      const el = document.getElementById(`note-${id}`);
+      const rect = el.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      _dragOffsetX = clientX - rect.left;
+      _dragOffsetY = clientY - rect.top;
+      el.style.zIndex = 1002;
+    }
+
+    function onDragMove(e) {
+      if (!_dragNoteId) return;
+      const el = document.getElementById(`note-${_dragNoteId}`);
+      if (!el) return;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      
+      let x = clientX - _dragOffsetX;
+      let y = clientY - _dragOffsetY;
+      
+      // Keep within bounds
+      x = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, x));
+      y = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, y));
+
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+    }
+
+    function onDragEnd() {
+      if (_dragNoteId) {
+        document.getElementById(`note-${_dragNoteId}`).style.zIndex = '';
+        debounceUpdateNote(_dragNoteId);
+        _dragNoteId = null;
+      }
+    }
+
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
+    document.addEventListener('touchmove', onDragMove, {passive: false});
+    document.addEventListener('touchend', onDragEnd);
+
+    // Load notes when init
+    window.addEventListener('load', loadNotes);

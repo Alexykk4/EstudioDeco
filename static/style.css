@@ -1483,6 +1483,109 @@
       cursor: pointer;
     }
 
+    .invoice-preview-logo {
+      max-width: 150px;
+      max-height: 80px;
+      object-fit: contain;
+    }
+
+    /* ── Notas Flotantes ── */
+    #notesContainer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none; /* Allows clicking through the container itself */
+      z-index: 1000;
+    }
+
+    .floating-note {
+      position: absolute;
+      width: 220px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      border: 1px solid rgba(0,0,0,0.1);
+      pointer-events: auto; /* Re-enable pointer events for the note */
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    .note-header {
+      height: 24px;
+      background: rgba(0,0,0,0.05);
+      border-bottom: 1px solid rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      cursor: grab;
+    }
+
+    .note-header:active {
+      cursor: grabbing;
+    }
+
+    .note-colors {
+      display: flex;
+      gap: 4px;
+    }
+
+    .note-color-btn {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid rgba(0,0,0,0.2);
+      cursor: pointer;
+    }
+
+    .note-del-btn {
+      background: none;
+      border: none;
+      color: var(--red);
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0;
+    }
+
+    .note-textarea {
+      width: 100%;
+      height: 120px;
+      padding: 8px;
+      border: none;
+      background: transparent;
+      resize: none;
+      outline: none;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: #333;
+    }
+
+    #btnNuevaNota {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      padding: 12px 20px;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(59,130,246,0.4);
+      cursor: pointer;
+      z-index: 1001;
+      transition: transform 0.2s, background 0.2s;
+      pointer-events: auto;
+    }
+
+    #btnNuevaNota:hover {
+      background: #2563eb;
+      transform: translateY(-2px);
+    }
+
     .propina-label {
       font-size: 12px;
       font-weight: 700;
