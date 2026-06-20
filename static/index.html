@@ -218,6 +218,7 @@
       <button class="nav-item" onclick="openPage('💼 Gastos e Ingresos', showMovimientosPage)"><span class="nav-icon">💼</span><span
           class="nav-label"> Gastos e Ingresos</span></button>
       <div style="flex:1;"></div>
+      <button class="nav-item" onclick="createNote()" style="margin-bottom:4px;color:var(--sage);"><span class="nav-icon">📝</span><span class="nav-label"> Nueva Nota</span></button>
       <button class="nav-item" onclick="doLogout()" style="color:var(--red);margin-bottom:8px;"><span class="nav-icon">🚪</span><span class="nav-label"> Cerrar Sesión</span></button>
     </aside>
 
@@ -392,7 +393,10 @@
 
   <!-- Modal container fuera de decoApp para que sea visible en sesión Estación también -->
   <div id="modals"></div>
+  <!-- Contenedor Notas Flotantes -->
+  <div id="notesContainer"></div>
 
+  <script src="app.js"></script>
 </body>
 
 </html>

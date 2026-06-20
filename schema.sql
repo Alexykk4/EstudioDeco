@@ -215,3 +215,11 @@ INSERT OR IGNORE INTO productos (id, tienda_id, nombre, precio, stock_local, sto
     (21, 4, 'Grava Decorativa', 55.00, 20, 5),
     (22, 4, 'Filtro Pecera',   180.00,  8, 2);
     
+CREATE TABLE IF NOT EXISTS notas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    texto TEXT NOT NULL,
+    pos_x REAL NOT NULL DEFAULT 100,
+    pos_y REAL NOT NULL DEFAULT 100,
+    color TEXT DEFAULT '#fef3c7',
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);

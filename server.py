@@ -185,6 +185,12 @@ class ProductReq(BaseModel):
     categoria_producto: str = ""
     receta_key: str = ""
 
+class NotaReq(BaseModel):
+    texto: str
+    pos_x: float = 100
+    pos_y: float = 100
+    color: str = "#fef3c7"
+
 # ── Pages ──
 @app.get("/")
 async def root():
@@ -799,6 +805,47 @@ async def api_reimprimir_comanda(vid: int):
     label += f" · {v['folio']}"
     ok = imprimir_comanda(label, [dict(i) for i in items])
     return {"impreso": ok}
+
+# ── Notas Flotantes ──
+import emoji
+
+def remove_emojis(text: str) -> str:
+    return emoji.replace_emoji(text, replace='')
+
+@app.get("/api/notas")
+async def api_get_notas():
+    conn = get_connection()
+    notas = conn.execute("SELECT * FROM notas").fetchall()
+    conn.close()
+    return [dict(n) for n in notas]
+
+@app.post("/api/notas")
+async def api_post_nota(r: NotaReq):
+    conn = get_connection()
+    cur = conn.cursor()
+    texto_limpio = remove_emojis(r.texto)
+    cur.execute("INSERT INTO notas (texto, pos_x, pos_y, color) VALUES (?,?,?,?)", (texto_limpio, r.pos_x, r.pos_y, r.color))
+    conn.commit()
+    nid = cur.lastrowid
+    conn.close()
+    return {"id": nid}
+
+@app.put("/api/notas/{nid}")
+async def api_put_nota(nid: int, r: NotaReq):
+    conn = get_connection()
+    texto_limpio = remove_emojis(r.texto)
+    conn.execute("UPDATE notas SET texto=?, pos_x=?, pos_y=?, color=? WHERE id=?", (texto_limpio, r.pos_x, r.pos_y, r.color, nid))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+@app.delete("/api/notas/{nid}")
+async def api_delete_nota(nid: int):
+    conn = get_connection()
+    conn.execute("DELETE FROM notas WHERE id=?", (nid,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
 
 if __name__ == "__main__":
     print("\n  * Estudio Deco POS *")
