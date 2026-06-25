@@ -26,3 +26,10 @@ desktop.ini
 # IDE
 .vscode/
 .idea/
+.claude/
+
+# Logs
+errores.log
+
+# Reportes y PDFs generados
+assets/*.pdf
