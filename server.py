@@ -491,9 +491,12 @@ def _descontar_bebidas_venta(items: list):
         prod_id   = it.get("producto_id")
         receta_key = ""
         if prod_id:
-            row = conn.execute("SELECT receta_key FROM productos WHERE id=?", (prod_id,)).fetchone()
-            if row:
-                receta_key = (row["receta_key"] or "").strip()
+            try:
+                row = conn.execute("SELECT receta_key FROM productos WHERE id=?", (prod_id,)).fetchone()
+                if row:
+                    receta_key = (row["receta_key"] or "").strip()
+            except Exception as e:
+                logging.error(f"Silenced error in server: {e}")
         # Fallback: comparar nombre en mayúsculas (compatibilidad con productos sin receta asignada)
         if not receta_key:
             receta_key = (it.get("nombre_producto") or it.get("nombre") or "").strip().upper()

@@ -30,6 +30,7 @@ def _asegurar_columna(conn, tabla, columna, definicion):
     cursor = conn.execute(f"PRAGMA table_info({tabla})")
     columnas_existentes = [row["name"] for row in cursor.fetchall()]
     if columna not in columnas_existentes:
+        conn.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {definicion}")
         logging.info(f"Migración: Columna {columna} agregada a {tabla}.")
 
 def init_db():
@@ -176,6 +177,7 @@ def init_db():
     _asegurar_columna(conn, "ingresos", "anulado", "INTEGER NOT NULL DEFAULT 0")
     _asegurar_columna(conn, "ingresos", "anulado_at", "TEXT DEFAULT NULL")
     _asegurar_columna(conn, "ingresos", "anulado_por", "TEXT DEFAULT NULL")
+    conn.commit()
 
     for sql in migrations:
         try:
