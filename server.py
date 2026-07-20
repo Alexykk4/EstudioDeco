@@ -22,7 +22,7 @@ from modules.database import (
     obtener_ventas_dia, obtener_ventas_turno, corregir_venta, anular_venta,
     obtener_bundle_components, agregar_bundle_component, eliminar_bundle_component,
     obtener_resumen_semana, registrar_pago_tienda, obtener_pagos_semana,
-    obtener_estadisticas,
+    obtener_estadisticas, obtener_estadisticas_estudio,
     obtener_balance_actual, ajustar_balance, limpiar_ingresos_gastos,
     registrar_nomina, listar_nominas,
     registrar_movimiento_estacion, obtener_balance_estacion, obtener_movimientos_estacion,
@@ -665,6 +665,10 @@ async def api_resumen_semanal(desde: str = None, hasta: str = None):
 
 @app.get("/api/estadisticas")
 async def api_estadisticas(): return obtener_estadisticas()
+
+@app.get("/api/estadisticas/estudio")
+async def api_estadisticas_estudio(desde: str = None, hasta: str = None):
+    return obtener_estadisticas_estudio(desde, hasta)
 
 @app.get("/api/balance")
 async def api_balance(): return obtener_balance_actual()

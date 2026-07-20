@@ -1907,6 +1907,172 @@ def obtener_estadisticas():
     return {'por_mes': por_mes, 'por_año': por_año, 'tiendas': tiendas, 'por_dia': por_dia}
 
 
+# Cláusula SQL centralizada: "Estudio Deco" en sentido de negocio = todo
+# excepto la cafetería Estación 304 (misma convención que obtener_resumen_semana).
+_SCOPE_ESTUDIO_SQL = "LOWER(COALESCE(t.nombre,'')) NOT LIKE '%estaci%'"
+
+_DOW_ES = {
+    '0': 'Domingo', '1': 'Lunes', '2': 'Martes', '3': 'Miércoles',
+    '4': 'Jueves', '5': 'Viernes', '6': 'Sábado',
+}
+_DOW_ORDEN = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
+
+def obtener_estadisticas_estudio(desde=None, hasta=None):
+    """Estadísticas enfocadas SOLO en Estudio Deco (excluye Estación 304).
+
+    Responde a: cuánto se vende, qué taller vende más, qué días se vende más.
+    Los totales se calculan sobre venta_detalle.subtotal (no sobre ventas.total),
+    porque una venta puede mezclar artículos de varias tiendas.
+    """
+    conn = get_connection()
+
+    # Rango de fechas opcional. Sin rango => histórico completo.
+    fecha_clause = ""
+    params = []
+    if desde and hasta:
+        fecha_clause = " AND DATE(v.created_at) BETWEEN ? AND ? "
+        params = [desde, hasta]
+
+    base_from = f"""
+        FROM venta_detalle vd
+        JOIN ventas v ON v.id = vd.venta_id
+        LEFT JOIN tiendas t ON t.id = vd.tienda_id
+        WHERE (v.cancelada IS NULL OR v.cancelada = 0)
+          AND {_SCOPE_ESTUDIO_SQL}
+          {fecha_clause}
+    """
+
+    # ── Resumen general del alcance ──
+    resumen_row = conn.execute(f"""
+        SELECT COALESCE(SUM(vd.subtotal), 0) as total,
+               COUNT(DISTINCT v.id)          as num_ventas,
+               COALESCE(SUM(vd.cantidad), 0) as unidades
+        {base_from}
+    """, params).fetchone()
+    total_ventas = round(resumen_row['total'], 2)
+    num_ventas = int(resumen_row['num_ventas'])
+    unidades = int(resumen_row['unidades'])
+    ticket_promedio = round(total_ventas / num_ventas, 2) if num_ventas else 0.0
+
+    # ── Ranking de talleres (categoria_producto = 'talleres') ──
+    talleres_rows = conn.execute(f"""
+        SELECT vd.nombre_producto          as producto,
+               COALESCE(SUM(vd.cantidad),0) as cantidad,
+               COALESCE(SUM(vd.subtotal),0) as total
+        FROM venta_detalle vd
+        JOIN ventas v ON v.id = vd.venta_id
+        LEFT JOIN tiendas t ON t.id = vd.tienda_id
+        LEFT JOIN productos p ON p.id = vd.producto_id
+        WHERE (v.cancelada IS NULL OR v.cancelada = 0)
+          AND {_SCOPE_ESTUDIO_SQL}
+          AND LOWER(COALESCE(p.categoria_producto,'')) = 'talleres'
+          {fecha_clause}
+        GROUP BY vd.nombre_producto
+        ORDER BY total DESC
+    """, params).fetchall()
+    ranking_talleres = [
+        {'producto': r['producto'], 'cantidad': int(r['cantidad']), 'total': round(r['total'], 2)}
+        for r in talleres_rows
+    ]
+
+    # ── Ranking de tiendas (dentro del alcance) ──
+    tiendas_rows = conn.execute(f"""
+        SELECT COALESCE(t.nombre,'Sin Tienda') as tienda,
+               COALESCE(SUM(vd.cantidad),0)    as cantidad,
+               COALESCE(SUM(vd.subtotal),0)    as total
+        {base_from}
+        GROUP BY COALESCE(t.nombre,'Sin Tienda')
+        ORDER BY total DESC
+    """, params).fetchall()
+    ranking_tiendas = [
+        {'tienda': r['tienda'], 'cantidad': int(r['cantidad']), 'total': round(r['total'], 2)}
+        for r in tiendas_rows
+    ]
+
+    # ── Top productos (cualquier categoría, dentro del alcance) ──
+    productos_rows = conn.execute(f"""
+        SELECT vd.nombre_producto          as producto,
+               COALESCE(SUM(vd.cantidad),0) as cantidad,
+               COALESCE(SUM(vd.subtotal),0) as total
+        {base_from}
+        GROUP BY vd.nombre_producto
+        ORDER BY total DESC
+        LIMIT 15
+    """, params).fetchall()
+    ranking_productos = [
+        {'producto': r['producto'], 'cantidad': int(r['cantidad']), 'total': round(r['total'], 2)}
+        for r in productos_rows
+    ]
+
+    # ── Ventas por día de la semana ──
+    dow_rows = conn.execute(f"""
+        SELECT strftime('%w', v.created_at) as dow,
+               COALESCE(SUM(vd.subtotal),0) as total,
+               COUNT(DISTINCT v.id)         as num_ventas
+        {base_from}
+        GROUP BY dow
+    """, params).fetchall()
+    dow_map = {r['dow']: r for r in dow_rows}
+    ranking_dias_semana = []
+    for nombre in _DOW_ORDEN:
+        dow_key = next((k for k, v in _DOW_ES.items() if v == nombre), None)
+        row = dow_map.get(dow_key)
+        ranking_dias_semana.append({
+            'dia': nombre,
+            'total': round(row['total'], 2) if row else 0.0,
+            'num_ventas': int(row['num_ventas']) if row else 0,
+        })
+
+    # ── Top días concretos (fechas con más venta) ──
+    top_dias_rows = conn.execute(f"""
+        SELECT DATE(v.created_at)            as fecha,
+               COALESCE(SUM(vd.subtotal),0)  as total,
+               COUNT(DISTINCT v.id)          as num_ventas
+        {base_from}
+        GROUP BY DATE(v.created_at)
+        ORDER BY total DESC
+        LIMIT 10
+    """, params).fetchall()
+    top_dias = [
+        {'fecha': r['fecha'], 'total': round(r['total'], 2), 'num_ventas': int(r['num_ventas'])}
+        for r in top_dias_rows
+    ]
+
+    # ── Serie mensual ──
+    mes_rows = conn.execute(f"""
+        SELECT strftime('%Y-%m', v.created_at) as mes,
+               COALESCE(SUM(vd.subtotal),0)    as total,
+               COUNT(DISTINCT v.id)            as num_ventas
+        {base_from}
+        GROUP BY mes
+        ORDER BY mes
+    """, params).fetchall()
+    por_mes = [
+        {'mes': r['mes'], 'total': round(r['total'], 2), 'num_ventas': int(r['num_ventas'])}
+        for r in mes_rows
+    ]
+
+    conn.close()
+    return {
+        'scope': 'estudio_deco',
+        'desde': desde,
+        'hasta': hasta,
+        'resumen': {
+            'total': total_ventas,
+            'num_ventas': num_ventas,
+            'unidades': unidades,
+            'ticket_promedio': ticket_promedio,
+        },
+        'ranking_talleres': ranking_talleres,
+        'ranking_tiendas': ranking_tiendas,
+        'ranking_productos': ranking_productos,
+        'ranking_dias_semana': ranking_dias_semana,
+        'top_dias': top_dias,
+        'por_mes': por_mes,
+    }
+
+
 # ══════════════════════════════════════════════════════════════════
 # INVENTARIO ESTACIÓN 304
 # ══════════════════════════════════════════════════════════════════

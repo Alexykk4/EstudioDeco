@@ -2215,23 +2215,99 @@
       </div>
     </div>`;
 
+      // ── Estadísticas SOLO Estudio Deco (excluye Estación 304) ──
+      let estudioData = null;
+
+      function renderEstudio() {
+        const d = estudioData;
+        if (!d) return '<div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando…</div>';
+        const fmt$ = v => '$' + (v || 0).toLocaleString('es-MX', { minimumFractionDigits: 0 });
+
+        // Lista horizontal con barras proporcionales (HTML puro, sin dependencias)
+        function barList(items, labelKey, valueKey, color, subKey) {
+          if (!items || !items.length) return '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Sin datos</div>';
+          const maxV = Math.max(...items.map(it => it[valueKey] || 0), 1);
+          return items.map((it, i) => {
+            const pct = Math.max(3, (it[valueKey] || 0) / maxV * 100);
+            const sub = subKey != null ? `<span style="color:var(--text-muted);font-weight:500;">${it[subKey]} u.</span>` : '';
+            return `<div style="margin-bottom:8px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+                <span style="font-weight:600;color:var(--text);">${i + 1}. ${it[labelKey]}</span>
+                <span style="display:flex;gap:8px;align-items:center;"><span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:${color};">${fmt$(it[valueKey])}</span>${sub}</span>
+              </div>
+              <div style="height:8px;background:var(--bg-warm);border-radius:5px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${color};border-radius:5px;"></div></div>
+            </div>`;
+          }).join('');
+        }
+
+        const r = d.resumen || {};
+        const kpis = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+          <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:2px;">Vendido</div>
+            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);">${fmt$(r.total)}</div>
+          </div>
+          <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:2px;">Tickets</div>
+            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--blue);">${r.num_ventas || 0}</div>
+          </div>
+          <div style="background:var(--rose-light,#F8E4FF);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--rose,#CE93D8);margin-bottom:2px;">Unidades</div>
+            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--rose,#CE93D8);">${r.unidades || 0}</div>
+          </div>
+          <div style="background:var(--gold-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">Ticket prom.</div>
+            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--gold);">${fmt$(r.ticket_promedio)}</div>
+          </div>
+        </div>`;
+
+        const card = (titulo, contenido) => `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:10px;">${titulo}</div>
+          ${contenido}
+        </div>`;
+
+        const talleres = card('🎨 Talleres que más venden', barList(d.ranking_talleres, 'producto', 'total', '#7E57C2', 'cantidad'));
+        const dias = card('📅 Días que más venden', barList(d.ranking_dias_semana, 'dia', 'total', '#26A69A', 'num_ventas'));
+        const tiendas = card('🏪 Tiendas (excluye Estación 304)', barList(d.ranking_tiendas, 'tienda', 'total', '#5C6BC0', 'cantidad'));
+        const productos = card('⭐ Top productos', barList(d.ranking_productos, 'producto', 'total', '#C4755A', 'cantidad'));
+
+        const topDiasRows = (d.top_dias || []).map((t, i) => `<tr style="border-top:1px solid var(--border-light);${i % 2 === 1 ? 'background:var(--bg-warm);' : ''}">
+            <td style="padding:6px 10px;font-weight:600;">${i + 1}. ${t.fecha}</td>
+            <td style="padding:6px 10px;text-align:right;color:var(--text-secondary);">${t.num_ventas} tickets</td>
+            <td style="padding:6px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--sage-dark);">${fmt$(t.total)}</td>
+          </tr>`).join('');
+        const topDias = card('🔥 Mejores fechas', `<div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">${topDiasRows || '<tr><td style="padding:16px;text-align:center;color:var(--text-muted);">Sin datos</td></tr>'}</table>
+        </div>`);
+
+        return kpis + talleres + dias + tiendas + productos + topDias;
+      }
+
       function renderModal(tab) {
         const bs = t => t === tab ? 'background:var(--sage-dark);color:#fff;border:none;' : 'background:var(--bg-warm);color:var(--text-secondary);border:1px solid var(--border);';
+        const contenido = tab === 'estudio' ? renderEstudio() : renderContent(tab);
+        const subtitulo = tab === 'estudio' ? 'Solo Estudio Deco · excluye Estación 304' : 'Análisis histórico de ventas, ingresos y gastos';
         showModal(`<div class="modal-body">
       <div class="modal-title">📈 Estadísticas</div>
-      <div class="modal-sub">Análisis histórico de ventas, ingresos y gastos</div>
-      ${balanceHtml}
-      <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <div class="modal-sub">${subtitulo}</div>
+      ${tab === 'estudio' ? '' : balanceHtml}
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <button onclick="window._statsTab('mes')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('mes')}">Por mes</button>
         <button onclick="window._statsTab('año')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('año')}">Por año</button>
+        <button onclick="window._statsTab('estudio')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('estudio')}">🎨 Estudio Deco</button>
       </div>
-      ${renderContent(tab)}
+      ${contenido}
       <div style="padding-top:12px;margin-top:4px;"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>
     </div>`);
         const m = document.querySelector('#modals .modal'); if (m) { m.style.width = '880px'; m.style.maxWidth = '99vw'; }
       }
 
-      window._statsTab = (tab) => renderModal(tab);
+      window._statsTab = async (tab) => {
+        if (tab === 'estudio' && !estudioData) {
+          try { estudioData = await api('/estadisticas/estudio'); }
+          catch (e) { toast('❌', e.message, 'var(--red)'); return; }
+        }
+        renderModal(tab);
+      };
       renderModal('mes');
     }
 
