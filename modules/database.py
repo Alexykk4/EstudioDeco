@@ -177,6 +177,9 @@ def init_db():
     _asegurar_columna(conn, "ingresos", "anulado", "INTEGER NOT NULL DEFAULT 0")
     _asegurar_columna(conn, "ingresos", "anulado_at", "TEXT DEFAULT NULL")
     _asegurar_columna(conn, "ingresos", "anulado_por", "TEXT DEFAULT NULL")
+    _asegurar_columna(conn, "notas", "width", "REAL NOT NULL DEFAULT 260")
+    _asegurar_columna(conn, "notas", "height", "REAL NOT NULL DEFAULT 180")
+    _asegurar_columna(conn, "notas", "minimizada", "INTEGER NOT NULL DEFAULT 0")
     conn.commit()
 
     for sql in migrations:
@@ -1418,6 +1421,37 @@ def obtener_ventas_dia(fecha=None):
         v_dict["items"] = items_map.get(v["id"], [])
         result.append(v_dict)
     return result
+
+
+def obtener_ventas_calendario(anio, mes):
+    """Totales diarios de un mes para el calendario de estadísticas."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT DATE(created_at) as fecha,
+               COUNT(*) as num_ventas,
+               COALESCE(SUM(total), 0) as total,
+               COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN total ELSE 0 END), 0) as efectivo,
+               COALESCE(SUM(CASE WHEN metodo_pago='Tarjeta' THEN total ELSE 0 END), 0) as tarjeta,
+               COALESCE(SUM(CASE WHEN metodo_pago='Transferencia' THEN total ELSE 0 END), 0) as transferencia
+        FROM ventas
+        WHERE (cancelada IS NULL OR cancelada=0)
+          AND strftime('%Y', created_at)=?
+          AND strftime('%m', created_at)=?
+        GROUP BY DATE(created_at)
+        ORDER BY fecha
+    """, (str(anio), f"{int(mes):02d}")).fetchall()
+    conn.close()
+    return [
+        {
+            'fecha': r['fecha'],
+            'num_ventas': int(r['num_ventas']),
+            'total': round(r['total'], 2),
+            'efectivo': round(r['efectivo'], 2),
+            'tarjeta': round(r['tarjeta'], 2),
+            'transferencia': round(r['transferencia'], 2),
+        }
+        for r in rows
+    ]
 
 def obtener_ventas_turno(fecha=None):
     """Obtiene las ventas del turno actual en 2 queries (elimina N+1, F-7)."""

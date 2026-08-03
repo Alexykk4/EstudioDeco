@@ -19,7 +19,7 @@ from modules.database import (
     obtener_ordenes_mesa, renombrar_orden, cancelar_orden_mesa,
     obtener_todos_los_productos, crear_producto, actualizar_producto, eliminar_producto,
     actualizar_item_orden, registrar_ingreso, set_fondo_apertura, get_fondo_apertura,
-    obtener_ventas_dia, obtener_ventas_turno, corregir_venta, anular_venta,
+    obtener_ventas_dia, obtener_ventas_turno, obtener_ventas_calendario, corregir_venta, anular_venta,
     obtener_bundle_components, agregar_bundle_component, eliminar_bundle_component,
     obtener_resumen_semana, registrar_pago_tienda, obtener_pagos_semana,
     obtener_estadisticas, obtener_estadisticas_estudio,
@@ -34,7 +34,7 @@ from modules.database import (
     eliminar_receta, agregar_ingrediente_receta, quitar_ingrediente_receta,
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
-from modules.pdf_report import generar_corte_pdf, generar_nomina_pdf
+from modules.pdf_report import generar_corte_pdf, generar_nomina_pdf, generar_ventas_dia_pdf, generar_ventas_dia_csv
 from modules.email_sender import enviar_corte_email, enviar_notificacion_email, enviar_nomina_email
 from modules.sync_sheets import sync_worker
 
@@ -59,6 +59,14 @@ ASSETS = Path(__file__).parent / "assets"
 ASSETS.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 app.mount("/assets", StaticFiles(directory=str(ASSETS)), name="assets")
+
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 # ── Models ──
 class NipReq(BaseModel): nip: str
@@ -190,6 +198,9 @@ class NotaReq(BaseModel):
     pos_x: float = 100
     pos_y: float = 100
     color: str = "#fef3c7"
+    width: float = 260
+    height: float = 180
+    minimizada: int = 0
 
 # ── Pages ──
 @app.get("/")
@@ -750,6 +761,36 @@ async def api_del_bundle(cid: int):
 @app.get("/api/ventas/hoy")
 async def api_ventas_hoy(): return obtener_ventas_dia()
 
+@app.get("/api/ventas")
+async def api_ventas_fecha(fecha: str = None):
+    return obtener_ventas_dia(fecha)
+
+@app.get("/api/ventas/calendario")
+async def api_ventas_calendario(anio: int = None, mes: int = None):
+    from datetime import date as _date
+    hoy = _date.today()
+    return obtener_ventas_calendario(anio or hoy.year, mes or hoy.month)
+
+@app.get("/api/report/ventas-dia.pdf")
+async def api_ventas_dia_pdf(fecha: str = None):
+    from datetime import date as _date
+    from fastapi.responses import FileResponse
+    if not fecha:
+        fecha = _date.today().strftime("%Y-%m-%d")
+    ventas = obtener_ventas_dia(fecha)
+    path = generar_ventas_dia_pdf(fecha, ventas)
+    return FileResponse(path, media_type="application/pdf", filename=f"ventas_{fecha}.pdf")
+
+@app.get("/api/report/ventas-dia.csv")
+async def api_ventas_dia_csv(fecha: str = None):
+    from datetime import date as _date
+    from fastapi.responses import FileResponse
+    if not fecha:
+        fecha = _date.today().strftime("%Y-%m-%d")
+    ventas = obtener_ventas_dia(fecha)
+    path = generar_ventas_dia_csv(fecha, ventas)
+    return FileResponse(path, media_type="text/csv", filename=f"ventas_{fecha}.csv")
+
 @app.put("/api/ventas/{vid}")
 async def api_corregir_venta(vid: int, r: CorregirVentaReq):
     corregir_venta(vid, r.metodo_pago, r.monto_efectivo, r.monto_tarjeta)
@@ -831,7 +872,10 @@ async def api_post_nota(r: NotaReq):
     conn = get_connection()
     cur = conn.cursor()
     texto_limpio = remove_emojis(r.texto)
-    cur.execute("INSERT INTO notas (texto, pos_x, pos_y, color) VALUES (?,?,?,?)", (texto_limpio, r.pos_x, r.pos_y, r.color))
+    cur.execute(
+        "INSERT INTO notas (texto, pos_x, pos_y, color, width, height, minimizada) VALUES (?,?,?,?,?,?,?)",
+        (texto_limpio, r.pos_x, r.pos_y, r.color, r.width, r.height, int(bool(r.minimizada))),
+    )
     conn.commit()
     nid = cur.lastrowid
     conn.close()
@@ -841,7 +885,10 @@ async def api_post_nota(r: NotaReq):
 async def api_put_nota(nid: int, r: NotaReq):
     conn = get_connection()
     texto_limpio = remove_emojis(r.texto)
-    conn.execute("UPDATE notas SET texto=?, pos_x=?, pos_y=?, color=? WHERE id=?", (texto_limpio, r.pos_x, r.pos_y, r.color, nid))
+    conn.execute(
+        "UPDATE notas SET texto=?, pos_x=?, pos_y=?, color=?, width=?, height=?, minimizada=? WHERE id=?",
+        (texto_limpio, r.pos_x, r.pos_y, r.color, r.width, r.height, int(bool(r.minimizada)), nid),
+    )
     conn.commit()
     conn.close()
     return {"ok": True}

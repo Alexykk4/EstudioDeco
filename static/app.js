@@ -36,8 +36,95 @@
       return r.json();
     }
 
+    /* ── Professional SVG icons (replaces emojis at render time) ── */
+    const _ICON_PATHS = {
+      check: '<path d="M5 13l4 4L19 7"/>',
+      x: '<path d="M6 6l12 12M18 6L6 18"/>',
+      warn: '<path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h16.9a2 2 0 001.7-3L12.7 3.9a2 2 0 00-3.4 0z"/>',
+      cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+      card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+      transfer: '<path d="M7 16V4M7 4L3 8M7 4l4 4M17 8v12M17 20l4-4M17 20l-4-4"/>',
+      chart: '<path d="M4 19V5M4 19h16M8 16V10M12 16V7M16 16v-5"/>',
+      calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+      list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+      eye: '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
+      users: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>',
+      bag: '<path d="M6 8h12l1 13H5L6 8z"/><path d="M9 8V6a3 3 0 016 0v2"/>',
+      note: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/>',
+      logout: '<path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>',
+      bank: '<path d="M3 21h18M3 10h18M5 10V21M9 10V21M15 10V21M19 10V21M12 3l9 7H3l9-7z"/>',
+      cart: '<circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M3 3h2l2.4 12.2a2 2 0 002 1.6h7.8a2 2 0 002-1.5L21 7H6"/>',
+      table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 16h18M9 4v16"/>',
+      print: '<path d="M6 9V3h12v6"/><path d="M6 17H4a2 2 0 01-2-2v-4a2 2 0 012-2h16a2 2 0 012 2v4a2 2 0 01-2 2h-2"/><rect x="6" y="13" width="12" height="8"/>',
+      edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>',
+      trash: '<path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>',
+      search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+      money: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c.5-1 1.5-1.5 2.5-1.5s2 .6 2 1.75-1 1.5-2.5 2-2.5.9-2.5 2.25S10.5 16 12 16s2-.4 2.5-1.2"/>',
+      spend: '<path d="M12 2v20M17 7H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+      settings: '<circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>',
+      phone: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/>',
+      mix: '<path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/>',
+      package: '<path d="M16.5 9.4L7.5 4.2M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.3 7L12 12l8.7-5M12 22V12"/>',
+      user: '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+      moon: '<path d="M21 14.5A8.5 8.5 0 1110.5 3a7 7 0 0010.5 11.5z"/>',
+      sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+      tag: '<path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L3 13V3h10l7.6 7.6a2 2 0 010 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+      key: '<path d="M21 2l-2 2m-7.6 7.6A5 5 0 1110 6.4L20 2l2 2-4.5 4.5"/>',
+      coffee: '<path d="M17 8h1a4 4 0 010 8h-1M3 8h14v9a4 4 0 01-4 4H7a4 4 0 01-4-4V8z"/><path d="M6 2v2M10 2v2M14 2v2"/>',
+      download: '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+      chevronL: '<path d="M15 18l-6-6 6-6"/>',
+      chevronR: '<path d="M9 18l6-6-6-6"/>',
+      store: '<path d="M3 9l1-5h16l1 5M3 9v11a1 1 0 001 1h16a1 1 0 001-1V9M3 9h18M8 21V13h8v8"/>',
+      palette: '<path d="M12 2a10 10 0 00-1 19.9c.6 0 1-.4 1-1v-1.2a2 2 0 012-1.9h2.3A3.9 3.9 0 0022 12 10 10 0 0012 2z"/><circle cx="7.5" cy="10" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16.5" cy="10" r="1"/>',
+      megaphone: '<path d="M3 11v2a2 2 0 002 2h2l5 4V5L7 9H5a2 2 0 00-2 2zM16 8.5a4 4 0 010 7"/>',
+      pin: '<path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>',
+      plus: '<path d="M12 5v14M5 12h14"/>',
+      home: '<path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z"/>',
+      minus: '<path d="M5 12h14"/>',
+    };
+    const _EMOJI_ICON = {
+      '✅': 'check', '✓': 'check', '❌': 'x', '✕': 'x', '⚠️': 'warn', '⚠': 'warn',
+      '💵': 'cash', '💳': 'card', '📱': 'phone', '💸': 'spend', '💰': 'money', '🪙': 'money', '💲': 'money',
+      '📊': 'chart', '📈': 'chart', '📉': 'chart', '🍩': 'chart',
+      '📅': 'calendar', '📋': 'list', '📝': 'note', '📦': 'package',
+      '👁': 'eye', '👁️': 'eye', '👥': 'users', '👤': 'user',
+      '🏦': 'bank', '💼': 'bag', '🚪': 'logout', '🛒': 'cart', '🪑': 'table',
+      '🖨': 'print', '🖨️': 'print', '✏️': 'edit', '✏': 'edit', '🗑️': 'trash', '🗑': 'trash',
+      '🔍': 'search', '⚙️': 'settings', '⚙': 'settings', '⚖️': 'mix', '⚖': 'mix',
+      '🛍️': 'bag', '🛍': 'bag', '🌙': 'moon', '☀️': 'sun', '☀': 'sun',
+      '🏷️': 'tag', '🏷': 'tag', '🔑': 'key', '☕': 'coffee', '🏪': 'store',
+      '🎨': 'palette', '📣': 'megaphone', '📍': 'pin', '🔥': 'chart', '⭐': 'chart',
+      '➕': 'plus', '🏠': 'home', '↔️': 'transfer', '↔': 'transfer',
+    };
+    function icon(name, size = 16) {
+      const d = _ICON_PATHS[name] || _ICON_PATHS.list;
+      return `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+    }
+    function demojify(html) {
+      if (!html || typeof html !== 'string') return html;
+      let out = html;
+      for (const [em, name] of Object.entries(_EMOJI_ICON)) {
+        if (out.includes(em)) out = out.split(em).join(icon(name));
+      }
+      return out;
+    }
+    function iconize(v, size = 16) {
+      if (!v) return '';
+      if (_ICON_PATHS[v]) return icon(v, size);
+      if (_EMOJI_ICON[v]) return icon(_EMOJI_ICON[v], size);
+      return demojify(String(v));
+    }
+    function fillIcons(root = document) {
+      root.querySelectorAll('[data-icon]').forEach(el => {
+        const name = el.getAttribute('data-icon');
+        const size = +(el.getAttribute('data-size') || 16);
+        el.innerHTML = icon(name, size);
+      });
+    }
+
     async function init() {
       tiendas = await api('/tiendas');
+      fillIcons();
       await refreshMesas();
       renderTabs();
       api('/catalog').then(d => { allProductsGlobal = d; }).catch(() => { });
@@ -1021,6 +1108,7 @@
     let _fpRendered = false; // true after first render into fpBody
 
     function showModal(h) {
+      h = demojify(h);
       if (_fpActive && !_fpRendered) {
         const body = document.getElementById('fpBody');
         if (body) {
@@ -1044,19 +1132,19 @@
 
     async function openPage(title, fn) {
       const fp = document.getElementById('fullpage');
-      fp.innerHTML = `
+      fp.innerHTML = demojify(`
     <div class="fp-header">
       <button class="fp-back" onclick="closePage()">←</button>
       <div class="fp-title">${title}</div>
     </div>
     <div class="fp-body" id="fpBody" style="display:flex;align-items:center;justify-content:center;">
       <span style="color:var(--text-muted);font-size:13px;">Cargando…</span>
-    </div>`;
+    </div>`);
       fp.classList.remove('hidden');
       closeSidebar();
       _fpActive = true;
       _fpRendered = false;
-      try { await fn(); } catch (e) { document.getElementById('fpBody').innerHTML = `<div style="padding:30px;color:var(--red);">❌ ${e.message}</div>`; }
+      try { await fn(); } catch (e) { document.getElementById('fpBody').innerHTML = demojify(`<div style="padding:30px;color:var(--red);">❌ ${e.message}</div>`); }
       const fpBody = document.getElementById('fpBody');
       if (fpBody) fpBody.style.display = '';
     }
@@ -1509,11 +1597,12 @@
       } catch (e) { toast('❌', e.message, 'var(--red)'); }
     }
 
-    function toast(icon, msg, bc) {
+    function toast(ic, msg, bc) {
       document.querySelectorAll('.toast').forEach(t => t.remove());
       const t = document.createElement('div'); t.className = 'toast';
       if (bc) t.style.borderLeftColor = bc; t.style.borderLeft = `3px solid ${bc || 'var(--sage)'}`;
-      t.innerHTML = `${icon} ${msg}`; document.body.appendChild(t); setTimeout(() => t.remove(), 3500);
+      t.innerHTML = `<span class="toast-ico">${iconize(ic, 16)}</span><span>${msg}</span>`;
+      document.body.appendChild(t); setTimeout(() => t.remove(), 3500);
     }
 
     /* ── VENTAS DEL DÍA ── */
@@ -1522,10 +1611,8 @@
       let ventas;
       try { ventas = await api('/ventas/hoy'); } catch (e) { toast('❌', e.message, 'var(--red)'); return; }
 
-      const metIcon = m => m === 'Efectivo' ? '💵' : m === 'Tarjeta' ? '💳' : '📱';
-
-      const activas = ventas.filter(v => !v.cancelada);
-      const canceladas = ventas.filter(v => v.cancelada);
+      let filtroMetodo = 'Todos';
+      const metIcon = m => icon(m === 'Efectivo' ? 'cash' : m === 'Tarjeta' ? 'card' : m === 'Transferencia' ? 'transfer' : m === 'Mixto' ? 'mix' : 'phone', 14);
 
       function renderVentaCard(v, isCancelled) {
         const hora = v.created_at ? v.created_at.slice(11, 16) : '';
@@ -1540,8 +1627,8 @@
 
         const comisionTar = (v.metodo_pago === 'Tarjeta' || v.metodo_pago === 'Mixto') && v.monto_tarjeta > 0
           ? parseFloat((v.monto_tarjeta * 0.04).toFixed(2)) : 0;
-        let pagoInfo = `${metIcon(v.metodo_pago)} ${v.metodo_pago}`;
-        if (v.metodo_pago === 'Mixto') pagoInfo = `⚖️ Mixto: 💵$${v.monto_efectivo.toFixed(2)} + 💳$${v.monto_tarjeta.toFixed(2)}`;
+        let pagoInfo = `<span style="display:inline-flex;align-items:center;gap:4px;">${metIcon(v.metodo_pago)} ${v.metodo_pago}</span>`;
+        if (v.metodo_pago === 'Mixto') pagoInfo = `<span style="display:inline-flex;align-items:center;gap:4px;">${icon('mix', 14)} Mixto: ${icon('cash', 13)} $${v.monto_efectivo.toFixed(2)} + ${icon('card', 13)} $${v.monto_tarjeta.toFixed(2)}</span>`;
         if (comisionTar > 0) pagoInfo += ` <span style="font-size:10px;color:var(--red);margin-left:4px;">−$${comisionTar.toFixed(2)} com.</span>`;
 
         const bgHead = isCancelled ? '#FFF3F3' : 'var(--bg-warm)';
@@ -1557,42 +1644,65 @@
         </div>
         <span style="font-size:11px;color:var(--text-secondary);margin-right:6px;">${pagoInfo}</span>
         <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:${totalColor};">$${v.total.toFixed(2)}</span>
-        <button class="btn-icon" style="background:var(--sage-light);color:var(--sage);flex-shrink:0;" onclick="reimprimirTicket(${v.id})" title="Reimprimir ticket">🖨️</button>
-        <button class="btn-icon" style="background:#FFF3E0;color:#E65100;flex-shrink:0;" onclick="reimprimirComanda(${v.id})" title="Reimprimir comanda">📋</button>
+        <button class="btn-icon" style="background:var(--sage-light);color:var(--sage);flex-shrink:0;" onclick="reimprimirTicket(${v.id})" title="Reimprimir ticket">${icon('print', 15)}</button>
+        <button class="btn-icon" style="background:#FFF3E0;color:#E65100;flex-shrink:0;" onclick="reimprimirComanda(${v.id})" title="Reimprimir comanda">${icon('list', 15)}</button>
         ${!isCancelled && usuario.perfil === 'Administrador' ? `
-        <button class="btn-icon btn-edit" onclick="showEditVentaModal(${v.id},'${v.folio}',${v.total},'${v.metodo_pago}',${v.monto_efectivo},${v.monto_tarjeta})" title="Corregir pago" style="flex-shrink:0;">✏️</button>
-        <button class="btn-icon btn-del" onclick="confirmarAnularVenta(${v.id},'${v.folio}')" title="Anular venta" style="flex-shrink:0;">🗑️</button>` : ''}
+        <button class="btn-icon btn-edit" onclick="showEditVentaModal(${v.id},'${v.folio}',${v.total},'${v.metodo_pago}',${v.monto_efectivo},${v.monto_tarjeta})" title="Corregir pago" style="flex-shrink:0;">${icon('edit', 15)}</button>
+        <button class="btn-icon btn-del" onclick="confirmarAnularVenta(${v.id},'${v.folio}')" title="Anular venta" style="flex-shrink:0;">${icon('trash', 15)}</button>` : ''}
       </div>
       <div style="padding:8px 14px 10px;">${itemsHtml || '<span style="font-size:11px;color:var(--text-muted)">Sin artículos</span>'}</div>
     </div>`;
       }
 
-      const rows = activas.length
-        ? activas.map(v => renderVentaCard(v, false)).join('')
-        : '<div style="padding:30px;text-align:center;color:var(--text-muted);">Sin ventas hoy</div>';
+      function renderVentasHoy() {
+        const match = v => filtroMetodo === 'Todos' || v.metodo_pago === filtroMetodo;
+        const todasActivas = ventas.filter(v => !v.cancelada);
+        const activas = todasActivas.filter(match);
+        const canceladas = ventas.filter(v => v.cancelada && match(v));
+        // KPIs always reflect the full day; only the list follows the chip filter
+        const totalDia = todasActivas.reduce((s, v) => s + v.total, 0);
+        const totalEf = todasActivas.filter(v => v.metodo_pago === 'Efectivo').reduce((s, v) => s + v.total, 0);
+        const totalTar = todasActivas.filter(v => v.metodo_pago === 'Tarjeta').reduce((s, v) => s + v.total, 0);
+        const totalTrn = todasActivas.filter(v => v.metodo_pago === 'Transferencia').reduce((s, v) => s + v.total, 0);
 
-      const canceladasHtml = canceladas.length
-        ? `<div style="margin-top:16px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red);letter-spacing:.5px;margin-bottom:8px;">🗑️ Ventas Canceladas (${canceladas.length})</div>
+        const chip = (id, labelHtml) => {
+          const on = filtroMetodo === id;
+          return `<button onclick="window._ventasHoyFiltro('${id}')" style="padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:5px;${on ? 'background:var(--sage-dark);color:#fff;border:none;' : 'background:var(--bg-warm);color:var(--text-secondary);border:1px solid var(--border);'}">${labelHtml}</button>`;
+        };
+
+        const rows = activas.length
+          ? activas.map(v => renderVentaCard(v, false)).join('')
+          : '<div style="padding:30px;text-align:center;color:var(--text-muted);">Sin ventas con este filtro</div>';
+
+        const canceladasHtml = canceladas.length
+          ? `<div style="margin-top:16px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red);letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">${icon('trash', 13)} Ventas Canceladas (${canceladas.length})</div>
         ${canceladas.map(v => renderVentaCard(v, true)).join('')}
        </div>` : '';
 
-      const totalDia = activas.reduce((s, v) => s + v.total, 0);
-      const totalEf = activas.reduce((s, v) => s + v.monto_efectivo, 0);
-      const totalTar = activas.reduce((s, v) => s + v.monto_tarjeta, 0);
-      showModal(`<div class="modal-body">
-    <div class="modal-title">📋 Ventas de Hoy</div>
-    <div class="modal-sub">${activas.length} venta${activas.length !== 1 ? 's' : ''}${canceladas.length ? ` · ${canceladas.length} cancelada${canceladas.length !== 1 ? 's' : ''}` : ''}
-</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
-      <div class="res-card"><div class="res-label">Total Día</div><div class="res-val" style="color:var(--sage-dark);font-size:16px;">$${totalDia.toFixed(2)}</div></div>
-      <div class="res-card"><div class="res-label">💵 Efectivo</div><div class="res-val v" style="font-size:16px;">$${totalEf.toFixed(2)}</div></div>
-      <div class="res-card"><div class="res-label">💳 Tarjeta/Trans.</div><div class="res-val" style="color:var(--gold);font-size:16px;">$${totalTar.toFixed(2)}</div></div>
+        showModal(`<div class="modal-body">
+    <div class="modal-title" style="display:flex;align-items:center;gap:8px;">${icon('list', 20)} Ventas de Hoy</div>
+    <div class="modal-sub">${activas.length} venta${activas.length !== 1 ? 's' : ''}${canceladas.length ? ` · ${canceladas.length} cancelada${canceladas.length !== 1 ? 's' : ''}` : ''}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      ${chip('Todos', 'Todos')}
+      ${chip('Efectivo', icon('cash', 13) + ' Efectivo')}
+      ${chip('Tarjeta', icon('card', 13) + ' Tarjeta')}
+      ${chip('Transferencia', icon('transfer', 13) + ' Transferencia')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+      <div class="res-card"><div class="res-label">Total</div><div class="res-val" style="color:var(--sage-dark);font-size:15px;">$${totalDia.toFixed(2)}</div></div>
+      <div class="res-card"><div class="res-label" style="display:flex;align-items:center;gap:4px;">${icon('cash', 12)} Efectivo</div><div class="res-val v" style="font-size:15px;">$${totalEf.toFixed(2)}</div></div>
+      <div class="res-card"><div class="res-label" style="display:flex;align-items:center;gap:4px;">${icon('card', 12)} Tarjeta</div><div class="res-val" style="color:var(--gold);font-size:15px;">$${totalTar.toFixed(2)}</div></div>
+      <div class="res-card"><div class="res-label" style="display:flex;align-items:center;gap:4px;">${icon('transfer', 12)} Transfer.</div><div class="res-val" style="color:var(--blue);font-size:15px;">$${totalTrn.toFixed(2)}</div></div>
     </div>
     <div style="max-height:480px;overflow-y:auto;">${rows}${canceladasHtml}</div>
   </div>
   <div class="modal-footer"><div class="modal-btns" style="margin-top:0"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div>`);
-      const m = document.querySelector('#modals .modal'); if (m) { m.style.width = '660px'; m.style.maxWidth = '98vw'; }
+        const m = document.querySelector('#modals .modal'); if (m) { m.style.width = '720px'; m.style.maxWidth = '98vw'; }
+      }
+
+      window._ventasHoyFiltro = (f) => { filtroMetodo = f; renderVentasHoy(); };
+      renderVentasHoy();
     }
 
     async function reimprimirTicket(vid) {
@@ -2282,28 +2392,134 @@
         return kpis + talleres + dias + tiendas + productos + topDias;
       }
 
+      // ── Calendario de ventas ──
+      let calYear = new Date().getFullYear();
+      let calMonth = new Date().getMonth() + 1;
+      let calDays = [];
+      let calSelected = null;
+      let calVentas = null;
+      const MESES_CAL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+      async function loadCalendario() {
+        calDays = await api(`/ventas/calendario?anio=${calYear}&mes=${calMonth}`);
+      }
+
+      async function selectCalDay(fecha) {
+        calSelected = fecha;
+        calVentas = await api(`/ventas?fecha=${fecha}`);
+        renderModal('calendario');
+      }
+
+      function renderCalendario() {
+        const byFecha = {};
+        calDays.forEach(d => { byFecha[d.fecha] = d; });
+        const first = new Date(calYear, calMonth - 1, 1);
+        const startDow = (first.getDay() + 6) % 7;
+        const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+        const cells = [];
+        for (let i = 0; i < startDow; i++) cells.push('<div></div>');
+        for (let day = 1; day <= daysInMonth; day++) {
+          const fecha = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const info = byFecha[fecha];
+          const selected = calSelected === fecha;
+          const has = !!info;
+          cells.push(`<button onclick="window._calSelect('${fecha}')" style="padding:8px 4px;border-radius:10px;border:1px solid ${selected ? 'var(--sage)' : 'var(--border)'};background:${selected ? 'var(--sage-light)' : has ? 'var(--surface)' : 'var(--bg-warm)'};cursor:pointer;text-align:left;min-height:64px;">
+            <div style="font-size:12px;font-weight:700;color:var(--text);">${day}</div>
+            ${has ? `<div style="font-size:10px;color:var(--sage-dark);font-family:'JetBrains Mono',monospace;margin-top:4px;">$${info.total.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</div>
+            <div style="font-size:9px;color:var(--text-muted);">${info.num_ventas} venta${info.num_ventas !== 1 ? 's' : ''}</div>` : '<div style="font-size:9px;color:var(--text-muted);margin-top:6px;">—</div>'}
+          </button>`);
+        }
+
+        let detalle = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">Selecciona un día para ver las ventas</div>';
+        if (calSelected && calVentas) {
+          const activas = calVentas.filter(v => !v.cancelada);
+          const total = activas.reduce((s, v) => s + v.total, 0);
+          const ef = activas.filter(v => v.metodo_pago === 'Efectivo').reduce((s, v) => s + v.total, 0);
+          const tar = activas.filter(v => v.metodo_pago === 'Tarjeta').reduce((s, v) => s + v.total, 0);
+          const trn = activas.filter(v => v.metodo_pago === 'Transferencia').reduce((s, v) => s + v.total, 0);
+          const lista = activas.length ? activas.map(v => {
+            const hora = (v.created_at || '').slice(11, 16);
+            return `<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border-light);font-size:12px;">
+              <span><strong>${v.folio}</strong> · ${hora} · ${v.metodo_pago}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:700;">$${v.total.toFixed(2)}</span>
+            </div>`;
+          }).join('') : '<div style="padding:16px;text-align:center;color:var(--text-muted);">Sin ventas este día</div>';
+
+          detalle = `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+              <div style="font-weight:700;font-size:14px;">${calSelected}</div>
+              <div style="display:flex;gap:8px;">
+                <a class="btn btn-sage btn-sm" href="/api/report/ventas-dia.pdf?fecha=${calSelected}" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;">${icon('download', 13)} PDF</a>
+                <a class="btn btn-ghost btn-sm" href="/api/report/ventas-dia.csv?fecha=${calSelected}" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;">${icon('download', 13)} CSV</a>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
+              <div class="res-card"><div class="res-label">Total</div><div class="res-val" style="font-size:14px;color:var(--sage-dark);">$${total.toFixed(2)}</div></div>
+              <div class="res-card"><div class="res-label">${icon('cash', 11)} Efectivo</div><div class="res-val v" style="font-size:14px;">$${ef.toFixed(2)}</div></div>
+              <div class="res-card"><div class="res-label">${icon('card', 11)} Tarjeta</div><div class="res-val" style="font-size:14px;color:var(--gold);">$${tar.toFixed(2)}</div></div>
+              <div class="res-card"><div class="res-label">${icon('transfer', 11)} Transfer.</div><div class="res-val" style="font-size:14px;color:var(--blue);">$${trn.toFixed(2)}</div></div>
+            </div>
+            <div style="max-height:260px;overflow-y:auto;">${lista}</div>`;
+        }
+
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <button class="btn btn-ghost btn-sm" onclick="window._calNav(-1)">${icon('chevronL', 14)}</button>
+            <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;">${icon('calendar', 16)} ${MESES_CAL[calMonth - 1]} ${calYear}</div>
+            <button class="btn btn-ghost btn-sm" onclick="window._calNav(1)">${icon('chevronR', 14)}</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px;font-size:10px;font-weight:700;color:var(--text-muted);text-align:center;">
+            <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:16px;">${cells.join('')}</div>
+          <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">${detalle}</div>`;
+      }
+
       function renderModal(tab) {
         const bs = t => t === tab ? 'background:var(--sage-dark);color:#fff;border:none;' : 'background:var(--bg-warm);color:var(--text-secondary);border:1px solid var(--border);';
-        const contenido = tab === 'estudio' ? renderEstudio() : renderContent(tab);
-        const subtitulo = tab === 'estudio' ? 'Solo Estudio Deco · excluye Estación 304' : 'Análisis histórico de ventas, ingresos y gastos';
+        let contenido = '';
+        if (tab === 'estudio') contenido = renderEstudio();
+        else if (tab === 'calendario') contenido = renderCalendario();
+        else contenido = renderContent(tab);
+        const subtitulo = tab === 'estudio' ? 'Solo Estudio Deco · excluye Estación 304'
+          : tab === 'calendario' ? 'Ventas por día · exportar PDF o CSV'
+          : 'Análisis histórico de ventas, ingresos y gastos';
         showModal(`<div class="modal-body">
       <div class="modal-title">📈 Estadísticas</div>
       <div class="modal-sub">${subtitulo}</div>
-      ${tab === 'estudio' ? '' : balanceHtml}
+      ${tab === 'estudio' || tab === 'calendario' ? '' : balanceHtml}
       <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <button onclick="window._statsTab('mes')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('mes')}">Por mes</button>
         <button onclick="window._statsTab('año')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('año')}">Por año</button>
+        <button onclick="window._statsTab('calendario')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('calendario')}">📅 Calendario</button>
         <button onclick="window._statsTab('estudio')" style="padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;${bs('estudio')}">🎨 Estudio Deco</button>
       </div>
       ${contenido}
       <div style="padding-top:12px;margin-top:4px;"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>
     </div>`);
-        const m = document.querySelector('#modals .modal'); if (m) { m.style.width = '880px'; m.style.maxWidth = '99vw'; }
+        const m = document.querySelector('#modals .modal'); if (m) { m.style.width = '920px'; m.style.maxWidth = '99vw'; }
       }
+
+      window._calNav = async (delta) => {
+        calMonth += delta;
+        if (calMonth < 1) { calMonth = 12; calYear--; }
+        if (calMonth > 12) { calMonth = 1; calYear++; }
+        calSelected = null; calVentas = null;
+        try { await loadCalendario(); renderModal('calendario'); }
+        catch (e) { toast('❌', e.message, 'var(--red)'); }
+      };
+      window._calSelect = async (fecha) => {
+        try { await selectCalDay(fecha); }
+        catch (e) { toast('❌', e.message, 'var(--red)'); }
+      };
 
       window._statsTab = async (tab) => {
         if (tab === 'estudio' && !estudioData) {
           try { estudioData = await api('/estadisticas/estudio'); }
+          catch (e) { toast('❌', e.message, 'var(--red)'); return; }
+        }
+        if (tab === 'calendario') {
+          try { await loadCalendario(); }
           catch (e) { toast('❌', e.message, 'var(--red)'); return; }
         }
         renderModal(tab);
@@ -3459,23 +3675,151 @@
     initTheme();
     initSession();
 
-    /* ── Notas Flotantes ── */
+    /* ── Notas Flotantes (ventanas) ── */
     let _notesTimeout = {};
+    let _noteZ = 1002;
+    const NOTE_MIN_W = 200;
+    const NOTE_MIN_H = 120;
+    const NOTE_DEFAULT_W = 260;
+    const NOTE_DEFAULT_H = 180;
+
+    function notePreviewLabel(texto) {
+      const t = (texto || '').replace(/\s+/g, ' ').trim();
+      if (!t) return 'Nota';
+      return t.length > 24 ? t.slice(0, 24) + '…' : t;
+    }
+
+    function rgbToHex(color) {
+      if (!color) return '#fef3c7';
+      if (color.startsWith('#')) {
+        if (color.length === 4) {
+          return '#' + [...color.slice(1)].map(c => c + c).join('');
+        }
+        return color.slice(0, 7);
+      }
+      const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (!m) return '#fef3c7';
+      return '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('');
+    }
+
+    function noteTintParts(color) {
+      const hex = rgbToHex(color);
+      return {
+        hex,
+        r: parseInt(hex.slice(1, 3), 16),
+        g: parseInt(hex.slice(3, 5), 16),
+        b: parseInt(hex.slice(5, 7), 16),
+      };
+    }
+
+    const NOTE_GLASS_ALPHA = 0.58;
+
+    function ensureNotesGlassStyles() {
+      if (document.getElementById('notes-glass-runtime')) return;
+      const s = document.createElement('style');
+      s.id = 'notes-glass-runtime';
+      s.textContent = `
+.floating-note{
+  background:transparent!important;
+  background-color:transparent!important;
+}
+.floating-note .note-glass{
+  position:absolute!important;
+  inset:0!important;
+  border-radius:inherit!important;
+  pointer-events:none!important;
+  z-index:0!important;
+}
+.floating-note>:not(.note-glass):not(.note-resize){position:relative;z-index:1}
+.floating-note>.note-resize{position:absolute!important;right:0!important;bottom:0!important;left:auto!important;top:auto!important;z-index:6!important}
+.note-color-btn.active{outline:2px solid rgba(40,30,60,.55);outline-offset:1px;transform:scale(1.12)}
+`;
+      document.head.appendChild(s);
+    }
+
+    function applyNoteColor(el, color) {
+      ensureNotesGlassStyles();
+      const { hex, r, g, b } = noteTintParts(color);
+      el.dataset.noteColor = hex;
+      const rgba = `rgba(${r}, ${g}, ${b}, ${NOTE_GLASS_ALPHA})`;
+      el.style.setProperty('background', 'transparent', 'important');
+      el.style.setProperty('background-color', 'transparent', 'important');
+      let glass = el.querySelector('.note-glass');
+      if (!glass) {
+        glass = document.createElement('div');
+        glass.className = 'note-glass';
+        el.insertBefore(glass, el.firstChild);
+      }
+      glass.style.setProperty('background', `linear-gradient(165deg, rgba(255,255,255,0.28), rgba(255,255,255,0.05)), ${rgba}`, 'important');
+      glass.style.setProperty('background-color', rgba, 'important');
+      glass.style.setProperty('backdrop-filter', 'blur(36px) saturate(170%)', 'important');
+      glass.style.setProperty('-webkit-backdrop-filter', 'blur(36px) saturate(170%)', 'important');
+      el.querySelectorAll('.note-color-btn').forEach(btn => {
+        btn.classList.toggle('active', (btn.dataset.color || '').toLowerCase() === hex.toLowerCase());
+      });
+    }
+
+    function focusNoteWindow(id) {
+      document.querySelectorAll('.floating-note.note-active').forEach(n => n.classList.remove('note-active'));
+      const el = document.getElementById(`note-${id}`);
+      if (!el) return;
+      el.style.zIndex = String(++_noteZ);
+      el.classList.add('note-active');
+    }
+
+    function refreshNotesTaskbar() {
+      const bar = document.getElementById('notesTaskbar');
+      if (!bar) return;
+      bar.innerHTML = '';
+      document.querySelectorAll('.floating-note.minimized').forEach(el => {
+        const id = el.dataset.noteId;
+        const ta = el.querySelector('textarea');
+        const color = el.dataset.noteColor || '#fef3c7';
+        const { r, g, b } = noteTintParts(color);
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'note-chip';
+        chip.style.setProperty('background-color', `rgba(${r}, ${g}, ${b}, 0.55)`, 'important');
+        chip.style.setProperty('backdrop-filter', 'blur(20px) saturate(160%)', 'important');
+        chip.style.setProperty('-webkit-backdrop-filter', 'blur(20px) saturate(160%)', 'important');
+        chip.title = 'Restaurar nota';
+        const dot = document.createElement('span');
+        dot.className = 'note-chip-dot';
+        dot.style.background = `rgb(${r}, ${g}, ${b})`;
+        const label = document.createElement('span');
+        label.className = 'note-chip-label';
+        label.textContent = notePreviewLabel(ta?.value || '');
+        chip.append(dot, label);
+        chip.onclick = () => restoreNote(+id);
+        bar.appendChild(chip);
+      });
+    }
 
     async function loadNotes() {
+      ensureNotesGlassStyles();
       try {
         const res = await fetch('/api/notas');
         if (!res.ok) return;
         const data = await res.json();
-        const container = document.getElementById('notesContainer');
-        container.innerHTML = '';
+        document.querySelectorAll('.floating-note').forEach(n => n.remove());
+        const bar = document.getElementById('notesTaskbar');
+        if (bar) bar.innerHTML = '';
         data.forEach(note => renderNote(note));
+        refreshNotesTaskbar();
       } catch (e) { console.error('Error loading notes:', e); }
     }
 
     async function createNote() {
       try {
-        const body = { texto: "", pos_x: window.innerWidth / 2 - 110, pos_y: window.innerHeight / 2 - 60, color: "#fef3c7" };
+        const body = {
+          texto: '',
+          pos_x: Math.max(20, window.innerWidth / 2 - NOTE_DEFAULT_W / 2),
+          pos_y: Math.max(20, window.innerHeight / 2 - NOTE_DEFAULT_H / 2),
+          color: '#fef3c7',
+          width: NOTE_DEFAULT_W,
+          height: NOTE_DEFAULT_H,
+          minimizada: 0,
+        };
         const res = await fetch('/api/notas', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
@@ -3483,6 +3827,9 @@
         if (!res.ok) return;
         const { id } = await res.json();
         renderNote({ id, ...body });
+        focusNoteWindow(id);
+        const ta = document.querySelector(`#note-${id} textarea`);
+        if (ta) ta.focus();
       } catch (e) { console.error('Error creating note:', e); }
     }
 
@@ -3490,24 +3837,65 @@
       const el = document.createElement('div');
       el.className = 'floating-note';
       el.id = `note-${note.id}`;
-      el.style.left = `${note.pos_x}px`;
-      el.style.top = `${note.pos_y}px`;
-      el.style.backgroundColor = note.color;
+      el.dataset.noteId = String(note.id);
+      const w = Math.max(NOTE_MIN_W, Number(note.width) || NOTE_DEFAULT_W);
+      const h = Math.max(NOTE_MIN_H, Number(note.height) || NOTE_DEFAULT_H);
+      el.style.left = `${note.pos_x ?? 100}px`;
+      el.style.top = `${note.pos_y ?? 100}px`;
+      el.style.width = `${w}px`;
+      el.style.height = `${h}px`;
+      if (note.minimizada) el.classList.add('minimized');
 
       const colors = ['#fef3c7', '#dcfce7', '#dbeafe', '#fce7f3', '#f3f4f6'];
-      const colorBtns = colors.map(c => 
-        `<button class="note-color-btn" style="background:${c};" onclick="changeNoteColor(${note.id}, '${c}')"></button>`
+      const colorBtns = colors.map(c =>
+        `<button type="button" class="note-color-btn" data-color="${c}" style="background:${c};" title="Color"></button>`
       ).join('');
 
       el.innerHTML = `
-        <div class="note-header" onmousedown="startDrag(event, ${note.id})" ontouchstart="startDrag(event, ${note.id})">
+        <div class="note-glass" aria-hidden="true"></div>
+        <div class="note-header">
           <div class="note-colors">${colorBtns}</div>
-          <button class="note-del-btn" onclick="deleteNote(${note.id})">✕</button>
+          <div class="note-win-btns">
+            <button type="button" class="note-win-btn note-min-btn" title="Minimizar">${icon('minus', 13)}</button>
+            <button type="button" class="note-win-btn note-del-btn" title="Cerrar">${icon('x', 13)}</button>
+          </div>
         </div>
-        <textarea class="note-textarea" oninput="handleNoteInput(${note.id}, this)">${note.texto}</textarea>
+        <textarea class="note-textarea" placeholder="Escribe una nota..."></textarea>
+        <div class="note-resize" title="Redimensionar"></div>
       `;
+      el.querySelector('textarea').value = note.texto || '';
+      applyNoteColor(el, note.color || '#fef3c7');
 
-      document.getElementById('notesContainer').appendChild(el);
+      const header = el.querySelector('.note-header');
+      header.addEventListener('mousedown', e => startDrag(e, note.id));
+      header.addEventListener('touchstart', e => startDrag(e, note.id), { passive: false });
+
+      el.querySelectorAll('.note-color-btn').forEach(btn => {
+        btn.addEventListener('mousedown', e => e.stopPropagation());
+        btn.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          changeNoteColor(note.id, btn.dataset.color);
+        });
+      });
+      el.querySelector('.note-min-btn').addEventListener('mousedown', e => e.stopPropagation());
+      el.querySelector('.note-min-btn').addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation(); minimizeNote(note.id);
+      });
+      el.querySelector('.note-del-btn').addEventListener('mousedown', e => e.stopPropagation());
+      el.querySelector('.note-del-btn').addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation(); deleteNote(note.id);
+      });
+      const resize = el.querySelector('.note-resize');
+      resize.addEventListener('mousedown', e => startResize(e, note.id));
+      resize.addEventListener('touchstart', e => startResize(e, note.id), { passive: false });
+
+      const ta = el.querySelector('textarea');
+      ta.addEventListener('input', () => handleNoteInput(note.id, ta));
+      ta.addEventListener('focus', () => focusNoteWindow(note.id));
+
+      el.addEventListener('mousedown', () => focusNoteWindow(note.id));
+      document.body.appendChild(el);
     }
 
     function removeEmojis(text) {
@@ -3517,20 +3905,43 @@
     function handleNoteInput(id, textarea) {
       const orig = textarea.value;
       const clean = removeEmojis(orig);
-      if (orig !== clean) {
-        textarea.value = clean;
-      }
+      if (orig !== clean) textarea.value = clean;
       debounceUpdateNote(id);
+      const el = document.getElementById(`note-${id}`);
+      if (el?.classList.contains('minimized')) refreshNotesTaskbar();
     }
 
     function changeNoteColor(id, color) {
       const el = document.getElementById(`note-${id}`);
-      if (el) el.style.backgroundColor = color;
+      if (!el) return;
+      applyNoteColor(el, color);
       debounceUpdateNote(id);
+      refreshNotesTaskbar();
+    }
+
+    function minimizeNote(id) {
+      const el = document.getElementById(`note-${id}`);
+      if (!el || el.classList.contains('minimized')) return;
+      el.classList.add('minimized');
+      el.classList.remove('note-active');
+      refreshNotesTaskbar();
+      debounceUpdateNote(id);
+    }
+
+    function restoreNote(id) {
+      const el = document.getElementById(`note-${id}`);
+      if (!el) return;
+      el.classList.remove('minimized');
+      focusNoteWindow(id);
+      refreshNotesTaskbar();
+      debounceUpdateNote(id);
+      const ta = el.querySelector('textarea');
+      if (ta) ta.focus();
     }
 
     async function deleteNote(id) {
       document.getElementById(`note-${id}`)?.remove();
+      refreshNotesTaskbar();
       try {
         await fetch(`/api/notas/${id}`, { method: 'DELETE' });
       } catch (e) { console.error('Error deleting note:', e); }
@@ -3544,15 +3955,18 @@
     async function updateNote(id) {
       const el = document.getElementById(`note-${id}`);
       if (!el) return;
-      const texto = el.querySelector('textarea').value;
+      const texto = el.querySelector('textarea')?.value || '';
       const pos_x = parseFloat(el.style.left) || 0;
       const pos_y = parseFloat(el.style.top) || 0;
-      const color = el.style.backgroundColor || '#fef3c7';
+      const color = el.dataset.noteColor || rgbToHex(el.style.backgroundColor || '#fef3c7');
+      const width = parseFloat(el.style.width) || NOTE_DEFAULT_W;
+      const height = parseFloat(el.style.height) || NOTE_DEFAULT_H;
+      const minimizada = el.classList.contains('minimized') ? 1 : 0;
 
       try {
         await fetch(`/api/notas/${id}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ texto, pos_x, pos_y, color })
+          body: JSON.stringify({ texto, pos_x, pos_y, color, width, height, minimizada })
         });
       } catch (e) { console.error('Error updating note:', e); }
     }
@@ -3560,9 +3974,17 @@
     let _dragNoteId = null;
     let _dragOffsetX = 0;
     let _dragOffsetY = 0;
+    let _resizeNoteId = null;
+    let _resizeStartX = 0;
+    let _resizeStartY = 0;
+    let _resizeStartW = 0;
+    let _resizeStartH = 0;
 
     function startDrag(e, id) {
-      if (e.target.tagName.toLowerCase() === 'button') return;
+      if (e.target.closest('button') || e.target.closest('.note-resize')) return;
+      e.preventDefault();
+      _resizeNoteId = null;
+      focusNoteWindow(id);
       _dragNoteId = id;
       const el = document.getElementById(`note-${id}`);
       const rect = el.getBoundingClientRect();
@@ -3570,20 +3992,48 @@
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
       _dragOffsetX = clientX - rect.left;
       _dragOffsetY = clientY - rect.top;
-      el.style.zIndex = 1002;
+    }
+
+    function startResize(e, id) {
+      e.preventDefault();
+      e.stopPropagation();
+      _dragNoteId = null;
+      focusNoteWindow(id);
+      _resizeNoteId = id;
+      const el = document.getElementById(`note-${id}`);
+      _resizeStartX = e.touches ? e.touches[0].clientX : e.clientX;
+      _resizeStartY = e.touches ? e.touches[0].clientY : e.clientY;
+      _resizeStartW = el.offsetWidth;
+      _resizeStartH = el.offsetHeight;
     }
 
     function onDragMove(e) {
+      if (_resizeNoteId) {
+        const el = document.getElementById(`note-${_resizeNoteId}`);
+        if (!el) return;
+        if (e.cancelable) e.preventDefault();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const left = parseFloat(el.style.left) || 0;
+        const top = parseFloat(el.style.top) || 0;
+        let w = _resizeStartW + (clientX - _resizeStartX);
+        let h = _resizeStartH + (clientY - _resizeStartY);
+        w = Math.max(NOTE_MIN_W, Math.min(window.innerWidth - left, w));
+        h = Math.max(NOTE_MIN_H, Math.min(window.innerHeight - top, h));
+        el.style.width = `${w}px`;
+        el.style.height = `${h}px`;
+        return;
+      }
       if (!_dragNoteId) return;
       const el = document.getElementById(`note-${_dragNoteId}`);
       if (!el) return;
+      if (e.cancelable) e.preventDefault();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      
+
       let x = clientX - _dragOffsetX;
       let y = clientY - _dragOffsetY;
-      
-      // Keep within bounds
+
       x = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, x));
       y = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, y));
 
@@ -3592,8 +4042,12 @@
     }
 
     function onDragEnd() {
+      if (_resizeNoteId) {
+        debounceUpdateNote(_resizeNoteId);
+        _resizeNoteId = null;
+        return;
+      }
       if (_dragNoteId) {
-        document.getElementById(`note-${_dragNoteId}`).style.zIndex = '';
         debounceUpdateNote(_dragNoteId);
         _dragNoteId = null;
       }
@@ -3601,8 +4055,15 @@
 
     document.addEventListener('mousemove', onDragMove);
     document.addEventListener('mouseup', onDragEnd);
-    document.addEventListener('touchmove', onDragMove, {passive: false});
+    document.addEventListener('touchmove', onDragMove, { passive: false });
     document.addEventListener('touchend', onDragEnd);
 
-    // Load notes when init
+    window.changeNoteColor = changeNoteColor;
+    window.minimizeNote = minimizeNote;
+    window.restoreNote = restoreNote;
+    window.deleteNote = deleteNote;
+    window.createNote = createNote;
+    window.startDrag = startDrag;
+    window.startResize = startResize;
+
     window.addEventListener('load', loadNotes);

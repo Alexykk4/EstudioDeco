@@ -221,5 +221,8 @@ CREATE TABLE IF NOT EXISTS notas (
     pos_x REAL NOT NULL DEFAULT 100,
     pos_y REAL NOT NULL DEFAULT 100,
     color TEXT DEFAULT '#fef3c7',
+    width REAL NOT NULL DEFAULT 260,
+    height REAL NOT NULL DEFAULT 180,
+    minimizada INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );

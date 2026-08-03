@@ -287,7 +287,13 @@
       width: 22px;
       text-align: center;
       flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
+    .ico { display: inline-block; vertical-align: -3px; flex-shrink: 0; }
+    .toast { display: flex; align-items: center; gap: 8px; }
+    .toast-ico { display: inline-flex; }
 
     .nav-label {
       transition: opacity .2s;
@@ -1110,6 +1116,10 @@
       cursor: pointer;
       transition: var(--transition);
       text-align: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
     }
 
     .pay-btn:hover {
@@ -1477,10 +1487,12 @@
     }
 
     .propina-check {
-      accent-color: var(--green-ok);
-      width: 16px;
-      height: 16px;
-      cursor: pointer;
+      position: absolute;
+      opacity: 0;
+      width: 1px;
+      height: 1px;
+      margin: 0;
+      pointer-events: none;
     }
 
     .invoice-preview-logo {
@@ -1489,39 +1501,74 @@
       object-fit: contain;
     }
 
-    /* ── Notas Flotantes ── */
+    /* ── Notas · Liquid Glass (capa .note-glass con rgba inline) ── */
     #notesContainer {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      pointer-events: none; /* Allows clicking through the container itself */
-      z-index: 1000;
+      display: contents;
     }
 
     .floating-note {
-      position: absolute;
-      width: 220px;
-      border-radius: 8px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-      border: 1px solid rgba(0,0,0,0.1);
-      pointer-events: auto; /* Re-enable pointer events for the note */
+      position: fixed;
+      z-index: 1000;
+      min-width: 200px;
+      min-height: 120px;
+      border-radius: 20px;
+      pointer-events: auto;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow: visible;
       touch-action: none;
+      background: transparent !important;
+      background-color: transparent !important;
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.65),
+        0 12px 40px rgba(40, 30, 60, 0.16),
+        0 2px 8px rgba(40, 30, 60, 0.08);
+    }
+
+    .floating-note .note-glass {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 0;
+      /* fallback si JS no corre; JS pisa con rgba literal */
+      background-color: rgba(254, 243, 199, 0.58);
+      backdrop-filter: blur(48px) saturate(180%);
+      -webkit-backdrop-filter: blur(48px) saturate(180%);
+    }
+
+    .floating-note > :not(.note-glass):not(.note-resize) {
+      position: relative;
+      z-index: 1;
+    }
+
+    .floating-note.minimized {
+      display: none !important;
+    }
+
+    .floating-note.note-active {
+      z-index: 1002;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.75),
+        0 18px 50px rgba(40, 30, 60, 0.2),
+        0 4px 12px rgba(40, 30, 60, 0.1);
+      border-color: rgba(255, 255, 255, 0.7);
     }
 
     .note-header {
-      height: 24px;
-      background: rgba(0,0,0,0.05);
-      border-bottom: 1px solid rgba(0,0,0,0.1);
+      height: 30px;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.1);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 20px 20px 0 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 8px;
+      padding: 0 6px 0 10px;
       cursor: grab;
+      user-select: none;
+      gap: 6px;
     }
 
     .note-header:active {
@@ -1530,38 +1577,215 @@
 
     .note-colors {
       display: flex;
-      gap: 4px;
+      gap: 5px;
+      flex: 1;
+      min-width: 0;
     }
 
     .note-color-btn {
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
-      border: 1px solid rgba(0,0,0,0.2);
+      border: 1px solid rgba(0,0,0,0.18);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.12);
       cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
     }
 
-    .note-del-btn {
-      background: none;
-      border: none;
-      color: var(--red);
-      font-weight: bold;
+    .note-color-btn.active {
+      outline: 2px solid rgba(40, 30, 60, 0.55);
+      outline-offset: 1px;
+      transform: scale(1.12);
+    }
+
+    .note-win-btns {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .note-win-btn {
+      background: rgba(255,255,255,0.28);
+      border: 1px solid rgba(255,255,255,0.35);
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
       cursor: pointer;
-      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(0,0,0,0.55);
       padding: 0;
+      line-height: 1;
+    }
+
+    .note-win-btn:hover {
+      background: rgba(255,255,255,0.5);
+      color: rgba(0,0,0,0.8);
+    }
+
+    .note-win-btn.note-del-btn:hover {
+      background: rgba(255, 80, 90, 0.35);
+      color: #8b1a1a;
+      border-color: rgba(255,255,255,0.5);
     }
 
     .note-textarea {
+      flex: 1;
       width: 100%;
-      height: 120px;
-      padding: 8px;
+      min-height: 0;
+      padding: 10px 12px;
       border: none;
       background: transparent;
       resize: none;
       outline: none;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
       font-size: 14px;
-      color: #333;
+      font-weight: 500;
+      color: rgba(20, 18, 28, 0.92);
+      line-height: 1.45;
+      border-radius: 0 0 20px 20px;
+    }
+
+    .note-resize {
+      position: absolute !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      left: auto !important;
+      top: auto !important;
+      width: 28px;
+      height: 28px;
+      margin: 0;
+      padding: 0;
+      border: none;
+      background: transparent;
+      cursor: nwse-resize;
+      touch-action: none;
+      z-index: 6 !important;
+      border-radius: 0 0 20px 0;
+      flex: none;
+    }
+
+    .note-resize::before,
+    .note-resize::after {
+      content: '';
+      position: absolute;
+      pointer-events: none;
+      border-style: solid;
+      border-color: rgba(40, 30, 60, 0.45);
+      border-width: 0 2px 2px 0;
+      border-radius: 0 0 1px 0;
+    }
+
+    .note-resize::before {
+      right: 7px;
+      bottom: 7px;
+      width: 11px;
+      height: 11px;
+      opacity: 0.4;
+    }
+
+    .note-resize::after {
+      right: 6px;
+      bottom: 6px;
+      width: 6px;
+      height: 6px;
+      opacity: 0.75;
+    }
+
+    .note-resize:hover::before,
+    .note-resize:hover::after {
+      border-color: rgba(40, 30, 60, 0.7);
+      opacity: 1;
+    }
+
+    /* Minimizadas: encima de Nueva Nota, apiladas hacia arriba */
+    #notesTaskbar {
+      display: flex;
+      flex-direction: column-reverse;
+      align-items: stretch;
+      gap: 6px;
+      width: 100%;
+      padding: 0 8px 8px;
+      box-sizing: border-box;
+      max-height: min(42vh, 320px);
+      overflow-x: hidden;
+      overflow-y: auto;
+      pointer-events: auto;
+      z-index: 2;
+      scrollbar-width: thin;
+    }
+
+    #notesTaskbar:empty {
+      display: none;
+      padding: 0;
+    }
+
+    .note-chip {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      max-width: none;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.45);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(20, 18, 28, 0.88);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      user-select: none;
+      text-align: left;
+      background-color: rgba(254, 243, 199, 0.45);
+      backdrop-filter: blur(18px) saturate(160%);
+      -webkit-backdrop-filter: blur(18px) saturate(160%);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.45),
+        0 2px 8px rgba(40, 30, 60, 0.08);
+    }
+
+    .note-chip:hover {
+      filter: brightness(1.03);
+    }
+
+    .note-chip-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.22);
+      flex-shrink: 0;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);
+    }
+
+    .note-chip-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+
+    .sidebar.sb-collapsed #notesTaskbar {
+      padding: 0 4px 6px;
+    }
+
+    .sidebar.sb-collapsed .note-chip {
+      justify-content: center;
+      padding: 8px 4px;
+    }
+
+    .sidebar.sb-collapsed .note-chip-label {
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      #notesTaskbar {
+        max-height: 28vh;
+      }
     }
 
     #btnNuevaNota {
@@ -1587,10 +1811,15 @@
     }
 
     .propina-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       font-size: 12px;
       font-weight: 700;
       color: #388E3C;
       flex: 1;
+      cursor: pointer;
+      user-select: none;
     }
 
     .propina-controls {
