@@ -505,3 +505,96 @@ def generar_nomina_pdf(nomina: dict, cajero: str) -> str:
 
     pdf.output(str(filepath))
     return str(filepath)
+
+
+def generar_ventas_dia_pdf(fecha: str, ventas: list) -> str:
+    """PDF de ventas de un día específico (activas + canceladas)."""
+    REPORTS_DIR.mkdir(exist_ok=True)
+    safe = fecha.replace("-", "")
+    filepath = REPORTS_DIR / f"ventas_dia_{safe}.pdf"
+
+    activas = [v for v in ventas if not v.get("cancelada")]
+    total = sum(float(v.get("total") or 0) for v in activas)
+    ef = sum(float(v.get("total") or 0) for v in activas if v.get("metodo_pago") == "Efectivo")
+    tar = sum(float(v.get("total") or 0) for v in activas if v.get("metodo_pago") == "Tarjeta")
+    trn = sum(float(v.get("total") or 0) for v in activas if v.get("metodo_pago") == "Transferencia")
+    mix = sum(float(v.get("total") or 0) for v in activas if v.get("metodo_pago") == "Mixto")
+
+    pdf = CortePDF()
+    pdf.add_page()
+    # Override subtitle area
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(*MORADO_PASTEL)
+    pdf.cell(0, 8, f"Reporte de Ventas - {fecha}", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "", 11)
+    pdf.set_text_color(60, 60, 60)
+    pdf.cell(0, 7, f"Tickets activos: {len(activas)}   |   Total: ${total:,.2f}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"Efectivo: ${ef:,.2f}   |   Tarjeta: ${tar:,.2f}   |   Transferencia: ${trn:,.2f}   |   Mixto: ${mix:,.2f}", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(6)
+
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_fill_color(*AZUL_PASTEL)
+    pdf.set_text_color(40, 40, 40)
+    cols = [("Hora", 18), ("Folio", 38), ("Cajero", 32), ("Metodo", 28), ("Total", 28), ("Estado", 26)]
+    for label, w in cols:
+        pdf.cell(w, 8, label, border=0, fill=True)
+    pdf.ln()
+
+    pdf.set_font("Helvetica", "", 8)
+    for v in ventas:
+        hora = str(v.get("created_at") or "")[11:16]
+        estado = "CANCELADA" if v.get("cancelada") else "OK"
+        pdf.set_text_color(180, 40, 40) if v.get("cancelada") else pdf.set_text_color(40, 40, 40)
+        pdf.cell(18, 6, hora)
+        pdf.cell(38, 6, str(v.get("folio") or "")[:18])
+        pdf.cell(32, 6, str(v.get("cajero_nombre") or "")[:16])
+        pdf.cell(28, 6, str(v.get("metodo_pago") or "")[:14])
+        pdf.cell(28, 6, f"${float(v.get('total') or 0):,.2f}")
+        pdf.cell(26, 6, estado)
+        pdf.ln()
+        items = v.get("items") or []
+        if items:
+            pdf.set_text_color(110, 110, 110)
+            desc = "; ".join(
+                f"{it.get('nombre_producto','')} x{it.get('cantidad',1)}" for it in items
+            )[:110]
+            pdf.cell(0, 5, f"  {desc}", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.output(str(filepath))
+    return str(filepath)
+
+
+def generar_ventas_dia_csv(fecha: str, ventas: list) -> str:
+    """CSV de ventas del día (UTF-8 BOM para Excel)."""
+    import csv
+    REPORTS_DIR.mkdir(exist_ok=True)
+    safe = fecha.replace("-", "")
+    filepath = REPORTS_DIR / f"ventas_dia_{safe}.csv"
+    with open(filepath, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow([
+            "fecha", "hora", "folio", "cajero", "metodo_pago",
+            "monto_efectivo", "monto_tarjeta", "total", "cancelada", "items",
+        ])
+        for v in ventas:
+            created = str(v.get("created_at") or "")
+            items = v.get("items") or []
+            items_txt = "; ".join(
+                f"{it.get('nombre_producto','')} x{it.get('cantidad',1)} @{float(it.get('precio_unitario') or 0):.2f}"
+                for it in items
+            )
+            w.writerow([
+                created[:10],
+                created[11:16],
+                v.get("folio") or "",
+                v.get("cajero_nombre") or "",
+                v.get("metodo_pago") or "",
+                f"{float(v.get('monto_efectivo') or 0):.2f}",
+                f"{float(v.get('monto_tarjeta') or 0):.2f}",
+                f"{float(v.get('total') or 0):.2f}",
+                1 if v.get("cancelada") else 0,
+                items_txt,
+            ])
+    return str(filepath)
