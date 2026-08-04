@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" role="img" aria-label="Estudio Deco">
+  <defs>
+    <linearGradient id="frameGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7E57C2"/>
+      <stop offset="100%" stop-color="#9575CD"/>
+    </linearGradient>
+    <linearGradient id="heartGrad" x1="20%" y1="10%" x2="80%" y2="90%">
+      <stop offset="0%" stop-color="#CE93D8"/>
+      <stop offset="55%" stop-color="#BA68C8"/>
+      <stop offset="100%" stop-color="#AB47BC"/>
+    </linearGradient>
+  </defs>
+
+  <!-- estudio -->
+  <text x="250" y="78" text-anchor="middle"
+        font-family="'Arial Rounded MT Bold', 'Helvetica Rounded', 'Nunito', 'Segoe UI', sans-serif"
+        font-size="72" font-weight="800" letter-spacing="2"
+        fill="#5E35B1">estudio</text>
+
+  <!-- Frame -->
+  <rect x="95" y="110" width="310" height="270" rx="18" ry="18"
+        fill="none" stroke="url(#frameGrad)" stroke-width="14"/>
+
+  <!-- Envelope diagonals -->
+  <path d="M109 124 L250 248 L391 124" fill="none" stroke="#B39DDB" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Sparkle -->
+  <g transform="translate(155 230)" stroke="#7986CB" stroke-width="8" stroke-linecap="round">
+    <line x1="0" y1="-28" x2="0" y2="28"/>
+    <line x1="-28" y1="0" x2="28" y2="0"/>
+    <line x1="-20" y1="-20" x2="20" y2="20"/>
+    <line x1="20" y1="-20" x2="-20" y2="20"/>
+  </g>
+
+  <!-- Heart -->
+  <path d="M250 318
+           C250 318 168 268 168 214
+           C168 178 196 158 224 158
+           C238 158 248 166 250 178
+           C252 166 262 158 276 158
+           C304 158 332 178 332 214
+           C332 268 250 318 250 318Z"
+        fill="url(#heartGrad)"/>
+
+  <!-- Paperclip -->
+  <g transform="translate(340 218) rotate(28)" fill="none" stroke="#26A69A" stroke-width="8" stroke-linecap="round">
+    <path d="M8 -36
+             C8 -50 22 -58 34 -50
+             C42 -44 44 -34 44 -24
+             L44 28
+             C44 48 28 60 12 60
+             C-4 60 -16 48 -16 32
+             L-16 -8
+             C-16 -20 -6 -28 4 -28
+             C14 -28 20 -20 20 -10
+             L20 22"/>
+  </g>
+
+  <!-- deco -->
+  <text x="250" y="460" text-anchor="middle"
+        font-family="'Arial Rounded MT Bold', 'Helvetica Rounded', 'Nunito', 'Segoe UI', sans-serif"
+        font-size="88" font-weight="800" letter-spacing="4"
+        fill="#5E35B1">deco</text>
+</svg>

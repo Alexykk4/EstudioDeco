@@ -96,9 +96,24 @@
       '🎨': 'palette', '📣': 'megaphone', '📍': 'pin', '🔥': 'chart', '⭐': 'chart',
       '➕': 'plus', '🏠': 'home', '↔️': 'transfer', '↔': 'transfer',
     };
-    function icon(name, size = 16) {
+    const _ICON_COLORS = {
+      cash: '#43A047', card: '#5C6BC0', transfer: '#00897B', phone: '#00897B',
+      mix: '#8E24AA', money: '#F9A825', spend: '#E65100',
+      chart: '#7E57C2', calendar: '#5C6BC0', list: '#5E35B1', eye: '#7E57C2',
+      users: '#5C6BC0', bag: '#00897B', note: '#43A047', logout: '#E53935',
+      bank: '#5E35B1', cart: '#FB8C00', table: '#8D6E63', print: '#546E7A',
+      edit: '#FB8C00', trash: '#E53935', search: '#7E57C2', settings: '#78909C',
+      package: '#8D6E63', user: '#5C6BC0', moon: '#5C6BC0', sun: '#F9A825',
+      tag: '#EC407A', key: '#F9A825', coffee: '#8D6E63', download: '#5C6BC0',
+      store: '#00897B', palette: '#AB47BC', megaphone: '#FB8C00', pin: '#E53935',
+      plus: '#43A047', minus: '#E53935', home: '#5E35B1',
+      check: '#43A047', x: '#E53935', warn: '#FB8C00',
+      chevronL: '#7E57C2', chevronR: '#7E57C2',
+    };
+    function icon(name, size = 16, color) {
       const d = _ICON_PATHS[name] || _ICON_PATHS.list;
-      return `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+      const c = color || _ICON_COLORS[name] || 'currentColor';
+      return `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
     }
     function demojify(html) {
       if (!html || typeof html !== 'string') return html;

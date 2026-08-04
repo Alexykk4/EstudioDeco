@@ -148,11 +148,17 @@
     }
 
     .sidebar-logo img {
-      height: 34px;
-      width: 34px;
+      height: 40px;
+      width: 40px;
       object-fit: contain;
-      border-radius: 8px;
+      border-radius: 10px;
       flex-shrink: 0;
+      background: #FDFBFF;
+      box-shadow: 0 0 0 1px var(--border-light);
+    }
+    [data-theme="dark"] .sidebar-logo img {
+      background: #2A2438;
+      box-shadow: 0 0 0 1px var(--border);
     }
 
     .sidebar-logo-text {
@@ -292,6 +298,10 @@
       justify-content: center;
     }
     .ico { display: inline-block; vertical-align: -3px; flex-shrink: 0; }
+    .nav-icon .ico,
+    .bottom-nav-btn .ico,
+    .view-btn .ico,
+    .pay-btn .ico { display: block; }
     .toast { display: flex; align-items: center; gap: 8px; }
     .toast-ico { display: inline-flex; }
 
