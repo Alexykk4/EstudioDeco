@@ -10,8 +10,8 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=logos-color-1">
-  <script src="/static/app.js?v=logos-color-1" defer></script>
+  <link rel="stylesheet" href="/static/style.css?v=emojis-1">
+  <script src="/static/app.js?v=emojis-1" defer></script>
 </head>
 
 <body>
@@ -21,7 +21,7 @@
   ═══════════════════════════════════════════════════════════════ -->
   <div id="loginScreen" style="display:none;position:fixed;inset:0;z-index:99999;background:var(--bg);align-items:center;justify-content:center;padding:20px;">
     <div style="background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:40px 36px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:18px;align-items:center;">
-      <img src="/assets/logo-color.png" alt="Estudio Deco" width="112" height="112" style="width:112px;height:112px;object-fit:contain;display:block;">
+      <div style="font-size:48px;line-height:1;">☕</div>
       <div style="font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.5px;">Estudio Deco</div>
       <div style="font-size:13px;color:var(--text-secondary);margin-top:-8px;">Sistema de Punto de Venta</div>
       <div style="width:100%;display:flex;flex-direction:column;gap:10px;margin-top:6px;">
@@ -47,7 +47,7 @@
   <div id="estacionApp" style="display:none;height:100vh;background:var(--bg);padding:0;overflow-y:auto;">
     <!-- Header -->
     <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;">
-      <img src="/assets/logo-mark.svg" alt="" width="28" height="28" style="width:28px;height:28px;object-fit:contain;flex-shrink:0;">
+      <span style="font-size:22px;">☕</span>
       <span style="font-size:17px;font-weight:700;color:var(--text);flex:1;">Estación 304 — Admin</span>
       <button id="themeToggleE" onclick="toggleTheme()" title="Cambiar tema" style="width:34px;height:34px;border:none;border-radius:50%;background:var(--bg-warm);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:var(--transition);">🌙</button>
       <button onclick="doLogout()" style="padding:8px 16px;background:var(--red-light);color:var(--red);border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:var(--transition);">Salir</button>
@@ -199,38 +199,38 @@
             class="dot"></span><span id="userName">Sin usuario</span></div>
       </div>
       <div class="nav-section-label">Caja</div>
-      <button class="nav-item" onclick="showFondoModal()"><span class="nav-icon" data-icon="bank"></span><span class="nav-label"> Abrir
+      <button class="nav-item" onclick="showFondoModal()"><span class="nav-icon">🏦</span><span class="nav-label"> Abrir
           Caja</span></button>
       <div class="nav-section-label">Reportes</div>
-      <button class="nav-item" onclick="showVentasHoyModal()"><span class="nav-icon" data-icon="list"></span><span class="nav-label">
+      <button class="nav-item" onclick="showVentasHoyModal()"><span class="nav-icon">📋</span><span class="nav-label">
           Ventas del Día</span></button>
-      <button class="nav-item" onclick="showPreCorteModal()"><span class="nav-icon" data-icon="eye"></span><span class="nav-label">
+      <button class="nav-item" onclick="showPreCorteModal()"><span class="nav-icon">👁</span><span class="nav-label">
           Pre-Corte</span></button>
-      <button class="nav-item nav-item-gold" onclick="openPage('Corte', showCorteModal)"><span
-          class="nav-icon" data-icon="chart"></span><span class="nav-label"> Corte</span></button>
-      <button class="nav-item" onclick="openPage('Corte Semanal', ()=>showCorteSemanalModal(0))"><span
-          class="nav-icon" data-icon="calendar"></span><span class="nav-label"> Corte Semanal</span></button>
-      <button class="nav-item" onclick="openPage('Estadísticas', showEstadisticasModal)"><span
-          class="nav-icon" data-icon="chart"></span><span class="nav-label"> Estadísticas</span></button>
+      <button class="nav-item nav-item-gold" onclick="openPage('📊 Corte', showCorteModal)"><span
+          class="nav-icon">📊</span><span class="nav-label"> Corte</span></button>
+      <button class="nav-item" onclick="openPage('📅 Corte Semanal', ()=>showCorteSemanalModal(0))"><span
+          class="nav-icon">📅</span><span class="nav-label"> Corte Semanal</span></button>
+      <button class="nav-item" onclick="openPage('📈 Estadísticas', showEstadisticasModal)"><span
+          class="nav-icon">📈</span><span class="nav-label"> Estadísticas</span></button>
       <div class="nav-section-label">Recursos</div>
-      <button class="nav-item" onclick="openPage('Nóminas', showNominasPage)"><span class="nav-icon" data-icon="users"></span><span
+      <button class="nav-item" onclick="openPage('👥 Nóminas', showNominasPage)"><span class="nav-icon">👥</span><span
           class="nav-label"> Nóminas</span></button>
-      <button class="nav-item" onclick="openPage('Gastos e Ingresos', showMovimientosPage)"><span class="nav-icon" data-icon="bag"></span><span
+      <button class="nav-item" onclick="openPage('💼 Gastos e Ingresos', showMovimientosPage)"><span class="nav-icon">💼</span><span
           class="nav-label"> Gastos e Ingresos</span></button>
       <div style="flex:1;"></div>
       <div id="notesTaskbar" aria-label="Notas minimizadas"></div>
-      <button class="nav-item" id="btnNuevaNotaNav" onclick="createNote()" style="margin-bottom:4px;color:var(--sage);"><span class="nav-icon" data-icon="note"></span><span class="nav-label"> Nueva Nota</span></button>
-      <button class="nav-item" onclick="doLogout()" style="color:var(--red);margin-bottom:8px;"><span class="nav-icon" data-icon="logout"></span><span class="nav-label"> Cerrar Sesión</span></button>
+      <button class="nav-item" id="btnNuevaNotaNav" onclick="createNote()" style="margin-bottom:4px;color:var(--sage);"><span class="nav-icon">📝</span><span class="nav-label"> Nueva Nota</span></button>
+      <button class="nav-item" onclick="doLogout()" style="color:var(--red);margin-bottom:8px;"><span class="nav-icon">🚪</span><span class="nav-label"> Cerrar Sesión</span></button>
     </aside>
 
     <!-- MAIN -->
     <main class="main">
       <!-- Navigation -->
       <div class="view-nav">
-        <button class="view-btn active" data-view="mesas" onclick="switchView('mesas')"><span data-icon="table" data-size="15"></span> Mesas</button>
-        <button class="view-btn" data-view="directa" onclick="switchView('directa')"><span data-icon="cart" data-size="15"></span> Venta Directa</button>
-        <button class="view-btn" data-view="semanal" onclick="switchView('semanal')"><span data-icon="chart" data-size="15"></span> Semanal</button>
-        <button class="view-btn hidden" id="navCatalog" data-view="catalog" onclick="switchView('catalog')"><span data-icon="settings" data-size="15"></span>
+        <button class="view-btn active" data-view="mesas" onclick="switchView('mesas')">🪑 Mesas</button>
+        <button class="view-btn" data-view="directa" onclick="switchView('directa')">🛒 Venta Directa</button>
+        <button class="view-btn" data-view="semanal" onclick="switchView('semanal')">📈 Semanal</button>
+        <button class="view-btn hidden" id="navCatalog" data-view="catalog" onclick="switchView('catalog')">⚙️
           Catálogo</button>
       </div>
 
@@ -274,7 +274,7 @@
       <!-- CATALOG VIEW -->
       <div class="catalog-view hidden" id="catalogView">
         <div class="catalog-header">
-          <div class="catalog-title"><span data-icon="package"></span> Catálogo de Productos</div>
+          <div class="catalog-title">📦 Catálogo de Productos</div>
           <button class="btn btn-sage" onclick="showCatalogModal()">+ Nuevo Producto</button>
         </div>
         <div class="catalog-table-wrap">
@@ -319,7 +319,7 @@
           <span>Subtotal</span><span id="subtotalAmt">$0.00</span>
         </div>
         <div class="propina-amt-row" id="propinaAmtRow" style="display:none">
-          <span style="display:inline-flex;align-items:center;gap:5px;"><span data-icon="money" data-size="13"></span> Propina</span><span id="propinaAmt">$0.00</span>
+          <span>🪙 Propina</span><span id="propinaAmt">$0.00</span>
         </div>
         <div class="order-total-row">
           <span class="order-total-label">Total</span>
@@ -328,8 +328,8 @@
         <!-- Sección propina -->
         <div class="propina-section" style="margin-bottom:10px">
           <div class="propina-row">
-            <input type="checkbox" class="propina-check" id="propinaCheck" onchange="togglePropina()" aria-label="Agregar propina">
-            <label for="propinaCheck" class="propina-label"><span data-icon="money" data-size="14"></span> Agregar propina</label>
+            <input type="checkbox" class="propina-check" id="propinaCheck" onchange="togglePropina()">
+            <label for="propinaCheck" class="propina-label">🪙 Agregar propina (opcional)</label>
           </div>
           <div class="propina-controls hidden" id="propinaControls">
             <button class="propina-opt active" data-pct="10" onclick="setPropinaPct(this,10)">10%</button>
@@ -341,27 +341,27 @@
           </div>
         </div>
         <div class="pay-row">
-          <button class="pay-btn active" data-m="Efectivo" onclick="selPay(this)"><span data-icon="cash" data-size="14"></span> Efectivo</button>
-          <button class="pay-btn" data-m="Tarjeta" onclick="selPay(this)"><span data-icon="card" data-size="14"></span> Tarjeta</button>
-          <button class="pay-btn" data-m="Transferencia" onclick="selPay(this)"><span data-icon="phone" data-size="14"></span> Transfer</button>
-          <button class="pay-btn" data-m="Mixto" onclick="selPay(this)"><span data-icon="mix" data-size="14"></span> Mixto</button>
+          <button class="pay-btn active" data-m="Efectivo" onclick="selPay(this)">💵 Efectivo</button>
+          <button class="pay-btn" data-m="Tarjeta" onclick="selPay(this)">💳 Tarjeta</button>
+          <button class="pay-btn" data-m="Transferencia" onclick="selPay(this)">📱 Transfer</button>
+          <button class="pay-btn" data-m="Mixto" onclick="selPay(this)">⚖️ Mixto</button>
         </div>
         <div id="mixtoFields" class="hidden" style="display:flex; gap:10px; margin-bottom:12px;">
           <div style="flex:1;">
-            <label style="font-size:10px;color:var(--text-secondary);font-weight:700;text-transform:uppercase;display:inline-flex;align-items:center;gap:4px;"><span data-icon="cash" data-size="11"></span>
+            <label style="font-size:10px;color:var(--text-secondary);font-weight:700;text-transform:uppercase;">💵
               Efectivo</label>
             <input type="number" id="mixEfectivo" class="input" style="padding:6px; font-size:13px;" placeholder="0.00"
               oninput="calcMixto('efectivo')">
           </div>
           <div style="flex:1;">
-            <label style="font-size:10px;color:var(--text-secondary);font-weight:700;text-transform:uppercase;display:inline-flex;align-items:center;gap:4px;"><span data-icon="card" data-size="11"></span>
+            <label style="font-size:10px;color:var(--text-secondary);font-weight:700;text-transform:uppercase;">💳
               Tarjeta</label>
             <input type="number" id="mixTarjeta" class="input" style="padding:6px; font-size:13px;" placeholder="0.00"
               oninput="calcMixto('tarjeta')">
           </div>
         </div>
         <div class="order-actions">
-          <button class="btn-clear" onclick="limpiarOrden()" title="Limpiar"><span data-icon="trash" data-size="16"></span></button>
+          <button class="btn-clear" onclick="limpiarOrden()">🗑</button>
           <button class="btn-cobrar" id="btnCobrar" onclick="cobrar()" disabled>Cobrar</button>
         </div>
       </div>
@@ -369,22 +369,22 @@
     <aside class="order-panel hidden" id="semanalSidebar"
       style="padding:18px; gap:14px; background:var(--bg); border:none;"></aside>
     <!-- Cart FAB (tablet/mobile) -->
-    <button class="cart-fab" id="cartFab" onclick="toggleCart()"><span data-icon="cart" data-size="20"></span><span class="cart-fab-badge" id="cartFabBadge"
+    <button class="cart-fab" id="cartFab" onclick="toggleCart()">🛒<span class="cart-fab-badge" id="cartFabBadge"
         style="display:none">0</span></button>
   </div>
 
   <!-- Bottom nav (phone) -->
   <nav class="bottom-nav" id="bottomNav">
     <button class="bottom-nav-btn active" id="bnMesas" onclick="switchView('mesas');setBottomNav('mesas')"><span
-        class="nav-icon" data-icon="table"></span>Mesas</button>
+        class="nav-icon">🪑</span>Mesas</button>
     <button class="bottom-nav-btn" id="bnDirecta" onclick="switchView('directa');setBottomNav('directa')"><span
-        class="nav-icon" data-icon="cart"></span>Venta</button>
-    <button class="bottom-nav-btn" id="bnVentas" onclick="openPage('Ventas del Día', showVentasHoyModal)"><span
-        class="nav-icon" data-icon="list"></span>Ventas</button>
-    <button class="bottom-nav-btn" id="bnSemanal" onclick="openPage('Semanal', ()=>showCorteSemanalModal(0))"><span
-        class="nav-icon" data-icon="calendar"></span>Semanal</button>
-    <button class="bottom-nav-btn" id="bnCorte" onclick="openPage('Corte', showCorteModal)"><span
-        class="nav-icon" data-icon="chart"></span>Corte</button>
+        class="nav-icon">🛒</span>Venta</button>
+    <button class="bottom-nav-btn" id="bnVentas" onclick="openPage('📋 Ventas del Día', showVentasHoyModal)"><span
+        class="nav-icon">📋</span>Ventas</button>
+    <button class="bottom-nav-btn" id="bnSemanal" onclick="openPage('📅 Semanal', ()=>showCorteSemanalModal(0))"><span
+        class="nav-icon">📅</span>Semanal</button>
+    <button class="bottom-nav-btn" id="bnCorte" onclick="openPage('📊 Corte', showCorteModal)"><span
+        class="nav-icon">📊</span>Corte</button>
   </nav>
 
   <!-- Full-page view -->
