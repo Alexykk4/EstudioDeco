@@ -2325,15 +2325,76 @@
       </div>
     </div>`;
 
+      // ── Helpers de periodo ──
+      const _fmtISO = d => d.toISOString().slice(0, 10);
+      const _hoyISO = () => _fmtISO(new Date());
+      function _periodoPreset(preset, year, month) {
+        const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
+        if (preset === '7d') {
+          const d = new Date(hoy); d.setDate(hoy.getDate() - 6);
+          return { desde: _fmtISO(d), hasta: _fmtISO(hoy) };
+        }
+        if (preset === '30d') {
+          const d = new Date(hoy); d.setDate(hoy.getDate() - 29);
+          return { desde: _fmtISO(d), hasta: _fmtISO(hoy) };
+        }
+        if (preset === 'mes') {
+          const y = year || hoy.getFullYear(), m = month || (hoy.getMonth() + 1);
+          const desde = `${y}-${String(m).padStart(2, '0')}-01`;
+          const hasta = _fmtISO(new Date(y, m, 0));
+          return { desde, hasta };
+        }
+        return null;
+      }
+      function _presetBtn(active, label, onclick) {
+        const on = active
+          ? 'background:var(--sage-dark);color:#fff;border:none;'
+          : 'background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);';
+        return `<button onclick="${onclick}" style="padding:4px 12px;border-radius:16px;cursor:pointer;font-size:11px;font-weight:600;${on}">${label}</button>`;
+      }
+      function _periodoFiltroHtml(idPrefix, preset, desde, hasta, onPreset, onApply, includeAll) {
+        return `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Periodo de ventas</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+            ${_presetBtn(preset === 'mes', 'Este mes', onPreset + "('mes')")}
+            ${_presetBtn(preset === '7d', 'Últimos 7 días', onPreset + "('7d')")}
+            ${_presetBtn(preset === '30d', 'Últimos 30 días', onPreset + "('30d')")}
+            ${_presetBtn(preset === 'custom', 'Personalizado', onPreset + "('custom')")}
+            ${includeAll ? _presetBtn(preset === 'all', 'Todo el historial', onPreset + "('all')") : ''}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;">
+            <div style="flex:1;min-width:130px;">
+              <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Desde</label>
+              <input type="date" id="${idPrefix}Desde" value="${desde || ''}" class="input" style="padding:6px 8px;font-size:12px;">
+            </div>
+            <div style="flex:1;min-width:130px;">
+              <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Hasta</label>
+              <input type="date" id="${idPrefix}Hasta" value="${hasta || ''}" class="input" style="padding:6px 8px;font-size:12px;">
+            </div>
+            <button class="btn btn-sage btn-sm" onclick="${onApply}" style="white-space:nowrap;">Aplicar</button>
+          </div>
+        </div>`;
+      }
+
       // ── Estadísticas SOLO Estudio Deco (excluye Estación 304) ──
       let estudioData = null;
+      let estudioPreset = 'all';
+      let estudioDesde = '';
+      let estudioHasta = '';
+
+      async function loadEstudio() {
+        let url = '/estadisticas/estudio';
+        if (estudioPreset !== 'all' && estudioDesde && estudioHasta) {
+          url += `?desde=${estudioDesde}&hasta=${estudioHasta}`;
+        }
+        estudioData = await api(url);
+      }
 
       function renderEstudio() {
         const d = estudioData;
         if (!d) return '<div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando…</div>';
         const fmt$ = v => '$' + (v || 0).toLocaleString('es-MX', { minimumFractionDigits: 0 });
 
-        // Lista horizontal con barras proporcionales (HTML puro, sin dependencias)
         function barList(items, labelKey, valueKey, color, subKey) {
           if (!items || !items.length) return '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Sin datos</div>';
           const maxV = Math.max(...items.map(it => it[valueKey] || 0), 1);
@@ -2349,6 +2410,20 @@
             </div>`;
           }).join('');
         }
+
+        const periodoLabel = estudioPreset === 'all'
+          ? 'Histórico completo'
+          : `${estudioDesde || '—'} → ${estudioHasta || '—'}`;
+
+        const filtro = _periodoFiltroHtml(
+          'est',
+          estudioPreset,
+          estudioDesde,
+          estudioHasta,
+          'window._estudioPreset',
+          'window._estudioApply()',
+          true
+        );
 
         const r = d.resumen || {};
         const kpis = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
@@ -2368,7 +2443,8 @@
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">Ticket prom.</div>
             <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--gold);">${fmt$(r.ticket_promedio)}</div>
           </div>
-        </div>`;
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Periodo: <strong style="color:var(--text-secondary);">${periodoLabel}</strong></div>`;
 
         const card = (titulo, contenido) => `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:10px;">${titulo}</div>
@@ -2377,7 +2453,7 @@
 
         const talleres = card('🎨 Talleres que más venden', barList(d.ranking_talleres, 'producto', 'total', '#7E57C2', 'cantidad'));
         const dias = card('📅 Días que más venden', barList(d.ranking_dias_semana, 'dia', 'total', '#26A69A', 'num_ventas'));
-        const tiendas = card('🏪 Tiendas (excluye Estación 304)', barList(d.ranking_tiendas, 'tienda', 'total', '#5C6BC0', 'cantidad'));
+        const tiendasCard = card('🏪 Tiendas (excluye Estación 304)', barList(d.ranking_tiendas, 'tienda', 'total', '#5C6BC0', 'cantidad'));
         const productos = card('⭐ Top productos', barList(d.ranking_productos, 'producto', 'total', '#C4755A', 'cantidad'));
 
         const topDiasRows = (d.top_dias || []).map((t, i) => `<tr style="border-top:1px solid var(--border-light);${i % 2 === 1 ? 'background:var(--bg-warm);' : ''}">
@@ -2389,7 +2465,7 @@
           <table style="width:100%;border-collapse:collapse;font-size:12px;">${topDiasRows || '<tr><td style="padding:16px;text-align:center;color:var(--text-muted);">Sin datos</td></tr>'}</table>
         </div>`);
 
-        return kpis + talleres + dias + tiendas + productos + topDias;
+        return filtro + kpis + talleres + dias + tiendasCard + productos + topDias;
       }
 
       // ── Calendario de ventas ──
@@ -2398,16 +2474,170 @@
       let calDays = [];
       let calSelected = null;
       let calVentas = null;
+      let calPreset = 'mes';
+      let calDesde = _periodoPreset('mes', calYear, calMonth).desde;
+      let calHasta = _periodoPreset('mes', calYear, calMonth).hasta;
+      let calTienda = '';
+      let calPeriodoData = null;
+      let calTiendaTab = 0;
       const MESES_CAL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+      const CAL_TCOLORS = ['#7C9A7E', '#C4755A', '#C9A84C', '#26A69A', '#5C6BC0', '#EC407A', '#8D6E63', '#546E7A'];
+      const PAGO_COLORS = { 'Efectivo': '#4CAF50', 'Tarjeta': '#C9A84C', 'Transferencia': '#26A69A', 'Mixto': '#5C6BC0' };
 
       async function loadCalendario() {
-        calDays = await api(`/ventas/calendario?anio=${calYear}&mes=${calMonth}`);
+        let url = `/ventas/calendario?anio=${calYear}&mes=${calMonth}`;
+        if (calTienda) url += `&tienda=${encodeURIComponent(calTienda)}`;
+        calDays = await api(url);
+      }
+
+      async function loadCalPeriodo() {
+        if (!calDesde || !calHasta) { calPeriodoData = null; return; }
+        let url = `/estadisticas/periodo?desde=${calDesde}&hasta=${calHasta}`;
+        if (calTienda) url += `&tienda=${encodeURIComponent(calTienda)}`;
+        calPeriodoData = await api(url);
+        const names = Object.keys(calPeriodoData?.detalle_por_tienda || {});
+        if (calTiendaTab >= names.length) calTiendaTab = 0;
       }
 
       async function selectCalDay(fecha) {
         calSelected = fecha;
         calVentas = await api(`/ventas?fecha=${fecha}`);
         renderModal('calendario');
+      }
+
+      function renderCalPeriodoStats() {
+        const d = calPeriodoData;
+        if (!d) return '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Selecciona un periodo para ver estadísticas</div>';
+        const fmt$ = v => '$' + (v || 0).toLocaleString('es-MX', { minimumFractionDigits: 0 });
+        const r = d.resumen || {};
+        const mejor = r.mejor_dia;
+
+        const kpis = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
+          <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:2px;">Total periodo</div>
+            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);">${fmt$(r.total)}</div>
+          </div>
+          <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:2px;">Tickets</div>
+            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--blue);">${r.num_ventas || 0}</div>
+          </div>
+          <div style="background:var(--gold-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">Ticket prom.</div>
+            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--gold);">${fmt$(r.ticket_promedio)}</div>
+          </div>
+          <div style="background:var(--sage-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--sage-dark);margin-bottom:2px;">Día más fuerte</div>
+            <div style="font-size:13px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">${mejor ? fmt$(mejor.total) : '—'}</div>
+            <div style="font-size:9px;color:var(--text-muted);">${mejor ? mejor.fecha : ''}</div>
+          </div>
+        </div>`;
+
+        const diasItems = (d.ranking_dias_semana || []).map(x => ({
+          label: x.label || x.dia.slice(0, 3),
+          value: x.total,
+          color: '#26A69A',
+        }));
+        const chartDias = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Días más fuertes</div>
+          <div style="overflow-x:auto;">${svgBarsV(diasItems, 90, 36, 8)}</div>
+        </div>`;
+
+        const diarioItems = (d.diario || []).map(x => ({ label: x.label, total: x.total }));
+        const chartDiario = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Ventas diarias del periodo</div>
+          <div style="overflow-x:auto;">${svgLineArea(diarioItems, [{ k: 'total', c: '#7C9A7E' }], 90)}</div>
+        </div>`;
+
+        const tiendaBars = (d.ventas_por_tienda || []).map((t, i) => ({
+          label: t.tienda,
+          value: t.total,
+          color: CAL_TCOLORS[i % CAL_TCOLORS.length],
+        }));
+        const chartTiendas = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Cuánto vendió cada tienda</div>
+          <div style="overflow-x:auto;">${tiendaBars.length ? svgBarsH(tiendaBars, 180, 22, 7) : '<div style="color:var(--text-muted);font-size:12px;">Sin ventas</div>'}</div>
+        </div>`;
+
+        const pagoSegs = (d.metodos_pago || []).map(p => ({
+          label: p.metodo,
+          value: p.total,
+          color: PAGO_COLORS[p.metodo] || '#8D6E63',
+        }));
+        const pagoLegend = pagoSegs.map(s => `<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:9px;height:9px;border-radius:2px;background:${s.color};display:inline-block;"></span>${s.label}: <strong>${fmt$(s.value)}</strong></div>`).join('');
+        const chartPago = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Métodos de pago</div>
+          <div style="display:flex;align-items:center;gap:14px;justify-content:center;">
+            ${svgDonut(pagoSegs, 100)}
+            <div style="display:flex;flex-direction:column;gap:5px;">${pagoLegend || '<span style="color:var(--text-muted);font-size:12px;">Sin datos</span>'}</div>
+          </div>
+        </div>`;
+
+        // Qué vendió cada tienda
+        const detalle = d.detalle_por_tienda || {};
+        const nombres = Object.keys(detalle);
+        let detalleHtml = '';
+        if (!nombres.length) {
+          detalleHtml = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Sin productos en este periodo</div>';
+        } else {
+          const tabs = nombres.map((n, i) => {
+            const on = i === calTiendaTab;
+            return `<button onclick="window._calTiendaTab(${i})" style="font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid var(--border);background:${on ? 'var(--sage-dark)' : 'var(--surface)'};color:${on ? '#fff' : 'var(--text-secondary)'};cursor:pointer;font-weight:600;">${n}</button>`;
+          }).join('');
+          const items = detalle[nombres[calTiendaTab]] || [];
+          const totalT = items.reduce((s, x) => s + x.total, 0);
+          const rows = items.map(p => `<tr style="border-top:1px solid var(--border-light);">
+            <td style="padding:5px 8px;font-size:12px;">${p.producto}</td>
+            <td style="padding:5px 8px;font-size:12px;text-align:right;color:var(--text-secondary);">${p.cantidad}</td>
+            <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;">$${p.total.toFixed(2)}</td>
+          </tr>`).join('');
+          detalleHtml = `
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">${tabs}</div>
+            <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="background:var(--bg-warm);font-size:10px;text-transform:uppercase;color:var(--text-secondary);">
+                  <th style="padding:6px 8px;text-align:left;">Producto</th>
+                  <th style="padding:6px 8px;text-align:right;">Cant.</th>
+                  <th style="padding:6px 8px;text-align:right;">Total</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+                <tfoot><tr style="background:var(--sage-light);">
+                  <td colspan="2" style="padding:6px 8px;font-size:12px;font-weight:700;">TOTAL ${nombres[calTiendaTab]}</td>
+                  <td style="padding:6px 8px;font-size:14px;font-weight:800;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">${fmt$(totalT)}</td>
+                </tr></tfoot>
+              </table>
+            </div>`;
+        }
+
+        const topRows = (d.top_dias || []).slice(0, 5).map((t, i) => `<tr style="border-top:1px solid var(--border-light);">
+          <td style="padding:5px 8px;font-size:12px;font-weight:600;">${i + 1}. ${t.fecha}</td>
+          <td style="padding:5px 8px;font-size:12px;text-align:right;color:var(--text-secondary);">${t.num_ventas} tickets</td>
+          <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--sage-dark);">${fmt$(t.total)}</td>
+        </tr>`).join('');
+
+        return `
+          <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);">
+            <div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:4px;">Estadísticas del periodo</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">${d.desde} → ${d.hasta}${d.tienda ? ' · ' + d.tienda : ' · Todas las tiendas'}</div>
+            ${kpis}
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:10px;">
+              ${chartDias}${chartDiario}
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:12px;">
+              ${chartTiendas}${chartPago}
+            </div>
+            <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:10px;">Qué vendió cada tienda</div>
+              ${detalleHtml}
+            </div>
+            <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Top fechas del periodo</div>
+              <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                  ${topRows || '<tr><td style="padding:14px;text-align:center;color:var(--text-muted);">Sin datos</td></tr>'}
+                </table>
+              </div>
+            </div>
+          </div>`;
       }
 
       function renderCalendario() {
@@ -2423,7 +2653,8 @@
           const info = byFecha[fecha];
           const selected = calSelected === fecha;
           const has = !!info;
-          cells.push(`<button onclick="window._calSelect('${fecha}')" style="padding:8px 4px;border-radius:10px;border:1px solid ${selected ? 'var(--sage)' : 'var(--border)'};background:${selected ? 'var(--sage-light)' : has ? 'var(--surface)' : 'var(--bg-warm)'};cursor:pointer;text-align:left;min-height:64px;">
+          const inPeriod = calDesde && calHasta && fecha >= calDesde && fecha <= calHasta;
+          cells.push(`<button onclick="window._calSelect('${fecha}')" style="padding:8px 4px;border-radius:10px;border:1px solid ${selected ? 'var(--sage)' : inPeriod && has ? 'var(--sage)' : 'var(--border)'};background:${selected ? 'var(--sage-light)' : has ? 'var(--surface)' : 'var(--bg-warm)'};cursor:pointer;text-align:left;min-height:64px;opacity:${inPeriod || !calDesde ? 1 : 0.45};">
             <div style="font-size:12px;font-weight:700;color:var(--text);">${day}</div>
             ${has ? `<div style="font-size:10px;color:var(--sage-dark);font-family:'JetBrains Mono',monospace;margin-top:4px;">$${info.total.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</div>
             <div style="font-size:9px;color:var(--text-muted);">${info.num_ventas} venta${info.num_ventas !== 1 ? 's' : ''}</div>` : '<div style="font-size:9px;color:var(--text-muted);margin-top:6px;">—</div>'}
@@ -2432,16 +2663,29 @@
 
         let detalle = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">Selecciona un día para ver las ventas</div>';
         if (calSelected && calVentas) {
-          const activas = calVentas.filter(v => !v.cancelada);
-          const total = activas.reduce((s, v) => s + v.total, 0);
+          let activas = calVentas.filter(v => !v.cancelada);
+          if (calTienda) {
+            activas = activas.filter(v => (v.items || []).some(it => (it.tienda_nombre || '') === calTienda));
+          }
+          const total = activas.reduce((s, v) => {
+            if (!calTienda) return s + v.total;
+            return s + (v.items || []).filter(it => it.tienda_nombre === calTienda).reduce((a, it) => a + (it.subtotal || 0), 0);
+          }, 0);
           const ef = activas.filter(v => v.metodo_pago === 'Efectivo').reduce((s, v) => s + v.total, 0);
           const tar = activas.filter(v => v.metodo_pago === 'Tarjeta').reduce((s, v) => s + v.total, 0);
           const trn = activas.filter(v => v.metodo_pago === 'Transferencia').reduce((s, v) => s + v.total, 0);
           const lista = activas.length ? activas.map(v => {
             const hora = (v.created_at || '').slice(11, 16);
-            return `<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border-light);font-size:12px;">
-              <span><strong>${v.folio}</strong> · ${hora} · ${v.metodo_pago}</span>
-              <span style="font-family:'JetBrains Mono',monospace;font-weight:700;">$${v.total.toFixed(2)}</span>
+            const itemsTxt = (v.items || [])
+              .filter(it => !calTienda || it.tienda_nombre === calTienda)
+              .map(it => `${it.cantidad}× ${it.nombre_producto}`)
+              .join(', ');
+            return `<div style="padding:8px 0;border-bottom:1px solid var(--border-light);font-size:12px;">
+              <div style="display:flex;justify-content:space-between;gap:8px;">
+                <span><strong>${v.folio}</strong> · ${hora} · ${v.metodo_pago}</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-weight:700;">$${v.total.toFixed(2)}</span>
+              </div>
+              ${itemsTxt ? `<div style="font-size:10px;color:var(--text-muted);margin-top:3px;">${itemsTxt}</div>` : ''}
             </div>`;
           }).join('') : '<div style="padding:16px;text-align:center;color:var(--text-muted);">Sin ventas este día</div>';
 
@@ -2462,7 +2706,25 @@
             <div style="max-height:260px;overflow-y:auto;">${lista}</div>`;
         }
 
+        const tiendaOpts = ['<option value="">Todas las tiendas</option>']
+          .concat((calPeriodoData?.tiendas || (window._allTiendas || tiendas || []).map(t => t.nombre)).map(n => {
+            const name = typeof n === 'string' ? n : n;
+            return `<option value="${name.replace(/"/g, '&quot;')}" ${calTienda === name ? 'selected' : ''}>${name}</option>`;
+          }));
+
+        const filtro = `
+          ${_periodoFiltroHtml('cal', calPreset, calDesde, calHasta, 'window._calPreset', 'window._calApply()', false)}
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:14px;">
+            <div style="flex:1;min-width:180px;">
+              <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Filtrar por tienda</label>
+              <select id="calTiendaSel" class="input" style="padding:6px 8px;font-size:12px;" onchange="window._calTiendaChange(this.value)">
+                ${tiendaOpts.join('')}
+              </select>
+            </div>
+          </div>`;
+
         return `
+          ${filtro}
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
             <button class="btn btn-ghost btn-sm" onclick="window._calNav(-1)">${icon('chevronL', 14)}</button>
             <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;">${icon('calendar', 16)} ${MESES_CAL[calMonth - 1]} ${calYear}</div>
@@ -2472,7 +2734,8 @@
             <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:16px;">${cells.join('')}</div>
-          <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">${detalle}</div>`;
+          <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">${detalle}</div>
+          ${renderCalPeriodoStats()}`;
       }
 
       function renderModal(tab) {
@@ -2481,8 +2744,8 @@
         if (tab === 'estudio') contenido = renderEstudio();
         else if (tab === 'calendario') contenido = renderCalendario();
         else contenido = renderContent(tab);
-        const subtitulo = tab === 'estudio' ? 'Solo Estudio Deco · excluye Estación 304'
-          : tab === 'calendario' ? 'Ventas por día · exportar PDF o CSV'
+        const subtitulo = tab === 'estudio' ? 'Solo Estudio Deco · excluye Estación 304 · filtro por periodo'
+          : tab === 'calendario' ? 'Ventas por día · filtros · gráficas del periodo'
           : 'Análisis histórico de ventas, ingresos y gastos';
         showModal(`<div class="modal-body">
       <div class="modal-title">📈 Estadísticas</div>
@@ -2497,7 +2760,7 @@
       ${contenido}
       <div style="padding-top:12px;margin-top:4px;"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>
     </div>`);
-        const m = document.querySelector('#modals .modal'); if (m) { m.style.width = '920px'; m.style.maxWidth = '99vw'; }
+        const m = document.querySelector('#modals .modal'); if (m) { m.style.width = '960px'; m.style.maxWidth = '99vw'; }
       }
 
       window._calNav = async (delta) => {
@@ -2505,21 +2768,100 @@
         if (calMonth < 1) { calMonth = 12; calYear--; }
         if (calMonth > 12) { calMonth = 1; calYear++; }
         calSelected = null; calVentas = null;
-        try { await loadCalendario(); renderModal('calendario'); }
-        catch (e) { toast('❌', e.message, 'var(--red)'); }
+        if (calPreset === 'mes') {
+          const p = _periodoPreset('mes', calYear, calMonth);
+          calDesde = p.desde; calHasta = p.hasta;
+        }
+        try {
+          await Promise.all([loadCalendario(), loadCalPeriodo()]);
+          renderModal('calendario');
+        } catch (e) { toast('❌', e.message, 'var(--red)'); }
       };
       window._calSelect = async (fecha) => {
         try { await selectCalDay(fecha); }
         catch (e) { toast('❌', e.message, 'var(--red)'); }
       };
+      window._calPreset = async (preset) => {
+        calPreset = preset;
+        if (preset !== 'custom') {
+          if (preset === 'mes') {
+            const hoy = new Date();
+            calYear = hoy.getFullYear();
+            calMonth = hoy.getMonth() + 1;
+          }
+          const p = _periodoPreset(preset, calYear, calMonth);
+          calDesde = p.desde; calHasta = p.hasta;
+        }
+        calSelected = null; calVentas = null; calTiendaTab = 0;
+        try {
+          await Promise.all([loadCalendario(), loadCalPeriodo()]);
+          renderModal('calendario');
+        } catch (e) { toast('❌', e.message, 'var(--red)'); }
+      };
+      window._calApply = async () => {
+        const d = document.getElementById('calDesde')?.value;
+        const h = document.getElementById('calHasta')?.value;
+        if (!d || !h) { toast('⚠️', 'Selecciona desde y hasta', 'var(--gold)'); return; }
+        if (d > h) { toast('⚠️', 'La fecha desde no puede ser mayor que hasta', 'var(--gold)'); return; }
+        calDesde = d; calHasta = h; calPreset = 'custom';
+        calYear = +d.slice(0, 4); calMonth = +d.slice(5, 7);
+        calSelected = null; calVentas = null; calTiendaTab = 0;
+        try {
+          await Promise.all([loadCalendario(), loadCalPeriodo()]);
+          renderModal('calendario');
+        } catch (e) { toast('❌', e.message, 'var(--red)'); }
+      };
+      window._calTiendaChange = async (val) => {
+        calTienda = val || '';
+        calTiendaTab = 0;
+        try {
+          await Promise.all([loadCalendario(), loadCalPeriodo()]);
+          if (calSelected) calVentas = await api(`/ventas?fecha=${calSelected}`);
+          renderModal('calendario');
+        } catch (e) { toast('❌', e.message, 'var(--red)'); }
+      };
+      window._calTiendaTab = (idx) => {
+        calTiendaTab = idx;
+        renderModal('calendario');
+      };
+
+      window._estudioPreset = async (preset) => {
+        estudioPreset = preset;
+        if (preset === 'all') {
+          estudioDesde = ''; estudioHasta = '';
+        } else if (preset === 'custom') {
+          if (!estudioDesde || !estudioHasta) {
+            const p = _periodoPreset('mes');
+            estudioDesde = p.desde; estudioHasta = p.hasta;
+          }
+        } else {
+          const p = _periodoPreset(preset);
+          estudioDesde = p.desde; estudioHasta = p.hasta;
+        }
+        try {
+          await loadEstudio();
+          renderModal('estudio');
+        } catch (e) { toast('❌', e.message, 'var(--red)'); }
+      };
+      window._estudioApply = async () => {
+        const d = document.getElementById('estDesde')?.value;
+        const h = document.getElementById('estHasta')?.value;
+        if (!d || !h) { toast('⚠️', 'Selecciona desde y hasta', 'var(--gold)'); return; }
+        if (d > h) { toast('⚠️', 'La fecha desde no puede ser mayor que hasta', 'var(--gold)'); return; }
+        estudioDesde = d; estudioHasta = h; estudioPreset = 'custom';
+        try {
+          await loadEstudio();
+          renderModal('estudio');
+        } catch (e) { toast('❌', e.message, 'var(--red)'); }
+      };
 
       window._statsTab = async (tab) => {
-        if (tab === 'estudio' && !estudioData) {
-          try { estudioData = await api('/estadisticas/estudio'); }
+        if (tab === 'estudio') {
+          try { await loadEstudio(); }
           catch (e) { toast('❌', e.message, 'var(--red)'); return; }
         }
         if (tab === 'calendario') {
-          try { await loadCalendario(); }
+          try { await Promise.all([loadCalendario(), loadCalPeriodo()]); }
           catch (e) { toast('❌', e.message, 'var(--red)'); return; }
         }
         renderModal(tab);

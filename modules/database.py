@@ -27,6 +27,11 @@ def _write_audit_log(conn, tabla, registro_id, accion, usuario_id=None, datos_an
     )
 
 def _asegurar_columna(conn, tabla, columna, definicion):
+    existe = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabla,)
+    ).fetchone()
+    if not existe:
+        return
     cursor = conn.execute(f"PRAGMA table_info({tabla})")
     columnas_existentes = [row["name"] for row in cursor.fetchall()]
     if columna not in columnas_existentes:
@@ -170,7 +175,6 @@ def init_db():
     _asegurar_columna(conn, "ventas", "cancelada", "INTEGER NOT NULL DEFAULT 0")
     _asegurar_columna(conn, "ventas", "cancelada_at", "TEXT DEFAULT NULL")
     _asegurar_columna(conn, "productos", "receta_key", "TEXT NOT NULL DEFAULT ''")
-    _asegurar_columna(conn, "inv_ingredientes", "costo_unitario", "REAL NOT NULL DEFAULT 0")
     _asegurar_columna(conn, "gastos", "anulado", "INTEGER NOT NULL DEFAULT 0")
     _asegurar_columna(conn, "gastos", "anulado_at", "TEXT DEFAULT NULL")
     _asegurar_columna(conn, "gastos", "anulado_por", "TEXT DEFAULT NULL")
@@ -188,6 +192,10 @@ def init_db():
             conn.commit()
         except Exception as e:
             logging.error(f"Silenced error: {e}")
+
+    # Después de CREATE TABLE de inventario (migrations), asegurar columnas nuevas
+    _asegurar_columna(conn, "inv_ingredientes", "costo_unitario", "REAL NOT NULL DEFAULT 0")
+    conn.commit()
     # 1. Inyectar nueva tienda 'Ehretia'
     tienda_ehretia = conn.execute("SELECT id FROM tiendas WHERE nombre='Ehretia'").fetchone()
     if not tienda_ehretia:
@@ -1423,23 +1431,46 @@ def obtener_ventas_dia(fecha=None):
     return result
 
 
-def obtener_ventas_calendario(anio, mes):
-    """Totales diarios de un mes para el calendario de estadísticas."""
+def obtener_ventas_calendario(anio, mes, tienda=None):
+    """Totales diarios de un mes para el calendario de estadísticas.
+
+    Si se pasa `tienda` (nombre), filtra por esa tienda usando venta_detalle.
+    """
     conn = get_connection()
-    rows = conn.execute("""
-        SELECT DATE(created_at) as fecha,
-               COUNT(*) as num_ventas,
-               COALESCE(SUM(total), 0) as total,
-               COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN total ELSE 0 END), 0) as efectivo,
-               COALESCE(SUM(CASE WHEN metodo_pago='Tarjeta' THEN total ELSE 0 END), 0) as tarjeta,
-               COALESCE(SUM(CASE WHEN metodo_pago='Transferencia' THEN total ELSE 0 END), 0) as transferencia
-        FROM ventas
-        WHERE (cancelada IS NULL OR cancelada=0)
-          AND strftime('%Y', created_at)=?
-          AND strftime('%m', created_at)=?
-        GROUP BY DATE(created_at)
-        ORDER BY fecha
-    """, (str(anio), f"{int(mes):02d}")).fetchall()
+    mes_str = f"{int(mes):02d}"
+    if tienda:
+        rows = conn.execute("""
+            SELECT DATE(v.created_at) as fecha,
+                   COUNT(DISTINCT v.id) as num_ventas,
+                   COALESCE(SUM(vd.subtotal), 0) as total,
+                   COALESCE(SUM(CASE WHEN v.metodo_pago='Efectivo' THEN vd.subtotal ELSE 0 END), 0) as efectivo,
+                   COALESCE(SUM(CASE WHEN v.metodo_pago='Tarjeta' THEN vd.subtotal ELSE 0 END), 0) as tarjeta,
+                   COALESCE(SUM(CASE WHEN v.metodo_pago='Transferencia' THEN vd.subtotal ELSE 0 END), 0) as transferencia
+            FROM venta_detalle vd
+            JOIN ventas v ON v.id = vd.venta_id
+            LEFT JOIN tiendas t ON t.id = vd.tienda_id
+            WHERE (v.cancelada IS NULL OR v.cancelada=0)
+              AND strftime('%Y', v.created_at)=?
+              AND strftime('%m', v.created_at)=?
+              AND COALESCE(t.nombre, 'Sin Tienda') = ?
+            GROUP BY DATE(v.created_at)
+            ORDER BY fecha
+        """, (str(anio), mes_str, tienda)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT DATE(created_at) as fecha,
+                   COUNT(*) as num_ventas,
+                   COALESCE(SUM(total), 0) as total,
+                   COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN total ELSE 0 END), 0) as efectivo,
+                   COALESCE(SUM(CASE WHEN metodo_pago='Tarjeta' THEN total ELSE 0 END), 0) as tarjeta,
+                   COALESCE(SUM(CASE WHEN metodo_pago='Transferencia' THEN total ELSE 0 END), 0) as transferencia
+            FROM ventas
+            WHERE (cancelada IS NULL OR cancelada=0)
+              AND strftime('%Y', created_at)=?
+              AND strftime('%m', created_at)=?
+            GROUP BY DATE(created_at)
+            ORDER BY fecha
+        """, (str(anio), mes_str)).fetchall()
     conn.close()
     return [
         {
@@ -1452,6 +1483,181 @@ def obtener_ventas_calendario(anio, mes):
         }
         for r in rows
     ]
+
+
+def obtener_estadisticas_periodo(desde, hasta, tienda=None):
+    """Estadísticas de ventas para un periodo arbitrario.
+
+    Incluye resumen, serie diaria, ranking por día de semana, ventas por tienda,
+    detalle de productos por tienda y métodos de pago. Opcionalmente filtra
+    por nombre de tienda.
+    """
+    if not desde or not hasta:
+        raise ValueError("desde y hasta son requeridos")
+
+    conn = get_connection()
+    tienda_clause = ""
+    params = [desde, hasta]
+    if tienda:
+        tienda_clause = " AND COALESCE(t.nombre, 'Sin Tienda') = ? "
+        params.append(tienda)
+
+    base_from = f"""
+        FROM venta_detalle vd
+        JOIN ventas v ON v.id = vd.venta_id
+        LEFT JOIN tiendas t ON t.id = vd.tienda_id
+        WHERE (v.cancelada IS NULL OR v.cancelada = 0)
+          AND DATE(v.created_at) BETWEEN ? AND ?
+          {tienda_clause}
+    """
+
+    resumen_row = conn.execute(f"""
+        SELECT COALESCE(SUM(vd.subtotal), 0) as total,
+               COUNT(DISTINCT v.id)          as num_ventas,
+               COALESCE(SUM(vd.cantidad), 0) as unidades
+        {base_from}
+    """, params).fetchone()
+    total_ventas = round(resumen_row['total'], 2)
+    num_ventas = int(resumen_row['num_ventas'])
+    unidades = int(resumen_row['unidades'])
+    ticket_promedio = round(total_ventas / num_ventas, 2) if num_ventas else 0.0
+
+    diario_rows = conn.execute(f"""
+        SELECT DATE(v.created_at) as fecha,
+               COALESCE(SUM(vd.subtotal), 0) as total,
+               COUNT(DISTINCT v.id) as num_ventas
+        {base_from}
+        GROUP BY DATE(v.created_at)
+        ORDER BY fecha
+    """, params).fetchall()
+    diario = [
+        {
+            'fecha': r['fecha'],
+            'label': r['fecha'][5:],
+            'total': round(r['total'], 2),
+            'num_ventas': int(r['num_ventas']),
+        }
+        for r in diario_rows
+    ]
+
+    # Ranking días de la semana
+    dow_rows = conn.execute(f"""
+        SELECT strftime('%w', v.created_at) as dow,
+               COALESCE(SUM(vd.subtotal), 0) as total,
+               COUNT(DISTINCT v.id) as num_ventas
+        {base_from}
+        GROUP BY dow
+    """, params).fetchall()
+    dow_map = {r['dow']: r for r in dow_rows}
+    ranking_dias_semana = []
+    for nombre in _DOW_ORDEN:
+        dow_key = next((k for k, v in _DOW_ES.items() if v == nombre), None)
+        row = dow_map.get(dow_key)
+        ranking_dias_semana.append({
+            'dia': nombre,
+            'label': nombre[:3],
+            'total': round(row['total'], 2) if row else 0.0,
+            'num_ventas': int(row['num_ventas']) if row else 0,
+        })
+
+    # Top días concretos
+    top_dias = sorted(diario, key=lambda d: d['total'], reverse=True)[:10]
+
+    # Ventas por tienda (sin filtro de tienda para el breakdown; si hay filtro, solo esa)
+    tiendas_rows = conn.execute(f"""
+        SELECT COALESCE(t.nombre, 'Sin Tienda') as tienda,
+               COALESCE(SUM(vd.cantidad), 0) as cantidad,
+               COALESCE(SUM(vd.subtotal), 0) as total
+        {base_from}
+        GROUP BY COALESCE(t.nombre, 'Sin Tienda')
+        ORDER BY total DESC
+    """, params).fetchall()
+    ventas_por_tienda = [
+        {
+            'tienda': r['tienda'],
+            'cantidad': int(r['cantidad']),
+            'total': round(r['total'], 2),
+        }
+        for r in tiendas_rows
+    ]
+
+    # Detalle productos por tienda
+    detalle_rows = conn.execute(f"""
+        SELECT COALESCE(t.nombre, 'Sin Tienda') as tienda,
+               vd.nombre_producto as producto,
+               COALESCE(SUM(vd.cantidad), 0) as cantidad,
+               COALESCE(SUM(vd.subtotal), 0) as total
+        {base_from}
+        GROUP BY COALESCE(t.nombre, 'Sin Tienda'), vd.nombre_producto
+        ORDER BY tienda, total DESC
+    """, params).fetchall()
+    detalle_por_tienda = {}
+    for row in detalle_rows:
+        detalle_por_tienda.setdefault(row['tienda'], []).append({
+            'producto': row['producto'],
+            'cantidad': int(row['cantidad']),
+            'total': round(row['total'], 2),
+        })
+
+    # Métodos de pago (sobre ventas del periodo; si hay filtro tienda, prorratea por subtotal)
+    if tienda:
+        pago_rows = conn.execute(f"""
+            SELECT v.metodo_pago as metodo,
+                   COALESCE(SUM(vd.subtotal), 0) as total
+            {base_from}
+            GROUP BY v.metodo_pago
+        """, params).fetchall()
+    else:
+        pago_rows = conn.execute("""
+            SELECT metodo_pago as metodo,
+                   COALESCE(SUM(total), 0) as total
+            FROM ventas
+            WHERE (cancelada IS NULL OR cancelada=0)
+              AND DATE(created_at) BETWEEN ? AND ?
+            GROUP BY metodo_pago
+        """, [desde, hasta]).fetchall()
+    metodos_pago = [
+        {'metodo': r['metodo'] or 'Otro', 'total': round(r['total'], 2)}
+        for r in pago_rows if r['total']
+    ]
+
+    # Lista de tiendas disponibles en el periodo (sin filtro) para el selector
+    if tienda:
+        all_tiendas_rows = conn.execute("""
+            SELECT DISTINCT COALESCE(t.nombre, 'Sin Tienda') as tienda
+            FROM venta_detalle vd
+            JOIN ventas v ON v.id = vd.venta_id
+            LEFT JOIN tiendas t ON t.id = vd.tienda_id
+            WHERE (v.cancelada IS NULL OR v.cancelada = 0)
+              AND DATE(v.created_at) BETWEEN ? AND ?
+            ORDER BY tienda
+        """, [desde, hasta]).fetchall()
+    else:
+        all_tiendas_rows = tiendas_rows
+    tiendas = [r['tienda'] for r in all_tiendas_rows]
+
+    mejor_dia = top_dias[0] if top_dias else None
+
+    conn.close()
+    return {
+        'desde': desde,
+        'hasta': hasta,
+        'tienda': tienda,
+        'resumen': {
+            'total': total_ventas,
+            'num_ventas': num_ventas,
+            'unidades': unidades,
+            'ticket_promedio': ticket_promedio,
+            'mejor_dia': mejor_dia,
+        },
+        'diario': diario,
+        'ranking_dias_semana': ranking_dias_semana,
+        'top_dias': top_dias,
+        'ventas_por_tienda': ventas_por_tienda,
+        'detalle_por_tienda': detalle_por_tienda,
+        'metodos_pago': metodos_pago,
+        'tiendas': tiendas,
+    }
 
 def obtener_ventas_turno(fecha=None):
     """Obtiene las ventas del turno actual en 2 queries (elimina N+1, F-7)."""
