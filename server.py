@@ -19,7 +19,8 @@ from modules.database import (
     obtener_ordenes_mesa, renombrar_orden, cancelar_orden_mesa,
     obtener_todos_los_productos, crear_producto, actualizar_producto, eliminar_producto,
     actualizar_item_orden, registrar_ingreso, set_fondo_apertura, get_fondo_apertura,
-    obtener_ventas_dia, obtener_ventas_turno, obtener_ventas_calendario, corregir_venta, anular_venta,
+    obtener_ventas_dia, obtener_ventas_turno, obtener_ventas_calendario, obtener_estadisticas_periodo,
+    corregir_venta, anular_venta,
     obtener_bundle_components, agregar_bundle_component, eliminar_bundle_component,
     obtener_resumen_semana, registrar_pago_tienda, obtener_pagos_semana,
     obtener_estadisticas, obtener_estadisticas_estudio,
@@ -684,6 +685,15 @@ async def api_estadisticas(): return obtener_estadisticas()
 async def api_estadisticas_estudio(desde: str = None, hasta: str = None):
     return obtener_estadisticas_estudio(desde, hasta)
 
+@app.get("/api/estadisticas/periodo")
+async def api_estadisticas_periodo(desde: str = None, hasta: str = None, tienda: str = None):
+    if not desde or not hasta:
+        raise HTTPException(400, "Parámetros desde y hasta son requeridos")
+    try:
+        return obtener_estadisticas_periodo(desde, hasta, tienda or None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
 @app.get("/api/balance")
 async def api_balance(): return obtener_balance_actual()
 
@@ -766,10 +776,10 @@ async def api_ventas_fecha(fecha: str = None):
     return obtener_ventas_dia(fecha)
 
 @app.get("/api/ventas/calendario")
-async def api_ventas_calendario(anio: int = None, mes: int = None):
+async def api_ventas_calendario(anio: int = None, mes: int = None, tienda: str = None):
     from datetime import date as _date
     hoy = _date.today()
-    return obtener_ventas_calendario(anio or hoy.year, mes or hoy.month)
+    return obtener_ventas_calendario(anio or hoy.year, mes or hoy.month, tienda or None)
 
 @app.get("/api/report/ventas-dia.pdf")
 async def api_ventas_dia_pdf(fecha: str = None):
