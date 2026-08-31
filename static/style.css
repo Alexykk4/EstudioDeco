@@ -1832,6 +1832,24 @@
       user-select: none;
     }
 
+    .print-ticket-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .print-ticket-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #455A64;
+      flex: 1;
+      cursor: pointer;
+      user-select: none;
+    }
+
     .propina-controls {
       display: flex;
       gap: 6px;
