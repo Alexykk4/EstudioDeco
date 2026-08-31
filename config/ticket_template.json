@@ -1,0 +1,78 @@
+{
+  "fallback_name": "ESTUDIO DECO",
+  "slogan": "Crea y decora en Estudio Deco",
+  "separator_style": "dot_star",
+  "show_logo": true,
+  "show_slogan": true,
+  "show_info": true,
+  "show_items": true,
+  "show_total": true,
+  "show_hearts": true,
+  "hearts_line": " <3    <3    <3    <3    <3 ",
+  "show_payment": true,
+  "show_footer": true,
+  "show_qr": true,
+  "instagram_handle": "@estudiodecomx",
+  "instagram_url": "https://instagram.com/estudiodecomx",
+  "footer_messages": [
+    "Hecho con amor en Estudio Deco",
+    "Tu creatividad nos inspira",
+    "Gracias por crear con nosotras",
+    "Donde la creatividad cobra vida",
+    "Nos vemos en la proxima creacion",
+    "Cafe & journal <3",
+    "Otro día, otra creación <3",
+    "Tu espacio creativo favorito <3"
+  ],
+  "layers": [
+    {
+      "id": "logo",
+      "type": "logo",
+      "name": "🖼️ Logo / Nombre",
+      "enabled": true
+    },
+    {
+      "id": "footer",
+      "type": "footer",
+      "name": "📜 Mensaje del Pie",
+      "enabled": true
+    },
+    {
+      "id": "sep_1",
+      "type": "separator",
+      "name": "➖ Separador",
+      "enabled": true,
+      "style": "dot_star"
+    },
+    {
+      "id": "info",
+      "type": "info",
+      "name": "📝 Datos de Venta",
+      "enabled": true
+    },
+    {
+      "id": "items",
+      "type": "items",
+      "name": "🛒 Lista de Artículos",
+      "enabled": true
+    },
+    {
+      "id": "total",
+      "type": "total",
+      "name": "💵 Monto Total",
+      "enabled": true
+    },
+    {
+      "id": "hearts",
+      "type": "hearts",
+      "name": "❤️ Línea de Corazones",
+      "enabled": true
+    },
+    {
+      "id": "payment",
+      "type": "payment",
+      "name": "💳 Forma de Pago",
+      "enabled": true
+    }
+  ]
+}

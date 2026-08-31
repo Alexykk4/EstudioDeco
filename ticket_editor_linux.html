@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Editor de Tickets · Estudio Deco</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f1ec;
+      --panel: #fff;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --accent: #5f7a61;
+      --accent-dark: #3f5a42;
+      --border: #e5e7eb;
+      --paper: #fffef9;
+      --shadow: 0 12px 40px rgba(31, 41, 55, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Outfit', sans-serif;
+      background: linear-gradient(160deg, #efe9df 0%, #f8f6f2 45%, #eef3ee 100%);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 24px;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+    }
+    header p {
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .15s, box-shadow .15s;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 6px 18px rgba(95, 122, 97, 0.25);
+    }
+    .btn-secondary {
+      background: white;
+      color: var(--ink);
+      border: 1px solid var(--border);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 24px;
+      padding: 24px;
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .panel-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+      background: #fafafa;
+    }
+    .panel-body {
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-height: calc(100vh - 140px);
+      overflow: auto;
+    }
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .field input[type="text"],
+    .field textarea,
+    .field select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      background: #fff;
+    }
+    .field textarea {
+      min-height: 100px;
+      resize: vertical;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .layer-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 10px;
+      font-size: 13px;
+      transition: all .15s;
+    }
+    .layer-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 4px 12px rgba(95, 122, 97, 0.12);
+    }
+    .layer-card.disabled {
+      opacity: 0.45;
+      background: #f9f9f9;
+    }
+    .layer-controls {
+      display: flex;
+      gap: 3px;
+    }
+    .btn-icon {
+      border: 1px solid var(--border);
+      background: #f8faf8;
+      border-radius: 6px;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .btn-icon:hover {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+    .btn-icon-danger:hover {
+      background: #ef4444;
+      color: white;
+      border-color: #ef4444;
+    }
+    .layer-title {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      user-select: none;
+      cursor: pointer;
+    }
+    .layer-title input { accent-color: var(--accent); }
+    .layer-select {
+      font-size: 11px;
+      padding: 3px 6px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #fff;
+    }
+    .btn-add-sep {
+      width: 100%;
+      border: 1px dashed var(--accent);
+      background: rgba(95, 122, 97, 0.08);
+      color: var(--accent-dark);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: background .15s;
+    }
+    .btn-add-sep:hover {
+      background: rgba(95, 122, 97, 0.18);
+    }
+    .preview-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 32px 24px 48px;
+      min-height: calc(100vh - 90px);
+    }
+    .paper {
+      width: 384px;
+      background: var(--paper);
+      border: 1px solid #ddd8cf;
+      border-radius: 4px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(255,255,255,0.6);
+      padding: 18px 14px 28px;
+      position: relative;
+    }
+    .paper::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 8px;
+      background: repeating-linear-gradient(90deg, #ece7de 0 8px, transparent 8px 16px);
+      border-radius: 4px 4px 0 0;
+    }
+    .ticket-preview {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #111;
+      margin-top: 8px;
+    }
+    .ticket-preview .logo-block {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .ticket-preview .logo-block img {
+      max-width: 180px;
+      max-height: 90px;
+      object-fit: contain;
+    }
+    .ticket-preview .total-line {
+      text-align: center;
+      font-size: 18px;
+      font-weight: 700;
+      margin: 8px 0;
+    }
+    .ticket-preview .qr-block {
+      text-align: center;
+      color: var(--muted);
+      font-size: 10px;
+      margin: 8px 0;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+      background: #f8faf8;
+      border: 1px dashed #cfd8cf;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .status {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--accent-dark);
+      color: white;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all .25s;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .status.show { opacity: 1; transform: translateY(0); }
+    .error-banner {
+      margin: 0 24px 0;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: #fff3cd;
+      border: 1px solid #f0d58c;
+      color: #7a5b00;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .error-banner.hidden { display: none; }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .panel-body { max-height: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🖨️ Editor de Tickets</h1>
+      <p>Linux · Sistema de Capas y Plantilla personalizable</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary" onclick="loadConfig()">↺ Recargar</button>
+      <button class="btn btn-secondary" onclick="resetDefaults()">Restaurar original</button>
+      <button class="btn btn-secondary" onclick="printTestTicket()">🖨️ Imprimir prueba</button>
+      <button class="btn btn-primary" onclick="saveConfig()">💾 Guardar plantilla</button>
+    </div>
+  </header>
+
+  <div id="errorBanner" class="error-banner hidden"></div>
+
+  <div class="layout">
+    <aside class="panel">
+      <div class="panel-head">🎨 Sistema de Capas y Opciones</div>
+      <div class="panel-body">
+        <div class="hint">
+          <b>Sistema de Capas:</b> Reordena las secciones con ▲/▼, activa o desactiva la casilla para mostrar/ocultar, o agrega/quita separadores.
+        </div>
+
+        <div class="field">
+          <label>Capas del Ticket (Orden de impresión)</label>
+          <div id="layersList" style="display:flex;flex-direction:column;gap:6px;"></div>
+          <button class="btn-add-sep" onclick="addSeparatorLayer()">➕ Agregar Separador</button>
+          <button class="btn btn-secondary" style="width:100%;margin-top:6px;font-size:11px;padding:6px 10px;" onclick="resetLayersDefault()">↺ Restablecer orden de capas por defecto</button>
+        </div>
+
+        <hr style="border:0;border-top:1px dashed var(--border);margin:4px 0;">
+
+        <div class="field">
+          <label>Estilo predeterminado de separadores</label>
+          <select id="separator_style" onchange="syncFromForm()">
+            <option value="dot_star">. * . * . *</option>
+            <option value="stars">* * * * *</option>
+            <option value="thin">────────</option>
+            <option value="bold">════════</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Nombre si no hay logo</label>
+          <input type="text" id="fallback_name" oninput="syncFromForm()">
+        </div>
+
+        <div class="field">
+          <label>Slogan</label>
+          <input type="text" id="slogan" oninput="syncFromForm()">
+        </div>
+
+        <div class="field">
+          <label>Línea de corazones</label>
+          <input type="text" id="hearts_line" oninput="syncFromForm()">
+        </div>
+
+        <div class="field">
+          <label>Instagram</label>
+          <input type="text" id="instagram_handle" oninput="syncFromForm()">
+        </div>
+
+        <div class="field">
+          <label>URL del QR</label>
+          <input type="text" id="instagram_url" oninput="syncFromForm()">
+        </div>
+
+        <div class="field">
+          <label>Mensajes del pie (uno por línea)</label>
+          <textarea id="footer_messages" oninput="syncFromForm()"></textarea>
+        </div>
+
+        <div class="field">
+          <label>Mensaje de pie en vista previa</label>
+          <select id="footer_preview_idx" onchange="renderPreview()"></select>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%;margin-top:10px;" onclick="printTestTicket()">🖨️ Imprimir ticket de prueba</button>
+      </div>
+    </aside>
+
+    <main class="preview-wrap">
+      <div class="paper">
+        <div class="ticket-preview" id="ticketPreview"></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <script>
+    const DEFAULT_LAYERS = [
+      { id: "logo", type: "logo", name: "🖼️ Logo / Nombre", enabled: true },
+      { id: "slogan", type: "slogan", name: "💬 Slogan", enabled: true },
+      { id: "sep_1", type: "separator", name: "➖ Separador", enabled: true, style: "dot_star" },
+      { id: "info", type: "info", name: "📝 Datos de Venta", enabled: true },
+      { id: "items", type: "items", name: "🛒 Lista de Artículos", enabled: true },
+      { id: "total", type: "total", name: "💵 Monto Total", enabled: true },
+      { id: "hearts", type: "hearts", name: "❤️ Línea de Corazones", enabled: true },
+      { id: "payment", type: "payment", name: "💳 Forma de Pago", enabled: true },
+      { id: "footer", type: "footer", name: "📜 Mensaje del Pie", enabled: true },
+      { id: "qr", type: "qr", name: "📱 Código QR e Instagram", enabled: true },
+      { id: "sep_2", type: "separator", name: "➖ Separador Final", enabled: true, style: "dot_star" },
+    ];
+
+    const DEFAULT_CONFIG = {
+      fallback_name: 'ESTUDIO DECO',
+      slogan: 'Crea y decora en Estudio Deco',
+      separator_style: 'dot_star',
+      show_logo: true,
+      show_slogan: true,
+      show_info: true,
+      show_items: true,
+      show_total: true,
+      show_hearts: true,
+      hearts_line: ' <3    <3    <3    <3    <3 ',
+      show_payment: true,
+      show_footer: true,
+      show_qr: true,
+      instagram_handle: '@estudiodecomx',
+      instagram_url: 'https://instagram.com/estudiodecomx',
+      footer_messages: [
+        'Hecho con amor en Estudio Deco',
+        'Tu creatividad nos inspira',
+        'Gracias por crear con nosotras',
+        'Donde la creatividad cobra vida',
+        'Nos vemos en la proxima creacion',
+        'Cafe & journal <3',
+        'Otro día, otra creación <3',
+        'Tu espacio creativo favorito <3',
+      ],
+      layers: DEFAULT_LAYERS,
+    };
+
+    let config = { ...DEFAULT_CONFIG };
+    let currentLayers = JSON.parse(JSON.stringify(DEFAULT_LAYERS));
+    let sample = null;
+
+    function showError(msg) {
+      const el = document.getElementById('errorBanner');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    function hideError() {
+      document.getElementById('errorBanner').classList.add('hidden');
+    }
+
+    function showStatus(msg) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(showStatus._t);
+      showStatus._t = setTimeout(() => el.classList.remove('show'), 2200);
+    }
+
+    function renderLayersUI() {
+      const el = document.getElementById('layersList');
+      if (!el) return;
+      el.innerHTML = currentLayers.map((layer, idx) => {
+        const isSep = layer.type === 'separator';
+        const name = layer.name || (isSep ? '➖ Separador' : layer.type);
+        const isFirst = idx === 0;
+        const isLast = idx === currentLayers.length - 1;
+
+        let sepSelect = '';
+        if (isSep) {
+          const curStyle = layer.style || document.getElementById('separator_style')?.value || 'dot_star';
+          sepSelect = `
+            <select class="layer-select" onchange="updateLayerStyle(${idx}, this.value)">
+              <option value="dot_star" ${curStyle==='dot_star'?'selected':''}>. * . *</option>
+              <option value="stars" ${curStyle==='stars'?'selected':''}>* * * *</option>
+              <option value="thin" ${curStyle==='thin'?'selected':''}>──────</option>
+              <option value="bold" ${curStyle==='bold'?'selected':''}>══════</option>
+            </select>
+          `;
+        }
+
+        return `
+          <div class="layer-card ${layer.enabled ? '' : 'disabled'}">
+            <div class="layer-controls">
+              <button class="btn-icon" onclick="moveLayer(${idx}, -1)" ${isFirst ? 'disabled style="opacity:0.3"' : ''}>▲</button>
+              <button class="btn-icon" onclick="moveLayer(${idx}, 1)" ${isLast ? 'disabled style="opacity:0.3"' : ''}>▼</button>
+            </div>
+            <label class="layer-title">
+              <input type="checkbox" ${layer.enabled ? 'checked' : ''} onchange="toggleLayer(${idx}, this.checked)">
+              <span>${name}</span>
+            </label>
+            ${sepSelect}
+            <button class="btn-icon btn-icon-danger" title="Eliminar capa" onclick="removeLayer(${idx})">✕</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function moveLayer(idx, dir) {
+      const target = idx + dir;
+      if (target < 0 || target >= currentLayers.length) return;
+      const tmp = currentLayers[idx];
+      currentLayers[idx] = currentLayers[target];
+      currentLayers[target] = tmp;
+      renderLayersUI();
+      syncFromForm();
+    }
+
+    function toggleLayer(idx, enabled) {
+      currentLayers[idx].enabled = enabled;
+      renderLayersUI();
+      syncFromForm();
+    }
+
+    function updateLayerStyle(idx, style) {
+      currentLayers[idx].style = style;
+      syncFromForm();
+    }
+
+    function removeLayer(idx) {
+      currentLayers.splice(idx, 1);
+      renderLayersUI();
+      syncFromForm();
+    }
+
+    function addSeparatorLayer() {
+      const id = 'sep_' + Date.now();
+      const globStyle = document.getElementById('separator_style')?.value || 'dot_star';
+      currentLayers.push({
+        id: id,
+        type: 'separator',
+        name: '➖ Separador',
+        enabled: true,
+        style: globStyle
+      });
+      renderLayersUI();
+      syncFromForm();
+    }
+
+    function resetLayersDefault() {
+      currentLayers = JSON.parse(JSON.stringify(DEFAULT_LAYERS));
+      renderLayersUI();
+      syncFromForm();
+    }
+
+    function readForm() {
+      const data = { ...config };
+      data.layers = JSON.parse(JSON.stringify(currentLayers));
+      data.separator_style = document.getElementById('separator_style').value;
+      data.fallback_name = document.getElementById('fallback_name').value.trim();
+      data.slogan = document.getElementById('slogan').value.trim();
+      data.hearts_line = document.getElementById('hearts_line').value;
+      data.instagram_handle = document.getElementById('instagram_handle').value.trim();
+      data.instagram_url = document.getElementById('instagram_url').value.trim();
+      data.footer_messages = document.getElementById('footer_messages').value
+        .split('\n').map(s => s.trim()).filter(Boolean);
+      return data;
+    }
+
+    function fillForm(cfg) {
+      config = cfg;
+      if (cfg.layers && Array.isArray(cfg.layers) && cfg.layers.length > 0) {
+        currentLayers = JSON.parse(JSON.stringify(cfg.layers));
+      } else {
+        resetLayersDefault();
+      }
+      renderLayersUI();
+
+      document.getElementById('separator_style').value = cfg.separator_style || 'dot_star';
+      document.getElementById('fallback_name').value = cfg.fallback_name || '';
+      document.getElementById('slogan').value = cfg.slogan || '';
+      document.getElementById('hearts_line').value = cfg.hearts_line || '';
+      document.getElementById('instagram_handle').value = cfg.instagram_handle || '';
+      document.getElementById('instagram_url').value = cfg.instagram_url || '';
+      document.getElementById('footer_messages').value = (cfg.footer_messages || []).join('\n');
+
+      const sel = document.getElementById('footer_preview_idx');
+      const msgs = cfg.footer_messages || [];
+      sel.innerHTML = msgs.map((m, i) => `<option value="${i}">${i + 1}. ${m.slice(0, 40)}</option>`).join('');
+    }
+
+    function syncFromForm() {
+      config = readForm();
+      renderPreview();
+    }
+
+    function separatorLine(style) {
+      const A = 48;
+      if (style === 'stars') return ('* '.repeat(A / 2)).slice(0, A);
+      if (style === 'thin') return '-'.repeat(A);
+      if (style === 'bold') return '='.repeat(A);
+      return ('. * '.repeat(A / 4)).slice(0, A);
+    }
+
+    async function renderPreview() {
+      const cfg = readForm();
+      const footerIdx = parseInt(document.getElementById('footer_preview_idx').value || '0', 10);
+      try {
+        const res = await fetch('/api/ticket-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ config: cfg, footer_index: footerIdx }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ok && data.layout) {
+            renderLayoutLines(data.layout.lines, cfg, footerIdx);
+            return;
+          }
+        }
+      } catch (e) {
+        // Fallback local local alignment
+      }
+      renderLocalFallback(cfg, footerIdx);
+    }
+
+    function renderLayoutLines(lines, cfg, footerIdx) {
+      let html = '';
+      for (const row of lines) {
+        if (row.blank) {
+          html += '<div style="height:12px"></div>';
+          continue;
+        }
+        if (row.type === 'logo') {
+          html += `<div class="logo-block" id="logoBlock"><img src="/assets/logo.png" alt="logo" id="ticketLogo"></div>`;
+          continue;
+        }
+        if (row.type === 'qr') {
+          html += `<div class="qr-block">[ CÓDIGO QR ]</div>`;
+          continue;
+        }
+        const text = row.text || '';
+        const align = row.align || 'left';
+        const style = row.style || 'normal';
+
+        if (style === 'double') {
+          html += `<div class="total-line">${escapeHtml(text.trim())}</div>`;
+        } else if (align === 'center') {
+          html += `<div style="text-align:center">${escapeHtml(text.trim())}</div>`;
+        } else {
+          html += `<div>${escapeHtml(text)}</div>`;
+        }
+      }
+
+      const box = document.getElementById('ticketPreview');
+      box.innerHTML = html;
+
+      const logoImg = document.getElementById('ticketLogo');
+      if (logoImg) {
+        logoImg.onerror = () => {
+          const block = document.getElementById('logoBlock');
+          if (block) {
+            block.innerHTML = `<div style="text-align:center;font-weight:700;font-size:16px">${escapeHtml(cfg.fallback_name || 'ESTUDIO DECO')}</div>`;
+          }
+        };
+      }
+    }
+
+    function renderLocalFallback(cfg, footerIdx) {
+      const layers = cfg.layers || DEFAULT_LAYERS;
+      const stars = ('* '.repeat(24)).slice(0, 48);
+      const footerMsg = (cfg.footer_messages || [])[footerIdx] || '';
+      let html = '';
+
+      for (const layer of layers) {
+        if (!layer.enabled) continue;
+        const ltype = layer.type;
+
+        if (ltype === 'logo') {
+          html += `<div class="logo-block" id="logoBlock"><img src="/assets/logo.png" alt="logo" id="ticketLogo"></div>`;
+        } else if (ltype === 'slogan' && cfg.slogan) {
+          html += `<div style="text-align:center;margin-bottom:8px">${escapeHtml(cfg.slogan)}</div>`;
+        } else if (ltype === 'separator') {
+          const sepStyle = layer.style || cfg.separator_style || 'dot_star';
+          html += `<div>${escapeHtml(separatorLine(sepStyle))}</div><div style="height:6px"></div>`;
+        } else if (ltype === 'info') {
+          html += `<div>  Fecha    : 2026-08-30 18:24</div>`;
+          html += `<div>  Folio    : A-0042</div>`;
+          html += `<div>  Atendió  : Diana</div>`;
+          html += `<div>  Mesa     : Mesa 3 - Ana</div><div style="height:6px"></div>`;
+        } else if (ltype === 'items') {
+          html += `<div>${escapeHtml(stars)}</div>`;
+          html += `<div>  ${'ARTÍCULO'.padEnd(24)} ${'CANT'.padStart(4)}  ${'TOTAL'.padStart(10)}</div>`;
+          html += `<div>${escapeHtml(stars)}</div>`;
+          html += `<div>  Latte vainilla             2     $130.00</div>`;
+          html += `<div>  Journal personalizado c... 1     $255.50</div><div style="height:6px"></div>`;
+        } else if (ltype === 'total') {
+          html += `<div class="total-line">$385.50</div>`;
+        } else if (ltype === 'hearts' && cfg.hearts_line) {
+          html += `<div style="text-align:center">${escapeHtml(cfg.hearts_line)}</div>`;
+        } else if (ltype === 'payment') {
+          html += `<div style="text-align:center">Forma de pago: Efectivo</div><div style="height:6px"></div>`;
+        } else if (ltype === 'footer' && footerMsg) {
+          html += `<div style="text-align:center">${escapeHtml(footerMsg)}</div><div style="height:6px"></div>`;
+        } else if (ltype === 'qr') {
+          html += `<div class="qr-block">[ CÓDIGO QR ]<br>${escapeHtml(cfg.instagram_handle || '@estudiodecomx')}</div>`;
+        }
+      }
+      document.getElementById('ticketPreview').innerHTML = html;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    async function printTestTicket() {
+      const cfg = readForm();
+      const footerIdx = parseInt(document.getElementById('footer_preview_idx').value || '0', 10);
+      showStatus('🖨️ Imprimiendo ticket de prueba...');
+      try {
+        const res = await fetch('/api/print-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ config: cfg, footer_index: footerIdx }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showStatus('✅ ' + data.message);
+        } else {
+          showError(data.error || data.message);
+          showStatus('⚠️ Error de impresión');
+        }
+      } catch (err) {
+        showError('No se pudo enviar a la impresora: ' + err.message);
+        showStatus('Error al imprimir');
+      }
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/ticket-template');
+        if (!res.ok) throw new Error('No se pudo conectar con el editor (¿corre python ticket_editor_linux.py?)');
+        const data = await res.json();
+        sample = { venta: data.sample_venta, cajero: data.sample_cajero };
+        fillForm(data.config);
+        renderPreview();
+        hideError();
+        showStatus('Plantilla cargada');
+      } catch (err) {
+        fillForm(DEFAULT_CONFIG);
+        renderPreview();
+        showError(err.message + ' — Ejecuta: python ticket_editor_linux.py');
+        showStatus('Modo sin servidor');
+      }
+    }
+
+    async function saveConfig() {
+      const body = readForm();
+      try {
+        const res = await fetch('/api/ticket-template', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('No se pudo guardar');
+        const data = await res.json();
+        fillForm(data.config);
+        renderPreview();
+        hideError();
+        showStatus('✅ Plantilla guardada');
+      } catch (err) {
+        showError(err.message + ' — Ejecuta: python ticket_editor_linux.py');
+        showStatus('Error al guardar');
+      }
+    }
+
+    async function resetDefaults() {
+      if (!confirm('¿Restaurar la plantilla original? Se perderán tus cambios.')) return;
+      try {
+        const res = await fetch('/api/ticket-template/reset', { method: 'POST' });
+        if (!res.ok) throw new Error('No se pudo restaurar');
+        const data = await res.json();
+        fillForm(data.config);
+        renderPreview();
+        hideError();
+        showStatus('Plantilla restaurada');
+      } catch (err) {
+        fillForm(DEFAULT_CONFIG);
+        renderPreview();
+        showError(err.message);
+      }
+    }
+
+    fillForm(DEFAULT_CONFIG);
+    renderPreview();
+    loadConfig();
+  </script>
+</body>
+</html>
