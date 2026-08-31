@@ -847,6 +847,19 @@ def listar_nominas(limit: int = 50, offset: int = 0):
     conn.close()
     return {"total": total, "items": [dict(r) for r in rows]}
 
+def borrar_nomina(nomina_id: int) -> dict | None:
+    """Borra un registro de nómina por ID y retorna los datos de la nómina eliminada."""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM nominas WHERE id=?", (nomina_id,)).fetchone()
+    if not row:
+        conn.close()
+        return None
+    nomina = dict(row)
+    conn.execute("DELETE FROM nominas WHERE id=?", (nomina_id,))
+    conn.commit()
+    conn.close()
+    return nomina
+
 # ── FONDO DE APERTURA ──
 def set_fondo_apertura(monto):
     import json

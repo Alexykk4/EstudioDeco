@@ -25,7 +25,7 @@ from modules.database import (
     obtener_resumen_semana, registrar_pago_tienda, obtener_pagos_semana,
     obtener_estadisticas, obtener_estadisticas_estudio,
     obtener_balance_actual, ajustar_balance, limpiar_ingresos_gastos,
-    registrar_nomina, listar_nominas,
+    registrar_nomina, listar_nominas, borrar_nomina,
     registrar_movimiento_estacion, obtener_balance_estacion, obtener_movimientos_estacion,
     listar_gastos, anular_gasto, listar_ingresos, anular_ingreso,
     listar_ingredientes, calcular_porciones_disponibles, descontar_ingredientes_bebida,
@@ -36,7 +36,7 @@ from modules.database import (
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf, generar_nomina_pdf, generar_ventas_dia_pdf, generar_ventas_dia_csv
-from modules.email_sender import enviar_corte_email, enviar_notificacion_email, enviar_nomina_email
+from modules.email_sender import enviar_corte_email, enviar_notificacion_email, enviar_nomina_email, enviar_alerta_nomina_eliminada
 from modules.sync_sheets import sync_worker
 
 init_db(); sync_worker.start()
@@ -728,6 +728,20 @@ async def api_registrar_nomina(r: dict):
     pdf_path = generar_nomina_pdf(nomina, cajero)
     enviar_nomina_email(pdf_path, nomina, cajero)
     return {'ok': True, 'nomina': nomina}
+
+@app.delete("/api/nominas/{nid}")
+async def api_borrar_nomina(nid: int, usuario_id: int = 1):
+    conn = __import__('modules.database', fromlist=['get_connection']).get_connection()
+    u = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (usuario_id,)).fetchone()
+    conn.close()
+    usuario_nombre = u['nombre'] if u else 'Administrador'
+
+    nomina = borrar_nomina(nid)
+    if not nomina:
+        raise HTTPException(status_code=404, detail="Nómina no encontrada")
+
+    enviar_alerta_nomina_eliminada(nomina, usuario_nombre)
+    return {'ok': True, 'message': 'Nómina eliminada correctamente y correo urgente enviado.', 'nomina': nomina}
 
 @app.post("/api/pagos-tienda")
 async def api_pago_tienda(r: PagoTiendaReq):

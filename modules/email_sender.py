@@ -173,3 +173,25 @@ def enviar_notificacion_email(asunto: str, cuerpo: str):
 
     hilo = threading.Thread(target=_enviar, daemon=True)
     hilo.start()
+
+
+def enviar_alerta_nomina_eliminada(nomina: dict, usuario_nombre: str):
+    """Envía un correo de ALERTA URGENTE cuando se elimina un registro de nómina."""
+    from datetime import datetime
+    monto = float(nomina.get('monto', 0.0))
+    asunto = f"🚨 URGENTE: Nómina Eliminada – {nomina.get('nombre_empleado', '?')} (${monto:,.2f})"
+    cuerpo = (
+        f"🚨 ALERTA DE SEGURIDAD / NOTIFICACIÓN URGENTE 🚨\n\n"
+        f"Se ha ELIMINADO un registro de nómina pagada en el sistema Estudio Deco POS.\n\n"
+        f"• Folio / ID Nómina: #{nomina.get('id', '?')}\n"
+        f"• Empleado:          {nomina.get('nombre_empleado', '?')}\n"
+        f"• Concepto:          {nomina.get('concepto', '?')}\n"
+        f"• Monto borrado:     ${monto:,.2f}\n"
+        f"• Método de pago:    {nomina.get('metodo_pago', '?')}\n"
+        f"• Fecha de registro: {str(nomina.get('created_at', ''))[:16]}\n"
+        f"• Eliminado por:     {usuario_nombre}\n"
+        f"• Fecha de borrado:  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        f"Notificación automática enviada por Estudio Deco POS."
+    )
+    enviar_notificacion_email(asunto, cuerpo)
+
