@@ -3215,18 +3215,22 @@
       try { const _r = await api('/nominas'); nominas = Array.isArray(_r) ? _r : (_r.items ?? []); } catch (e) { }
 
       const metIcon = m => m === 'Efectivo' ? '💵' : '💳';
-      const rows = nominas.length ? nominas.map(n => `
+      const rows = nominas.length ? nominas.map(n => {
+        const empEsc = (n.nombre_empleado || '').replace(/'/g, "\\'");
+        return `
     <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;">
       <div style="width:38px;height:38px;border-radius:50%;background:var(--sage-light);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">👤</div>
       <div style="flex:1;min-width:0;">
         <div style="font-weight:700;font-size:13px;">${n.nombre_empleado}</div>
         <div style="font-size:11px;color:var(--text-muted);">${n.concepto} · ${n.created_at?.slice(0, 16) || ''} · ${n.cajero || ''}</div>
       </div>
-      <div style="text-align:right;flex-shrink:0;">
+      <div style="text-align:right;flex-shrink:0;margin-margin-right:4px;">
         <div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:var(--sage-dark);">$${n.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
         <div style="font-size:11px;color:var(--text-muted);">${metIcon(n.metodo_pago)} ${n.metodo_pago}</div>
       </div>
-    </div>`).join('') : '<div style="padding:40px;text-align:center;color:var(--text-muted);">Sin nóminas registradas</div>';
+      <button class="btn" style="padding:6px 10px;background:#fdedec;color:#922b21;border:1px solid #f5b7b1;font-size:12px;font-weight:700;border-radius:8px;cursor:pointer;flex-shrink:0;" title="Borrar nómina" onclick="borrarNomina(${n.id}, '${empEsc}', ${n.monto})">🗑️ Borrar</button>
+    </div>`;
+      }).join('') : '<div style="padding:40px;text-align:center;color:var(--text-muted);">Sin nóminas registradas</div>';
 
       const totalMes = nominas.filter(n => n.created_at?.slice(0, 7) === new Date().toISOString().slice(0, 7)).reduce((s, n) => s + n.monto, 0);
 
@@ -3239,6 +3243,18 @@
     <button class="btn btn-sage" style="width:100%;margin-bottom:14px;" onclick="showRegistrarNominaModal()">+ Registrar Pago</button>
     <div style="max-height:500px;overflow-y:auto;">${rows}</div>
   </div>`);
+    }
+
+    async function borrarNomina(id, nombre, monto) {
+      if (!confirm(`🚨 ¿Estás seguro de ELIMINAR la nómina de "${nombre}" por $${monto.toFixed(2)}?\n\nEsta acción notificará inmediatamente mediante un CORREO URGENTE.`)) return;
+      try {
+        const uid = usuario ? usuario.id : 1;
+        await api(`/nominas/${id}?usuario_id=${uid}`, { method: 'DELETE' });
+        toast('✅', 'Nómina eliminada. Correo de alerta enviado.', 'var(--green-ok)');
+        showNominasPage();
+      } catch (e) {
+        toast('❌', e.message, 'var(--red)');
+      }
     }
 
     function showRegistrarNominaModal() {
