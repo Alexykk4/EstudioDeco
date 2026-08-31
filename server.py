@@ -81,6 +81,7 @@ class AddItemReq(BaseModel):
 class EditItemReq(BaseModel):
     nombre: str
     precio_unitario: float = Field(ge=0.0)
+    cantidad: int = Field(default=1, ge=1)
 class CerrarMesaReq(BaseModel):
     usuario_id: int
     metodo_pago: str
@@ -484,7 +485,7 @@ async def api_comanda(oid: int):
 
 @app.put("/api/orden-items/{item_id}")
 async def api_put_item(item_id: int, r: EditItemReq):
-    actualizar_item_orden(item_id, r.nombre, r.precio_unitario)
+    actualizar_item_orden(item_id, r.nombre, r.precio_unitario, r.cantidad)
     return {"ok": True}
 
 @app.delete("/api/orden-items/{item_id}")

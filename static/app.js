@@ -775,7 +775,7 @@
         const sub = (it.cantidad * it.precio_unitario).toFixed(2);
         const removeAction = selectedMesa ? `removeDbItem(${it.id})` : `removeCartItem(${idx})`;
         const pId = it.producto_id || 'null';
-        const editAction = selectedMesa ? `showEditItemModalDb(${it.id}, '${n.replace(/'/g, "\\'")}', ${it.precio_unitario}, ${it.tienda_id}, ${pId})` : `showEditItemModalCart(${idx}, '${n.replace(/'/g, "\\'")}', ${it.precio_unitario}, ${pId})`;
+        const editAction = selectedMesa ? `showEditItemModalDb(${it.id}, '${n.replace(/'/g, "\\'")}', ${it.precio_unitario}, ${it.tienda_id}, ${pId}, ${it.cantidad})` : `showEditItemModalCart(${idx}, '${n.replace(/'/g, "\\'")}', ${it.precio_unitario}, ${pId}, ${it.cantidad})`;
         return `<div class="order-item">
       <div class="oi-info"><div class="oi-name">${n}</div><div class="oi-detail">x${it.cantidad} · $${it.precio_unitario.toFixed(2)}</div></div>
       <div class="oi-price" style="display:flex; align-items:center; gap:6px;">
@@ -809,7 +809,7 @@
       document.getElementById(priceInputId).value = (orig * (1 - dsc / 100)).toFixed(2);
     }
 
-    async function showEditItemModalDb(id, nombre, precio, tienda_id, producto_id) {
+    async function showEditItemModalDb(id, nombre, precio, tienda_id, producto_id, cantidad = 1) {
       const cleanNombre = nombre.replace(" (Frío)", "").replace(" (Caliente)", "");
       const isC = nombre.includes("(Caliente)");
 
@@ -864,6 +864,7 @@
       showModal(`<div class="modal-title">✏️ Editar Artículo</div>
     <div class="field"><label>Descripción Base</label><input type="text" id="edN_base" class="input" value="${baseNombre}" readonly style="background:#f4f4f4; color:#888;"></div>
     <div class="field"><label>${labelCliente}</label><input type="text" id="edN_cliente" class="input" value="${clienteNombre}"></div>
+    <div class="field"><label>Cantidad de Artículos</label><input type="number" id="edCant" class="input" min="1" step="1" value="${cantidad}"></div>
     ${tempHtml}
     ${extrasHtml}
     <div class="field"><label>Precio Unitario</label><input type="number" id="edP" class="input" step="0.01" value="${precio}" onkeydown="if(event.key==='Enter')doEditItemDb(${id})"></div>
@@ -879,13 +880,14 @@
       const tempEl = document.getElementById('edTemp');
       const t = tempEl ? tempEl.value : "";
       const p = parseFloat(document.getElementById('edP').value);
-      if (!n || isNaN(p) || p < 0) return;
+      const cant = parseInt(document.getElementById('edCant').value) || 1;
+      if (!n || isNaN(p) || p < 0 || cant < 1) return;
       const finalName = n + t;
 
       const extEl = document.getElementById('edExtra');
 
       try {
-        await api(`/orden-items/${id}`, { method: 'PUT', body: { nombre: finalName, precio_unitario: p } });
+        await api(`/orden-items/${id}`, { method: 'PUT', body: { nombre: finalName, precio_unitario: p, cantidad: cant } });
 
         // Add extra if selected
         if (extEl && extEl.value) {
@@ -910,10 +912,11 @@
       } catch (e) { toast('❌', e.message, 'var(--red)'); }
     }
 
-    async function showEditItemModalCart(idx, nombre, precio, producto_id) {
+    async function showEditItemModalCart(idx, nombre, precio, producto_id, cantidad) {
       if (nombre === undefined) nombre = directCart[idx].nombre;
       if (precio === undefined) precio = directCart[idx].precio_unitario;
       if (producto_id === undefined) producto_id = directCart[idx].producto_id;
+      if (cantidad === undefined) cantidad = directCart[idx].cantidad || 1;
       const cleanNombre = nombre.replace(" (Frío)", "").replace(" (Caliente)", "");
       const isC = nombre.includes("(Caliente)");
       const tienda_id = directCart[idx].tienda_id;
@@ -955,6 +958,7 @@
       showModal(`<div class="modal-title">✏️ Editar Artículo</div>
     <div class="field"><label>Descripción Base</label><input type="text" id="edN_base" class="input" value="${baseNombre}" readonly style="background:#f4f4f4; color:#888;"></div>
     <div class="field"><label>${labelClienteC}</label><input type="text" id="edN_cliente" class="input" value="${clienteNombre}"></div>
+    <div class="field"><label>Cantidad de Artículos</label><input type="number" id="edCant" class="input" min="1" step="1" value="${cantidad}"></div>
     ${tempHtml}
     ${extrasHtml}
     <div class="field"><label>Precio Unitario</label><input type="number" id="edP" class="input" step="0.01" value="${precio}" onkeydown="if(event.key==='Enter')doEditItemCart(${idx})"></div>
@@ -970,13 +974,15 @@
       const tempEl = document.getElementById('edTemp');
       const t = tempEl ? tempEl.value : "";
       const p = parseFloat(document.getElementById('edP').value);
+      const cant = parseInt(document.getElementById('edCant').value) || 1;
       const extEl = document.getElementById('edExtra');
 
-      if (!n || isNaN(p) || p < 0) return;
+      if (!n || isNaN(p) || p < 0 || cant < 1) return;
       const finalName = n + t;
 
       directCart[idx].nombre = finalName;
       directCart[idx].precio_unitario = p;
+      directCart[idx].cantidad = cant;
 
       if (extEl && extEl.value) {
         const extraId = parseInt(extEl.value);

@@ -373,12 +373,18 @@ def agregar_item_orden(orden_id, producto_id, tienda_id, nombre_producto, cantid
     conn.close()
     return item_id
 
-def actualizar_item_orden(item_id, nombre_producto, precio_unitario):
+def actualizar_item_orden(item_id, nombre_producto, precio_unitario, cantidad=None):
     conn = get_connection()
-    conn.execute(
-        "UPDATE orden_items SET nombre_producto=?, precio_unitario=? WHERE id=?",
-        (nombre_producto, precio_unitario, item_id)
-    )
+    if cantidad is not None:
+        conn.execute(
+            "UPDATE orden_items SET nombre_producto=?, precio_unitario=?, cantidad=? WHERE id=?",
+            (nombre_producto, precio_unitario, int(cantidad), item_id)
+        )
+    else:
+        conn.execute(
+            "UPDATE orden_items SET nombre_producto=?, precio_unitario=? WHERE id=?",
+            (nombre_producto, precio_unitario, item_id)
+        )
     conn.commit()
     conn.close()
 
