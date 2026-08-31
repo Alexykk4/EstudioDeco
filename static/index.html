@@ -329,7 +329,7 @@
         <div class="propina-section" style="margin-bottom:10px">
           <div class="propina-row">
             <input type="checkbox" class="propina-check" id="propinaCheck" onchange="togglePropina()">
-            <label for="propinaCheck" class="propina-label">🪙 Agregar propina (opcional)</label>
+            <label for="propinaCheck" class="propina-label">🪙 Agregar propina</label>
           </div>
           <div class="propina-controls hidden" id="propinaControls">
             <button class="propina-opt active" data-pct="10" onclick="setPropinaPct(this,10)">10%</button>
@@ -339,6 +339,10 @@
             <input type="number" id="propinaCustom" class="input propina-custom hidden" placeholder="0.00" step="0.01"
               oninput="renderOrder()">
           </div>
+        </div>
+        <div class="print-ticket-row" style="margin-bottom:10px">
+          <input type="checkbox" class="propina-check" id="printTicketCheck" checked onchange="savePrintTicketPref()">
+          <label for="printTicketCheck" class="print-ticket-label">🖨️ Imprimir ticket</label>
         </div>
         <div class="pay-row">
           <button class="pay-btn active" data-m="Efectivo" onclick="selPay(this)">💵 Efectivo</button>

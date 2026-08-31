@@ -30,6 +30,24 @@
       return Math.max(0, v);
     }
 
+    function loadPrintTicketPref() {
+      const el = document.getElementById('printTicketCheck');
+      if (!el) return;
+      const saved = localStorage.getItem('estudio_print_ticket');
+      el.checked = saved !== '0';
+    }
+
+    function savePrintTicketPref() {
+      const el = document.getElementById('printTicketCheck');
+      if (!el) return;
+      localStorage.setItem('estudio_print_ticket', el.checked ? '1' : '0');
+    }
+
+    function shouldPrintTicket() {
+      const el = document.getElementById('printTicketCheck');
+      return el ? el.checked : true;
+    }
+
     async function api(p, o = {}) {
       const r = await fetch(`/api${p}`, { headers: { 'Content-Type': 'application/json' }, ...o, body: o.body ? JSON.stringify(o.body) : undefined });
       if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Error') }
@@ -131,6 +149,7 @@
     }
 
     async function init() {
+      loadPrintTicketPref();
       tiendas = await api('/tiendas');
       fillIcons();
       await refreshMesas();
@@ -1087,6 +1106,7 @@
 
       try {
         let data;
+        const imprimir_ticket = shouldPrintTicket();
         if (selectedOrden) {
           if (propinaMonto > 0) {
             const tiendaRef = baseItems[0]?.tienda_id || tiendas[0]?.id || 1;
@@ -1098,9 +1118,9 @@
               }
             });
           }
-          data = await api(`/ordenes/${selectedOrden.id}/cerrar`, { method: 'POST', body: { usuario_id: usuario.id, metodo_pago: metodoPago, monto_efectivo: ef, monto_tarjeta: tar, efectivo_recibido } });
+          data = await api(`/ordenes/${selectedOrden.id}/cerrar`, { method: 'POST', body: { usuario_id: usuario.id, metodo_pago: metodoPago, monto_efectivo: ef, monto_tarjeta: tar, efectivo_recibido, imprimir_ticket } });
         } else {
-          data = await api('/ventas', { method: 'POST', body: { usuario_id: usuario.id, metodo_pago: metodoPago, items: itemsConPropina, monto_efectivo: ef, monto_tarjeta: tar, efectivo_recibido } });
+          data = await api('/ventas', { method: 'POST', body: { usuario_id: usuario.id, metodo_pago: metodoPago, items: itemsConPropina, monto_efectivo: ef, monto_tarjeta: tar, efectivo_recibido, imprimir_ticket } });
           directCart = [];
         }
         document.getElementById('propinaCheck').checked = false;
@@ -1477,8 +1497,11 @@
     }
 
     function showReceiptModal(d) {
+      const printNote = d.imprimir_solicitado === false
+        ? 'Sin imprimir'
+        : (d.impreso ? '🖨 Impreso' : '⚠ Sin impresora');
       showModal(`<div class="modal-title">✅ Venta Registrada</div>
-    <div class="modal-sub">Folio: ${d.venta.folio} · ${d.impreso ? '🖨 Impreso' : '⚠ Sin impresora'} · Cajero: ${d.cajero}</div>
+    <div class="modal-sub">Folio: ${d.venta.folio} · ${printNote} · Cajero: ${d.cajero}</div>
     <div style="background:var(--bg);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-top:14px;">
       <div style="font-size:28px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">$${d.venta.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
       <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${d.venta.metodo_pago}</div>

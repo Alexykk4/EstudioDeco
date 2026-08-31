@@ -87,6 +87,7 @@ class CerrarMesaReq(BaseModel):
     monto_efectivo: float = Field(default=0.0, ge=0.0)
     monto_tarjeta: float = Field(default=0.0, ge=0.0)
     efectivo_recibido: float = Field(default=0.0, ge=0.0)
+    imprimir_ticket: bool = True
 
 class MesaNombreReq(BaseModel):
     nombre: str
@@ -539,7 +540,9 @@ async def api_cerrar(oid: int, r: CerrarMesaReq):
     conn.close()
 
     cajero = row["nombre"] if row else "?"
-    impreso = imprimir_ticket(venta, cajero)
+    impreso = False
+    if r.imprimir_ticket:
+        impreso = imprimir_ticket(venta, cajero)
 
     # Imprimir comanda automáticamente si hay items de barra
     if items_comanda:
@@ -554,7 +557,7 @@ async def api_cerrar(oid: int, r: CerrarMesaReq):
             label += f" - {o['nombre_cliente']}"
         imprimir_comanda(label, items_comanda)
 
-    return {"venta": venta, "impreso": impreso, "cajero": cajero}
+    return {"venta": venta, "impreso": impreso, "cajero": cajero, "imprimir_solicitado": r.imprimir_ticket}
 
 # ── Ventas directas (sin mesa) ──
 @app.post("/api/ventas")
@@ -566,7 +569,10 @@ async def api_venta_directa(r: dict):
     cajero = row["nombre"] if row else "?"
     # Descontar ingredientes del inventario para bebidas de Estación 304
     _descontar_bebidas_venta(venta.get("items", []))
-    impreso = imprimir_ticket(venta, cajero)
+    imprimir_solicitado = r.get("imprimir_ticket", True)
+    impreso = False
+    if imprimir_solicitado:
+        impreso = imprimir_ticket(venta, cajero)
     # Imprimir comanda automática para items de barra (tienda_id=1)
     # Consultamos venta_detalle (ya expandida con componentes de bundles)
     venta_id = venta["venta_id"]
@@ -578,7 +584,7 @@ async def api_venta_directa(r: dict):
     conn2.close()
     if items_barra:
         imprimir_comanda("VENTA DIRECTA", [dict(i) for i in items_barra])
-    return {"venta": venta, "impreso": impreso, "cajero": cajero}
+    return {"venta": venta, "impreso": impreso, "cajero": cajero, "imprimir_solicitado": imprimir_solicitado}
 
 # ── Gastos ──
 @app.get("/api/gastos")
