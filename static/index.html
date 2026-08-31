@@ -326,13 +326,12 @@
           <span class="order-total-amount" id="orderTotal">$0.00</span>
         </div>
         <!-- Sección propina -->
-        <div class="toggle-option-card active-red" id="propinaCard" onclick="handlePropinaCardClick(event)">
-          <div class="toggle-option-row">
+        <div class="propina-section" style="margin-bottom:10px">
+          <div class="propina-row">
             <input type="checkbox" class="propina-check" id="propinaCheck" onchange="togglePropina()">
-            <label for="propinaCheck" class="toggle-option-label">🪙 Agregar propina</label>
-            <span class="toggle-badge" id="propinaBadge">✕ NO</span>
+            <label for="propinaCheck" class="propina-label">🪙 Agregar propina</label>
           </div>
-          <div class="propina-controls hidden" id="propinaControls" onclick="event.stopPropagation()">
+          <div class="propina-controls hidden" id="propinaControls">
             <button class="propina-opt active" data-pct="10" onclick="setPropinaPct(this,10)">10%</button>
             <button class="propina-opt" data-pct="15" onclick="setPropinaPct(this,15)">15%</button>
             <button class="propina-opt" data-pct="20" onclick="setPropinaPct(this,20)">20%</button>

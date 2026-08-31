@@ -9,32 +9,10 @@
     let allProductsGlobal = null; // caché de todos los productos de todas las tiendas
     let propinaPct = 10; // porcentaje activo (0 = monto personalizado)
 
-    function updatePropinaUI() {
-      const chk = document.getElementById('propinaCheck');
-      const card = document.getElementById('propinaCard');
-      const badge = document.getElementById('propinaBadge');
-      const controls = document.getElementById('propinaControls');
-      if (!chk || !card) return;
-
-      const isChecked = chk.checked;
-      card.classList.toggle('active-blue', isChecked);
-      card.classList.toggle('active-red', !isChecked);
-      if (badge) badge.textContent = isChecked ? '✓ SÍ' : '✕ NO';
-      if (controls) controls.classList.toggle('hidden', !isChecked);
-    }
-
     function togglePropina() {
-      updatePropinaUI();
+      const on = document.getElementById('propinaCheck').checked;
+      document.getElementById('propinaControls').classList.toggle('hidden', !on);
       renderOrder();
-    }
-
-    function handlePropinaCardClick(e) {
-      if (e.target.closest('#propinaControls') || e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL') return;
-      const chk = document.getElementById('propinaCheck');
-      if (chk) {
-        chk.checked = !chk.checked;
-        togglePropina();
-      }
     }
 
     function updatePrintTicketUI() {
@@ -81,7 +59,6 @@
       const saved = localStorage.getItem('estudio_print_ticket');
       el.checked = saved !== '0';
       updatePrintTicketUI();
-      updatePropinaUI();
     }
 
     function savePrintTicketPref() {
