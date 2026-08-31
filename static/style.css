@@ -1845,17 +1845,35 @@
     }
 
     .toggle-option-card.active-blue {
-      background: linear-gradient(135deg, #1e88e5 0%, #1565c0 100%);
-      color: #ffffff !important;
-      border: 1px solid #0d47a1;
-      box-shadow: 0 4px 14px rgba(21, 101, 192, 0.35);
+      background: #ebf5fb;
+      color: #1a5276 !important;
+      border: 1px solid #a9cce3;
+      box-shadow: 0 2px 8px rgba(26, 82, 118, 0.08);
+    }
+
+    .toggle-option-card.active-blue .toggle-option-label {
+      color: #1a5276 !important;
+    }
+
+    .toggle-option-card.active-blue .toggle-badge {
+      background: #d4e6f1;
+      color: #1a5276;
     }
 
     .toggle-option-card.active-red {
-      background: linear-gradient(135deg, #e53935 0%, #c62828 100%);
-      color: #ffffff !important;
-      border: 1px solid #b71c1c;
-      box-shadow: 0 4px 14px rgba(198, 40, 40, 0.35);
+      background: #fdedec;
+      color: #922b21 !important;
+      border: 1px solid #f5b7b1;
+      box-shadow: 0 2px 8px rgba(146, 43, 33, 0.08);
+    }
+
+    .toggle-option-card.active-red .toggle-option-label {
+      color: #922b21 !important;
+    }
+
+    .toggle-option-card.active-red .toggle-badge {
+      background: #fadbd8;
+      color: #922b21;
     }
 
     .toggle-option-row {
@@ -1871,7 +1889,6 @@
       gap: 8px;
       font-size: 13px;
       font-weight: 700;
-      color: #ffffff !important;
       cursor: pointer;
       margin: 0;
       flex: 1;
