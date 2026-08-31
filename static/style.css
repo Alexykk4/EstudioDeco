@@ -1820,34 +1820,60 @@
       transform: translateY(-2px);
     }
 
-    .propina-label {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      font-weight: 700;
-      color: #388E3C;
-      flex: 1;
-      cursor: pointer;
+    .toggle-option-card {
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
       user-select: none;
+      cursor: pointer;
     }
 
-    .print-ticket-row {
+    .toggle-option-card.active-blue {
+      background: linear-gradient(135deg, #1e88e5 0%, #1565c0 100%);
+      color: #ffffff !important;
+      border: 1px solid #0d47a1;
+      box-shadow: 0 4px 14px rgba(21, 101, 192, 0.35);
+    }
+
+    .toggle-option-card.active-red {
+      background: linear-gradient(135deg, #e53935 0%, #c62828 100%);
+      color: #ffffff !important;
+      border: 1px solid #b71c1c;
+      box-shadow: 0 4px 14px rgba(198, 40, 40, 0.35);
+    }
+
+    .toggle-option-row {
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
+      width: 100%;
     }
 
-    .print-ticket-label {
+    .toggle-option-label {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      font-size: 12px;
+      gap: 8px;
+      font-size: 13px;
       font-weight: 700;
-      color: #455A64;
-      flex: 1;
+      color: #ffffff !important;
       cursor: pointer;
-      user-select: none;
+      margin: 0;
+      flex: 1;
+    }
+
+    .toggle-badge {
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+      backdrop-filter: blur(4px);
     }
 
     .propina-controls {
