@@ -1820,6 +1820,18 @@
       transform: translateY(-2px);
     }
 
+    .propina-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #388E3C;
+      flex: 1;
+      cursor: pointer;
+      user-select: none;
+    }
+
     .toggle-option-card {
       border-radius: var(--radius-sm);
       padding: 12px 14px;
