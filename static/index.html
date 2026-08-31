@@ -326,12 +326,13 @@
           <span class="order-total-amount" id="orderTotal">$0.00</span>
         </div>
         <!-- Sección propina -->
-        <div class="propina-section" style="margin-bottom:10px">
-          <div class="propina-row">
+        <div class="toggle-option-card active-red" id="propinaCard" onclick="handlePropinaCardClick(event)">
+          <div class="toggle-option-row">
             <input type="checkbox" class="propina-check" id="propinaCheck" onchange="togglePropina()">
-            <label for="propinaCheck" class="propina-label">🪙 Agregar propina</label>
+            <label for="propinaCheck" class="toggle-option-label">🪙 Agregar propina</label>
+            <span class="toggle-badge" id="propinaBadge">✕ NO</span>
           </div>
-          <div class="propina-controls hidden" id="propinaControls">
+          <div class="propina-controls hidden" id="propinaControls" onclick="event.stopPropagation()">
             <button class="propina-opt active" data-pct="10" onclick="setPropinaPct(this,10)">10%</button>
             <button class="propina-opt" data-pct="15" onclick="setPropinaPct(this,15)">15%</button>
             <button class="propina-opt" data-pct="20" onclick="setPropinaPct(this,20)">20%</button>
@@ -340,9 +341,14 @@
               oninput="renderOrder()">
           </div>
         </div>
-        <div class="print-ticket-row" style="margin-bottom:10px">
-          <input type="checkbox" class="propina-check" id="printTicketCheck" checked onchange="savePrintTicketPref()">
-          <label for="printTicketCheck" class="print-ticket-label">🖨️ Imprimir ticket</label>
+
+        <!-- Sección imprimir ticket -->
+        <div class="toggle-option-card active-blue" id="printTicketCard" onclick="handlePrintCardClick(event)">
+          <div class="toggle-option-row">
+            <input type="checkbox" class="propina-check" id="printTicketCheck" checked onchange="updatePrintTicketUI()">
+            <label for="printTicketCheck" class="toggle-option-label">🖨️ Imprimir ticket</label>
+            <span class="toggle-badge" id="printTicketBadge">✓ SÍ</span>
+          </div>
         </div>
         <div class="pay-row">
           <button class="pay-btn active" data-m="Efectivo" onclick="selPay(this)">💵 Efectivo</button>
