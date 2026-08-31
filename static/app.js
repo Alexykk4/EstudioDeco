@@ -665,18 +665,19 @@
       if (!usuario) return showNipModal(() => prepareAddItem(prod, tienda));
 
       if (prod.es_precio_abierto) {
-        showModal(`<div class="modal-title">🛍️ ${prod.nombre}</div><div class="modal-sub">Monto variable requerido</div>
+        showModal(`<div class="modal-title">🛍️ ${prod.nombre}</div><div class="modal-sub">Monto y cantidad requeridos</div>
     <div class="field"><label>Descripción / Detalle</label><input type="text" id="paD" class="input" placeholder="Opcional: Detalle de venta" value="${prod.nombre}"></div>
-    <div class="field"><label>Monto a cobrar</label><input type="number" id="paM" class="input" placeholder="0.00" step="0.01" onkeydown="if(event.key==='Enter')doAddItemAbierto(${prod.id}, ${tienda.id})"></div>
+    <div class="field"><label>Monto a cobrar por unidad</label><input type="number" id="paM" class="input" placeholder="0.00" step="0.01" onkeydown="if(event.key==='Enter')doAddItemAbierto(${prod.id}, ${tienda.id})"></div>
+    <div class="field"><label>Cantidad de artículos</label><input type="number" id="paC" class="input" value="1" min="1" step="1" onkeydown="if(event.key==='Enter')doAddItemAbierto(${prod.id}, ${tienda.id})"></div>
     <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="doAddItemAbierto(${prod.id}, ${tienda.id})">Agregar</button></div>`);
         setTimeout(() => document.getElementById('paM')?.focus(), 100);
       } else if (prod.es_bundle) {
         let comps = [];
         try { comps = await api(`/bundle-components/${prod.id}`); } catch(e) {}
         const tieneComp304 = comps.some(c => c.tienda_id === 1);
-        addItemFinal(prod, tienda, prod.nombre, prod.precio, false, tieneComp304);
+        addItemFinal(prod, tienda, prod.nombre, prod.precio, false, tieneComp304, 1);
       } else {
-        addItemFinal(prod, tienda, prod.nombre, prod.precio, false, false);
+        addItemFinal(prod, tienda, prod.nombre, prod.precio, false, false, 1);
       }
     }
 
@@ -691,12 +692,13 @@
       if (!prod) return;
       const m = parseFloat(document.getElementById('paM').value);
       const d = document.getElementById('paD').value.trim() || prod.nombre;
-      if (!m || m <= 0) return;
+      const cant = parseInt(document.getElementById('paC')?.value) || 1;
+      if (!m || m <= 0 || cant < 1) return;
       closeModal();
-      addItemFinal(prod, tienda, d, m, true);
+      addItemFinal(prod, tienda, d, m, true, false, cant);
     }
 
-    async function addItemFinal(prod, tienda, nombre_hist, precio, abierto, tieneComp304 = false) {
+    async function addItemFinal(prod, tienda, nombre_hist, precio, abierto, tieneComp304 = false, cantidad = 1) {
       const cat = (prod.categoria_producto || "").trim().toLowerCase();
       const es304 = tienda.id === 1 || tieneComp304;
       if (es304 && cat !== "extras" && !abierto && !nombre_hist.includes("(Frío)") && !nombre_hist.includes("(Caliente)")) {
@@ -709,7 +711,7 @@
           const res = await api(`/ordenes/${selectedOrden.id}/items`, {
             method: 'POST', body: {
               producto_id: prod.id, tienda_id: tienda.id, nombre: nombre_hist,
-              cantidad: 1, precio_unitario: precio, es_precio_abierto: abierto
+              cantidad: cantidad, precio_unitario: precio, es_precio_abierto: abierto
             }
           });
           // refresh order
@@ -721,9 +723,9 @@
       } else {
         // Direct sale mode
         if (abierto) {
-          directCart.push({ producto_id: prod.id, tienda_id: tienda.id, nombre: nombre_hist, cantidad: 1, precio_unitario: precio, es_precio_abierto: true, categoria_producto: prod.categoria_producto });
+          directCart.push({ producto_id: prod.id, tienda_id: tienda.id, nombre: nombre_hist, cantidad: cantidad, precio_unitario: precio, es_precio_abierto: true, categoria_producto: prod.categoria_producto });
         } else {
-          directCart.push({ producto_id: prod.id, tienda_id: tienda.id, nombre: nombre_hist, cantidad: 1, precio_unitario: precio, es_precio_abierto: false, categoria_producto: prod.categoria_producto, tieneComp304 });
+          directCart.push({ producto_id: prod.id, tienda_id: tienda.id, nombre: nombre_hist, cantidad: cantidad, precio_unitario: precio, es_precio_abierto: false, categoria_producto: prod.categoria_producto, tieneComp304 });
         }
         renderOrder();
       }
@@ -1285,23 +1287,25 @@
     }
 
     function showMackModal() {
-      showModal(`<div class="modal-title">🛍️ Venta Mack</div><div class="modal-sub">Precio abierto</div>
+      showModal(`<div class="modal-title">🛍️ Venta Mack</div><div class="modal-sub">Monto y cantidad requeridos</div>
     <div class="field"><label>Descripción</label><input type="text" id="mkD" class="input" placeholder="Ej: Bolsa azul"></div>
-    <div class="field"><label>Monto</label><input type="number" id="mkM" class="input" placeholder="0.00" step="0.01" onkeydown="if(event.key==='Enter')addMk()"></div>
+    <div class="field"><label>Monto a cobrar por unidad</label><input type="number" id="mkM" class="input" placeholder="0.00" step="0.01" onkeydown="if(event.key==='Enter')addMk()"></div>
+    <div class="field"><label>Cantidad de artículos</label><input type="number" id="mkC" class="input" value="1" min="1" step="1" onkeydown="if(event.key==='Enter')addMk()"></div>
     <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="addMk()">Agregar</button></div>`);
-      setTimeout(() => document.getElementById('mkD')?.focus(), 100);
+      setTimeout(() => document.getElementById('mkM')?.focus(), 100);
     }
     async function addMk() {
       const m = parseFloat(document.getElementById('mkM').value), d = document.getElementById('mkD').value.trim() || 'Artículo Mack';
-      if (!m || m <= 0) return;
+      const cant = parseInt(document.getElementById('mkC')?.value) || 1;
+      if (!m || m <= 0 || cant < 1) return;
       const t = tiendas.find(x => x.precio_abierto);
       if (selectedOrden && t) {
-        await api(`/ordenes/${selectedOrden.id}/items`, { method: 'POST', body: { tienda_id: t.id, nombre: d, cantidad: 1, precio_unitario: m, es_precio_abierto: true } });
+        await api(`/ordenes/${selectedOrden.id}/items`, { method: 'POST', body: { tienda_id: t.id, nombre: d, cantidad: cant, precio_unitario: m, es_precio_abierto: true } });
         const todas = await api(`/mesas/${selectedMesa.id}/ordenes`);
         currentOrden = todas.find(x => x.id === selectedOrden.id);
         selectedOrden = currentOrden;
       } else if (t) {
-        directCart.push({ producto_id: null, tienda_id: t.id, nombre: d, cantidad: 1, precio_unitario: m, es_precio_abierto: true });
+        directCart.push({ producto_id: null, tienda_id: t.id, nombre: d, cantidad: cant, precio_unitario: m, es_precio_abierto: true });
       }
       renderOrder(); closeModal();
     }
@@ -2003,25 +2007,27 @@
       const tienda = tiendas.find(t => t.id === tiendaId) || { id: tiendaId, nombre: '', precio_abierto: 0 };
       if (esAbierto) {
         closeModal();
-        showModal(`<div class="modal-title">🛍️ ${nombre}</div><div class="modal-sub">Monto variable</div>
+        showModal(`<div class="modal-title">🛍️ ${nombre}</div><div class="modal-sub">Monto y cantidad requeridos</div>
       <div class="field"><label>Descripción</label><input type="text" id="gsD" class="input" value="${nombre}"></div>
-      <div class="field"><label>Monto</label><input type="number" id="gsM" class="input" placeholder="0.00" step="0.01" onkeydown="if(event.key==='Enter')doPickGsAbierto(${prodId},${tiendaId})"></div>
+      <div class="field"><label>Monto a cobrar por unidad</label><input type="number" id="gsM" class="input" placeholder="0.00" step="0.01" onkeydown="if(event.key==='Enter')doPickGsAbierto(${prodId},${tiendaId})"></div>
+      <div class="field"><label>Cantidad de artículos</label><input type="number" id="gsC" class="input" value="1" min="1" step="1" onkeydown="if(event.key==='Enter')doPickGsAbierto(${prodId},${tiendaId})"></div>
       <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="doPickGsAbierto(${prodId},${tiendaId})">Agregar</button></div>`);
         setTimeout(() => document.getElementById('gsM')?.focus(), 80);
         return;
       }
       closeModal();
       const prod = { id: prodId, nombre, precio, es_precio_abierto: false, stock_local: 99, stock_minimo: 0, categoria_producto: '' };
-      await addItemFinal(prod, tienda, nombre, precio, false);
+      await addItemFinal(prod, tienda, nombre, precio, false, false, 1);
     }
 
     async function doPickGsAbierto(prodId, tiendaId) {
       const m = parseFloat(document.getElementById('gsM').value); const d = document.getElementById('gsD').value.trim();
-      if (!m || m <= 0) return;
+      const cant = parseInt(document.getElementById('gsC')?.value) || 1;
+      if (!m || m <= 0 || cant < 1) return;
       closeModal();
       const tienda = tiendas.find(t => t.id === tiendaId) || { id: tiendaId };
       const prod = { id: prodId, nombre: d, precio: m, es_precio_abierto: true, stock_local: 99, stock_minimo: 0, categoria_producto: '' };
-      await addItemFinal(prod, tienda, d, m, true);
+      await addItemFinal(prod, tienda, d, m, true, false, cant);
     }
 
     /* ── PRE-CORTE (vista previa sin confirmar) ── */
