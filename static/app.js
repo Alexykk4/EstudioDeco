@@ -74,7 +74,12 @@
 
     async function api(p, o = {}) {
       const r = await fetch(`/api${p}`, { headers: { 'Content-Type': 'application/json' }, ...o, body: o.body ? JSON.stringify(o.body) : undefined });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Error') }
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        const error = new Error(e.detail || 'Error');
+        error.status = r.status;
+        throw error;
+      }
       return r.json();
     }
 
@@ -1483,7 +1488,7 @@
     <div class="modal-btns" style="margin-top:0">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn" style="background:#4a5568;color:white;" onclick="printCorteDia()">🖨️ Imprimir Z</button>
-      <button class="btn btn-sage" onclick="doCorte()">✓ Confirmar Corte</button>
+      <button id="confirmarCorteBtn" class="btn btn-sage" onclick="doCorte()">✓ Confirmar Corte</button>
     </div>
   </div>`);
       const m = document.querySelector('#modals .modal');
@@ -1519,15 +1524,45 @@
       el.textContent = (dif >= 0 ? '+' : '') + ' $' + Math.abs(dif).toFixed(2);
       el.style.color = dif >= 0 ? 'var(--green-ok)' : 'var(--red)';
     }
+    let corteEnProceso = false;
     async function doCorte() {
-      const BILLS = [1000, 500, 200, 100, 50, 20], COINS = [10, 5, 2, 1, 0.5];
-      let total = 0; const desglose = {};
-      BILLS.forEach(d => { const q = parseInt(document.getElementById('b' + d)?.value) || 0; if (q) desglose['B' + d] = q; total += d * q; });
-      COINS.forEach(d => { const q = parseInt(document.getElementById('m' + d)?.value) || 0; if (q) desglose['M' + d] = q; total += d * q; });
-      const fondo = parseFloat(document.getElementById('cFondo')?.value) || 0;
-      const efectivo_real = total - fondo;
-      const d = await api('/corte', { method: 'POST', body: { usuario_id: usuario.id, efectivo_real, fondo_caja: fondo, desglose } });
-      closeModal(); const dif = d.resumen.diferencia; toast('✅', `Corte OK · Dif: ${dif >= 0 ? '+' : ''}$${dif.toFixed(2)}`);
+      if (corteEnProceso) return;
+      const btn = document.getElementById('confirmarCorteBtn');
+      let solicitudEnviada = false;
+      try {
+        const BILLS = [1000, 500, 200, 100, 50, 20], COINS = [10, 5, 2, 1, 0.5];
+        let total = 0; const desglose = {};
+        const contar = (denoms, prefijo, clave) => denoms.forEach(d => {
+          const q = Number(document.getElementById(prefijo + d)?.value || 0);
+          if (!Number.isSafeInteger(q) || q < 0) throw new Error('Las cantidades de billetes y monedas deben ser enteros de cero o más.');
+          if (q) desglose[clave + d] = q;
+          total += d * q;
+        });
+        contar(BILLS, 'b', 'B');
+        contar(COINS, 'm', 'M');
+        const fondo = Number(document.getElementById('cFondo')?.value || 0);
+        if (!Number.isFinite(fondo) || fondo < 0) throw new Error('El fondo de caja debe ser un importe válido de cero o más.');
+        if (!usuario) throw new Error('Identifícate de nuevo antes de confirmar el corte.');
+        const efectivo_real = total - fondo;
+        corteEnProceso = true;
+        if (btn) { btn.disabled = true; btn.textContent = 'Guardando corte…'; }
+        solicitudEnviada = true;
+        const d = await api('/corte', { method: 'POST', body: { usuario_id: usuario.id, efectivo_real, fondo_caja: fondo, desglose } });
+        const dif = d.resumen.diferencia;
+        closeModal();
+        toast('✅', `Corte OK · Dif: ${dif >= 0 ? '+' : ''}$${dif.toFixed(2)}`);
+      } catch (e) {
+        let mensaje = e.message;
+        if (solicitudEnviada) {
+          mensaje = e.status === 422
+            ? 'El servidor rechazó los datos del corte. Revisa el conteo y el fondo de caja; si son correctos, actualiza el sistema.'
+            : 'No se pudo confirmar el resultado. El corte podría haberse guardado: revisa los cortes registrados antes de volver a confirmar.';
+        }
+        toast('❌', mensaje, 'var(--red)');
+      } finally {
+        corteEnProceso = false;
+        if (btn) { btn.disabled = false; btn.textContent = '✓ Confirmar Corte'; }
+      }
     }
 
     function showReceiptModal(d) {
