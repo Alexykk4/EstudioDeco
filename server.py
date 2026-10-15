@@ -106,8 +106,9 @@ class GastoReq(BaseModel):
     origen: str = "Caja"
 class CorteReq(BaseModel):
     usuario_id: int
-    efectivo_real: float = Field(ge=0.0)
-    fondo_caja: float = Field(default=0.0, ge=0.0)
+    # Neto del turno (contado menos fondo): puede ser negativo por gastos de caja.
+    efectivo_real: float = Field(allow_inf_nan=False)
+    fondo_caja: float = Field(default=0.0, ge=0.0, allow_inf_nan=False)
     desglose: dict = {}
 
 class IngresoReq(BaseModel):
