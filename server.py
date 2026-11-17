@@ -8,7 +8,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from pathlib import Path
-import uvicorn, hashlib, secrets, os
+import uvicorn, hashlib, hmac, os
+
+from modules import auth as autenticacion
 
 from modules.database import (
     init_db, listar_tiendas, obtener_productos, validar_nip,
@@ -36,7 +38,7 @@ from modules.database import (
 )
 from modules.printer import imprimir_ticket, imprimir_comanda, imprimir_corte_caja
 from modules.pdf_report import generar_corte_pdf, generar_nomina_pdf, generar_ventas_dia_pdf, generar_ventas_dia_csv
-from modules.email_sender import enviar_corte_email, enviar_notificacion_email, enviar_nomina_email, enviar_alerta_nomina_eliminada
+from modules.email_sender import enviar_corte_email, enviar_notificacion_email, enviar_nomina_email, enviar_alerta_nomina_eliminada, enviar_codigo_login
 from modules.sync_sheets import sync_worker
 
 init_db(); sync_worker.start()
@@ -52,9 +54,6 @@ SYSTEM_USERS = {
     "estacion304": {"password_hash": _hash_pw(os.environ.get("ESTUDIO_PASS_304", "telefono")), "role": "estacion"},
 }
 
-# S-2: tokens de sesión en memoria (se invalidan al reiniciar el servidor)
-_active_tokens: dict[str, dict] = {}
-
 STATIC = Path(__file__).parent / "static"
 ASSETS = Path(__file__).parent / "assets"
 ASSETS.mkdir(exist_ok=True)
@@ -63,8 +62,8 @@ app.mount("/assets", StaticFiles(directory=str(ASSETS)), name="assets")
 
 @app.middleware("http")
 async def no_cache_static(request, call_next):
-    if request.url.path.startswith("/api/") and request.url.path != "/api/login":
-        if request.headers.get("X-Auth-Token") not in _active_tokens:
+    if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/login"):
+        if not autenticacion.sesion_valida(request.headers.get("X-Auth-Token")):
             return JSONResponse(status_code=401, content={"detail": "Sesión expirada. Inicia sesión de nuevo."})
     response = await call_next(request)
     if request.url.path.startswith("/static/"):
@@ -158,6 +157,11 @@ class BundleComponentReq(BaseModel):
 class LoginReq(BaseModel):
     username: str
     password: str
+    device: str | None = None
+
+class VerificarReq(BaseModel):
+    reto: str
+    codigo: str
 
 class EstacionGastoReq(BaseModel):
     concepto: str
@@ -244,18 +248,39 @@ async def auth(r: NipReq):
     return u
 
 @app.post("/api/login")
-async def login(r: LoginReq):
+def login(r: LoginReq):
+    segundos = autenticacion.bloqueado(r.username)
+    if segundos:
+        raise HTTPException(429, f"Demasiados intentos. Espera {(segundos + 59) // 60} min.")
     user = SYSTEM_USERS.get(r.username)
-    if not user or user["password_hash"] != _hash_pw(r.password):
+    if not user or not hmac.compare_digest(user["password_hash"], _hash_pw(r.password)):
+        autenticacion.registrar_fallo(r.username)
         raise HTTPException(401, "Usuario o contraseña incorrectos")
-    token = secrets.token_urlsafe(32)
-    _active_tokens[token] = {"username": r.username, "role": user["role"]}
-    return {"ok": True, "role": user["role"], "username": r.username, "token": token}
+    if autenticacion.dispositivo_confiable(r.username, r.device):
+        autenticacion.limpiar_fallos(r.username)
+        token = autenticacion.crear_sesion(r.username, user["role"])
+        return {"ok": True, "role": user["role"], "username": r.username, "token": token}
+    reto, codigo = autenticacion.crear_reto(r.username, user["role"])
+    if not enviar_codigo_login(codigo, r.username):
+        raise HTTPException(503, "No se pudo enviar el código por correo. Revisa la configuración de email.")
+    return {"ok": True, "verificar": True, "reto": reto}
+
+@app.post("/api/login/verificar")
+def verificar_login(r: VerificarReq):
+    segundos = autenticacion.bloqueo_reto(r.reto)
+    if segundos:
+        raise HTTPException(429, f"Demasiados intentos. Espera {(segundos + 59) // 60} min.")
+    usuario = autenticacion.verificar_reto(r.reto, r.codigo)
+    if not usuario:
+        raise HTTPException(401, "Código incorrecto o vencido")
+    username, role = usuario
+    token = autenticacion.crear_sesion(username, role)
+    device = autenticacion.nuevo_dispositivo(username)
+    return {"ok": True, "role": role, "username": username, "token": token, "device": device}
 
 @app.post("/api/logout")
 async def logout(x_auth_token: str | None = Header(default=None)):
-    if x_auth_token and x_auth_token in _active_tokens:
-        del _active_tokens[x_auth_token]
+    autenticacion.cerrar_sesion(x_auth_token)
     return {"ok": True}
 
 # ── Estación 304 admin ──

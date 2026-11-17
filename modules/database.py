@@ -44,6 +44,12 @@ def init_db():
         conn.executescript(f.read())
     # Migrations para bases de datos existentes
     migrations = [
+        """CREATE TABLE IF NOT EXISTS dispositivos_confiables (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            username   TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            creado     TEXT DEFAULT CURRENT_TIMESTAMP
+        )""",
         """CREATE TABLE IF NOT EXISTS ingresos (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             usuario_id   INTEGER NOT NULL,
@@ -223,6 +229,23 @@ def init_db():
     # Sembrar ingredientes de las recetas (solo si la tabla está vacía)
     _seed_ingredientes()
     _seed_recetas()
+
+# ── DISPOSITIVOS CONFIABLES ──
+def registrar_dispositivo(username, token_hash):
+    conn = get_connection()
+    try:
+        conn.execute("INSERT INTO dispositivos_confiables (username, token_hash) VALUES (?,?)", (username, token_hash))
+        conn.commit()
+    finally:
+        conn.close()
+
+def existe_dispositivo(username, token_hash) -> bool:
+    conn = get_connection()
+    try:
+        return conn.execute("SELECT 1 FROM dispositivos_confiables WHERE username=? AND token_hash=?",
+                            (username, token_hash)).fetchone() is not None
+    finally:
+        conn.close()
 
 # ── USUARIOS ──
 def hash_nip(nip): return hashlib.sha256(nip.encode()).hexdigest()
