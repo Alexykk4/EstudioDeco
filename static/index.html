@@ -52,7 +52,7 @@
     <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;">
       <span style="font-size:22px;">☕</span>
       <span style="font-family:var(--font-brand);font-variation-settings:'SOFT' 100;font-size:22px;font-weight:800;color:var(--violeta);flex:1;">Estación 304</span>
-      <button id="themeToggleE" onclick="toggleTheme()" title="Cambiar tema" style="width:34px;height:34px;border:none;border-radius:50%;background:var(--bg-warm);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:var(--transition);">🌙</button>
+      <button id="themeToggleE" onclick="toggleTheme()" title="Cambiar tema" aria-label="Cambiar tema" style="width:34px;height:34px;border:none;border-radius:50%;background:var(--bg-warm);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:var(--transition);">🌙</button>
       <button onclick="doLogout()" style="padding:8px 16px;background:var(--red-light);color:var(--red);border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:var(--transition);">Salir</button>
     </div>
     <!-- Tab nav -->
@@ -169,18 +169,18 @@
   </div>
 
   <!-- Theme toggle fixed (solo visible en app Deco) -->
-  <button id="themeToggle" onclick="toggleTheme()" title="Cambiar tema" style="position:fixed;top:12px;right:14px;z-index:9999;width:36px;height:36px;border:none;border-radius:50%;background:var(--surface);box-shadow:var(--shadow-sm);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:var(--transition);">🌙</button>
+  <button id="themeToggle" onclick="toggleTheme()" title="Cambiar tema" aria-label="Cambiar tema" style="position:fixed;top:12px;right:14px;z-index:9999;width:36px;height:36px;border:none;border-radius:50%;background:var(--surface);box-shadow:var(--shadow-sm);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:var(--transition);">🌙</button>
 
   <!-- ═══ DECO APP ═══ -->
   <div id="decoApp" style="display:none;">
 
   <!-- Mobile topbar -->
   <div class="topbar" id="topbar">
-    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    <button class="hamburger" aria-label="Abrir menú" onclick="toggleSidebar()">☰</button>
     <span class="logo-text" style="flex:1">Estudio Deco</span>
-    <div class="user-pill" id="topUserPill" onclick="showNipModal()" title="Cambiar usuario"><span class="dot"
-        id="topDot"></span><span id="topUserName">Sin usuario</span></div>
-    <button onclick="doLogout()" title="Cerrar sesión" style="margin-left:6px;padding:6px 10px;background:var(--red-light);color:var(--red);border:none;border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Salir</button>
+    <button type="button" class="user-pill" id="topUserPill" onclick="showNipModal()" title="Cambiar usuario"><span class="dot"
+        id="topDot"></span><span id="topUserName">Elegir cajero</span></button>
+    <button onclick="doLogout()" title="Cerrar sesión" aria-label="Cerrar sesión" style="margin-left:6px;padding:6px 10px;background:var(--red-light);color:var(--red);border:none;border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Salir</button>
   </div>
   <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
@@ -193,13 +193,13 @@
           <div class="logo-text">Estudio Deco</div>
           <div class="logo-sub">Punto de Venta</div>
         </div>
-        <button class="sb-toggle" onclick="toggleSidebarCollapse()" title="Menú">
+        <button class="sb-toggle" aria-label="Contraer menú" onclick="toggleSidebarCollapse()" title="Menú">
           <span class="hamburger-icon"><span></span><span></span><span></span></span>
         </button>
       </div>
       <div class="sidebar-user">
-        <div class="user-pill" id="userPill" onclick="showNipModal()" title="Cambiar usuario"><span
-            class="dot"></span><span id="userName">Sin usuario</span></div>
+        <button type="button" class="user-pill" id="userPill" onclick="showNipModal()" title="Cambiar usuario"><span
+            class="dot"></span><span id="userName">Elegir cajero</span></button>
       </div>
       <div class="nav-section-label">Caja</div>
       <button class="nav-item" onclick="showFondoModal()"><span class="nav-icon">🏦</span><span class="nav-label"> Abrir
@@ -243,7 +243,7 @@
       <!-- PRODUCTS VIEW (for a selected mesa or direct sale) -->
       <div class="products-view hidden" id="productsView">
         <div class="mesa-header-bar" id="mesaBar">
-          <button class="back-btn" onclick="backToMesas()">←</button>
+          <button class="back-btn" aria-label="Volver a mesas" onclick="backToMesas()">←</button>
           <span class="mesa-badge" id="mesaBadge" onclick="renameMesa()" title="Editar nombre del cliente">Mesa 1</span>
           <div class="spacer"></div>
         </div>
@@ -251,8 +251,11 @@
 
         <!-- Búsqueda y Categorías -->
         <div style="padding:0 18px 10px; display:flex; gap:10px; align-items:center;">
-          <input type="text" id="searchInput" class="input" style="flex:1" placeholder="Buscar artículo..."
-            oninput="filterProducts()">
+          <div class="search-wrap">
+            <input type="text" id="searchInput" class="input" placeholder="Buscar artículo (tecla /)"
+              oninput="filterProducts()" onkeydown="if(event.key==='Escape'){event.preventDefault();limpiarBusqueda()}">
+            <button type="button" class="search-clear" id="searchClear" aria-label="Limpiar búsqueda" onclick="limpiarBusqueda()" hidden>×</button>
+          </div>
           <div id="catFilters" style="display:none; gap:6px;">
             <button class="pay-btn active" id="btnCatAll" onclick="setCategoryFilter('')"
               style="padding:6px 12px">Todos</button>
@@ -314,7 +317,7 @@
         <div class="order-mesa-info" id="orderMesaInfo">Selecciona una mesa</div>
       </div>
       <div class="order-items" id="orderItems">
-        <div class="order-empty"><span class="order-empty-icon">📋</span><span>Sin artículos</span></div>
+        <div class="order-empty"><span class="order-empty-icon">📋</span><span>Elige una mesa para ver su cuenta</span></div>
       </div>
       <div class="order-footer">
         <!-- Subtotal + Propina -->
@@ -359,21 +362,21 @@
           <button class="pay-btn" data-m="Mixto" onclick="selPay(this)">⚖️ Mixto</button>
         </div>
         <div id="mixtoFields" class="hidden" style="display:flex; gap:10px; margin-bottom:12px;">
-          <div style="flex:1;">
-            <label style="font-size:10px;color:var(--text-secondary);font-weight:700;">💵
+          <div class="mixto-field">
+            <label>💵
               Efectivo</label>
-            <input type="number" id="mixEfectivo" class="input" style="padding:6px; font-size:13px;" placeholder="0.00"
+            <input type="number" id="mixEfectivo" class="input" placeholder="0.00"
               oninput="calcMixto('efectivo')">
           </div>
-          <div style="flex:1;">
-            <label style="font-size:10px;color:var(--text-secondary);font-weight:700;">💳
+          <div class="mixto-field">
+            <label>💳
               Tarjeta</label>
-            <input type="number" id="mixTarjeta" class="input" style="padding:6px; font-size:13px;" placeholder="0.00"
+            <input type="number" id="mixTarjeta" class="input" placeholder="0.00"
               oninput="calcMixto('tarjeta')">
           </div>
         </div>
         <div class="order-actions">
-          <button class="btn-clear" onclick="limpiarOrden()">🗑</button>
+          <button class="btn-clear" id="btnClear" aria-label="Vaciar venta" title="Vaciar venta" style="display:none" onclick="confirmarQuitar(this, limpiarOrden, '¿Vaciar?')">🗑</button>
           <button class="btn-cobrar" id="btnCobrar" onclick="cobrar()" disabled>Cobrar</button>
         </div>
       </div>
@@ -381,7 +384,7 @@
     <aside class="order-panel hidden" id="semanalSidebar"
       style="padding:18px; gap:14px; background:var(--bg); border:none;"></aside>
     <!-- Cart FAB (tablet/mobile) -->
-    <button class="cart-fab" id="cartFab" onclick="toggleCart()">🛒<span class="cart-fab-badge" id="cartFabBadge"
+    <button class="cart-fab" id="cartFab" aria-label="Ver pedido" onclick="toggleCart()">🛒<span class="cart-fab-badge" id="cartFabBadge"
         style="display:none">0</span></button>
   </div>
 
