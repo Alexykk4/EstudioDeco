@@ -3755,27 +3755,137 @@
     let _loginReto = null;
     let _verificando = false;
     let _otpIntervalo = null, _otpReenvioHasta = 0;
+    let _loginCiclo = 0, _loginPeticion = null;
+    const _loginEsperas = new Map();
+    const _otpMovimientoReducido = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const campoOtp = document.getElementById('loginCode');
 
-    function renderOtp() {
+    function cancelarAnimacionesLogin(elemento = document.getElementById('loginScreen')) {
+      elemento.getAnimations({subtree: true}).forEach(animacion => animacion.cancel());
+    }
+
+    function cancelarLogin() {
+      ++_loginCiclo;
+      _loginPeticion?.abort();
+      _loginPeticion = null;
+      _loginEsperas.forEach((resolver, temporizador) => { clearTimeout(temporizador); resolver(); });
+      _loginEsperas.clear();
+      cancelarAnimacionesLogin();
+      document.getElementById('loginTarjeta').style.height = '';
+      return _loginCiclo;
+    }
+
+    function esperarLogin(duracion) {
+      return new Promise(resolver => {
+        const temporizador = setTimeout(() => { _loginEsperas.delete(temporizador); resolver(); }, duracion);
+        _loginEsperas.set(temporizador, resolver);
+      });
+    }
+
+    async function animarLogin(elemento, fotogramas, opciones) {
+      if (_otpMovimientoReducido.matches) return;
+      const animacion = elemento.animate(fotogramas, opciones);
+      await animacion.finished.catch(() => {});
+      if (!opciones.fill) animacion.cancel();
+    }
+
+    function ponerTextosOtp(estado = '') {
+      const titulo = document.getElementById('loginOtpTitulo');
+      const sub = document.getElementById('loginOtpSub');
+      titulo.classList.toggle('verificado', estado === 'ok');
+      if (estado === 'comprobando') {
+        titulo.textContent = 'Comprobando tu código';
+        sub.textContent = 'Un momento, lo estamos confirmando.';
+      } else if (estado === 'ok') {
+        titulo.textContent = 'Verificado';
+        sub.textContent = 'Preparando tu sesión…';
+      } else {
+        titulo.textContent = 'Revisa tu correo';
+        const nombre = document.createElement('b');
+        nombre.id = 'loginUsuarioOtp';
+        nombre.textContent = document.getElementById('loginUser').value.trim();
+        sub.replaceChildren('Escribe el código de 4 dígitos que enviamos al correo del negocio para ', nombre, '.');
+      }
+    }
+
+    async function cambiarTextosOtp(estado, ciclo) {
+      const textos = document.querySelector('.login-otp-textos');
+      await animarLogin(textos, [{opacity: 1}, {opacity: 0}], {duration: 100, easing: 'ease-out'});
+      if (ciclo !== _loginCiclo) return;
+      ponerTextosOtp(estado);
+      await animarLogin(textos, [{opacity: 0}, {opacity: 1}], {duration: 100, easing: 'ease-in'});
+    }
+
+    function limpiarDeck(limpiarCodigo = true) {
+      const otp = document.getElementById('otp');
+      cancelarAnimacionesLogin(otp);
+      cancelarAnimacionesLogin(document.querySelector('.login-otp-textos'));
+      cancelarAnimacionesLogin(document.getElementById('loginVerificado'));
+      otp.className = 'otp';
+      otp.removeAttribute('aria-busy');
+      document.getElementById('loginVerificado').hidden = true;
+      if (limpiarCodigo) campoOtp.value = '';
+      campoOtp.removeAttribute('aria-invalid');
+      ponerTextosOtp();
+      renderOtp();
+    }
+
+    function limpiarReenvio() {
+      clearInterval(_otpIntervalo);
+      _otpIntervalo = null;
+      _otpReenvioHasta = 0;
+    }
+
+    async function cambiarPasoLogin(segundo, ciclo) {
+      const tarjeta = document.getElementById('loginTarjeta');
+      const saliente = document.getElementById(segundo ? 'loginPaso1' : 'loginPaso2');
+      const entrante = document.getElementById(segundo ? 'loginPaso2' : 'loginPaso1');
+      if (!entrante.hidden) return;
+      saliente.inert = true;
+      entrante.inert = true;
+      document.getElementById('loginVolver').disabled = true;
+      const altoInicial = tarjeta.getBoundingClientRect().height;
+      await animarLogin(saliente, [{opacity: 1, transform: 'none'}, {opacity: 0, transform: `translateY(${segundo ? 8 : 28}px)`}], {duration: 200, easing: 'ease-out'});
+      if (ciclo !== _loginCiclo) return;
+      saliente.hidden = true;
+      entrante.hidden = false;
+      const altoFinal = tarjeta.getBoundingClientRect().height;
+      tarjeta.style.height = `${altoFinal}px`;
+      await Promise.all([
+        animarLogin(tarjeta, [{height: `${altoInicial}px`}, {height: `${altoFinal}px`}], {duration: 350, easing: 'ease'}),
+        animarLogin(entrante, [{opacity: 0, transform: `translateY(${segundo ? 28 : 8}px)`}, {opacity: 1, transform: 'none'}], {duration: 420, easing: 'cubic-bezier(.175,.885,.32,1.275)'})
+      ]);
+      if (ciclo !== _loginCiclo) return;
+      tarjeta.style.height = '';
+      entrante.inert = false;
+      document.getElementById('loginVolver').disabled = false;
+    }
+
+    function renderOtp(destellar = false) {
       const campo = document.getElementById('loginCode');
       const activa = document.activeElement === campo && !campo.readOnly ? Math.min(campo.selectionStart ?? campo.value.length, 3) : -1;
       document.querySelectorAll('#otp .otp-slot').forEach((casilla, i) => {
         const digito = campo.value[i] || '';
-        if (casilla.dataset.digito !== digito) {
-          const contenido = document.createElement('span');
+        const cambio = casilla.dataset.digito !== digito;
+        if (cambio) {
+          const contenido = casilla.querySelector('.otp-digito');
           contenido.textContent = digito;
-          if (!digito) contenido.className = 'otp-caret';
-          casilla.replaceChildren(contenido);
+          contenido.className = digito ? 'otp-digito' : 'otp-digito otp-caret';
           casilla.dataset.digito = digito;
+        }
+        if (destellar && digito && (cambio || i === campo.selectionStart - 1) && !_otpMovimientoReducido.matches) {
+          const luz = casilla.querySelector('.slot__spark rect');
+          cancelarAnimacionesLogin(luz);
+          animarLogin(luz, [{strokeDashoffset: 1, opacity: 1}, {strokeDashoffset: 0, opacity: 1, offset: .82}, {strokeDashoffset: 0, opacity: 0}], {duration: 520, easing: 'ease-out'});
         }
         casilla.classList.toggle('llena', !!digito);
         casilla.classList.toggle('activa', i === activa);
       });
     }
 
-    const campoOtp = document.getElementById('loginCode');
-    ['focus', 'blur', 'select', 'keyup', 'click'].forEach(evento => campoOtp.addEventListener(evento, renderOtp));
+    ['focus', 'blur', 'select', 'keyup', 'click'].forEach(evento => campoOtp.addEventListener(evento, () => renderOtp()));
     campoOtp.addEventListener('input', () => {
+      if (campoOtp.readOnly || _verificando) return;
       const posicion = campoOtp.value.slice(0, campoOtp.selectionStart).replace(/\D/g, '').length;
       const limpio = campoOtp.value.replace(/\D/g, '').slice(0, 4);
       if (campoOtp.value !== limpio) {
@@ -3783,7 +3893,8 @@
         campoOtp.setSelectionRange(posicion, posicion);
       }
       campoOtp.removeAttribute('aria-invalid');
-      renderOtp();
+      document.getElementById('otp').classList.remove('error');
+      renderOtp(true);
       if (_loginReto && campoOtp.value.length === 4) doLogin();
     });
     campoOtp.addEventListener('paste', evento => {
@@ -3794,52 +3905,134 @@
       campoOtp.dispatchEvent(new Event('input', {bubbles: true}));
     });
 
-    async function otpError() {
+    async function prepararDeck(ciclo) {
       const otp = document.getElementById('otp');
+      otp.classList.remove('entra');
+      otp.setAttribute('aria-busy', 'true');
+      if (!_otpMovimientoReducido.matches) {
+        const casillas = [...otp.querySelectorAll('.otp-slot')];
+        // Compensar el pivote bajo para que las cartas se encimen.
+        const angulos = [-14, -5, 5, 14], desplazamientos = [64, 22, -22, -64];
+        const rebote = getComputedStyle(otp).getPropertyValue('--ease-rebote').trim();
+        await Promise.all(casillas.map((casilla, i) => animarLogin(casilla,
+          [{transform: 'none'}, {transform: `translate(${desplazamientos[i]}px, -6px) rotate(${angulos[i]}deg)`}],
+          {duration: 560, delay: i * 45, easing: rebote, fill: 'forwards'})));
+        if (ciclo !== _loginCiclo) return;
+        await esperarLogin(250);
+        if (ciclo !== _loginCiclo) return;
+        await Promise.all(casillas.flatMap((casilla, i) => {
+          const centro = otp.clientWidth / 2 - casilla.offsetLeft - casilla.offsetWidth / 2;
+          return [
+            animarLogin(casilla, [
+              {transform: getComputedStyle(casilla).transform, opacity: 1},
+              {transform: `translate(${centro}px, 0) rotate(${(i - 1.5) * 3}deg)`, opacity: 1, offset: .8},
+              {transform: `translate(${centro}px, 0) rotate(${i === 3 ? 0 : (i - 1.5) * 3}deg)`, opacity: i === 3 ? 1 : 0}
+            ], {duration: 420, delay: (3 - i) * 40, easing: 'ease-in-out', fill: 'forwards'}),
+            animarLogin(casilla.querySelector('.otp-digito'), [{opacity: 1}, {opacity: 0}], {duration: 180, fill: 'forwards'})
+          ];
+        }));
+        if (ciclo !== _loginCiclo) return;
+        otp.classList.add('apilado');
+      }
+      otp.classList.add('comprobando');
+      if (!_otpMovimientoReducido.matches) {
+        otp.querySelector('.seal__seg').animate([{strokeDashoffset: 1}, {strokeDashoffset: 0}], {duration: 1100, iterations: Infinity, easing: 'linear'});
+      }
+      await cambiarTextosOtp('comprobando', ciclo);
+    }
+
+    async function otpError(ciclo, mensaje) {
+      const otp = document.getElementById('otp');
+      cancelarAnimacionesLogin(otp.querySelector('.seal'));
+      otp.classList.remove('comprobando', 'apilado');
+      if (!_otpMovimientoReducido.matches) {
+        await Promise.all([...otp.querySelectorAll('.otp-slot')].map(casilla => animarLogin(casilla,
+          [{transform: getComputedStyle(casilla).transform, opacity: getComputedStyle(casilla).opacity}, {transform: 'none', opacity: 1}],
+          {duration: 380, easing: 'cubic-bezier(.175,.885,.32,1.275)', fill: 'forwards'})));
+        if (ciclo !== _loginCiclo) return;
+      }
+      limpiarDeck(false);
       campoOtp.setAttribute('aria-invalid', 'true');
+      const error = document.getElementById('loginError');
+      error.textContent = mensaje;
+      error.style.display = 'block';
       otp.classList.add('error');
       await Promise.all(otp.getAnimations().map(animacion => animacion.finished.catch(() => {})));
-      otp.classList.remove('error');
+      if (ciclo !== _loginCiclo) return;
       campoOtp.value = '';
       campoOtp.focus();
       renderOtp();
     }
 
-    async function otpOk() {
-      document.getElementById('otp').classList.add('ok');
-      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        await new Promise(resolver => setTimeout(resolver, 450));
+    async function otpOk(ciclo) {
+      const otp = document.getElementById('otp');
+      cancelarAnimacionesLogin(otp.querySelector('.seal'));
+      otp.classList.remove('comprobando');
+      otp.removeAttribute('aria-busy');
+      otp.classList.add('ok');
+      const etiqueta = document.getElementById('loginVerificado');
+      etiqueta.hidden = false;
+      const textos = cambiarTextosOtp('ok', ciclo);
+      const sello = animarLogin(etiqueta, [{opacity: 0, transform: 'translateY(6px)'}, {opacity: 1, transform: 'none'}], {duration: 300, easing: 'ease-out'});
+      if (!_otpMovimientoReducido.matches) {
+        const palomita = otp.querySelector('.seal__palomita path');
+        await Promise.all([
+          animarLogin(otp.querySelector('.seal__destello'), [{transform: 'scale(.6)', opacity: 1}, {transform: 'scale(1.25)', opacity: 0}], {duration: 450, easing: 'ease-out'}),
+          animarLogin(palomita, [{strokeDashoffset: 1}, {strokeDashoffset: 0}], {duration: 300, delay: 450, fill: 'backwards', easing: 'ease-out'}),
+          textos, sello, esperarLogin(900)
+        ]);
+      } else {
+        await Promise.all([textos, sello, esperarLogin(900)]);
       }
     }
 
     function actualizarReenvio() {
       const segundos = Math.max(0, Math.ceil((_otpReenvioHasta - Date.now()) / 1000));
       const boton = document.getElementById('loginReenviar');
-      boton.disabled = _verificando || segundos > 0;
+      boton.disabled = _verificando || document.getElementById('loginPaso2').hidden || segundos > 0;
       boton.textContent = segundos ? `Reenviar código (${segundos} s)` : 'Reenviar código';
       if (!segundos) { clearInterval(_otpIntervalo); _otpIntervalo = null; }
     }
 
     function reenviarCodigo() {
-      if (_verificando || Date.now() < _otpReenvioHasta) return;
+      if (_verificando || document.getElementById('loginPaso2').hidden || Date.now() < _otpReenvioHasta) return;
+      cancelarLogin();
       _loginReto = null;
+      limpiarReenvio();
+      limpiarDeck();
       doLogin();
     }
 
+    async function volverLogin() {
+      const ciclo = cancelarLogin();
+      _verificando = true;
+      _loginReto = null;
+      limpiarReenvio();
+      limpiarDeck();
+      campoOtp.readOnly = true;
+      document.getElementById('loginError').style.display = 'none';
+      actualizarReenvio();
+      await cambiarPasoLogin(false, ciclo);
+      if (ciclo !== _loginCiclo) return;
+      _verificando = false;
+      document.getElementById('loginEntrar').disabled = false;
+      document.getElementById('loginPass').focus();
+    }
+
     function showLogin() {
+      cancelarLogin();
       _loginReto = null;
       _verificando = false;
-      clearInterval(_otpIntervalo);
-      _otpIntervalo = null;
-      _otpReenvioHasta = 0;
-      document.getElementById('loginCodeBox').style.display = 'none';
-      campoOtp.value = '';
-      campoOtp.readOnly = false;
-      campoOtp.removeAttribute('aria-invalid');
-      document.getElementById('otp').className = 'otp';
+      limpiarReenvio();
+      limpiarDeck();
+      campoOtp.readOnly = true;
+      document.getElementById('loginPaso1').hidden = false;
+      document.getElementById('loginPaso1').inert = false;
+      document.getElementById('loginPaso2').hidden = true;
+      document.getElementById('loginPaso2').inert = true;
+      document.getElementById('loginVolver').disabled = false;
       document.getElementById('loginError').style.display = 'none';
       document.getElementById('loginError').textContent = '';
-      document.getElementById('loginEntrar').style.display = '';
       document.getElementById('loginEntrar').disabled = false;
       document.getElementById('loginReenviar').disabled = true;
       document.getElementById('loginReenviar').textContent = 'Reenviar código (30 s)';
@@ -3851,7 +4044,7 @@
       document.getElementById('decoApp').style.display = 'none';
       document.getElementById('estacionApp').style.display = 'none';
       document.getElementById('themeToggle').style.display = 'none';
-      setTimeout(() => document.getElementById('loginUser').focus(), 100);
+      document.getElementById('loginUser').focus();
     }
 
     function showDecoApp() {
@@ -3871,6 +4064,7 @@
 
     async function doLogin() {
       if (_verificando) return;
+      const ciclo = _loginCiclo;
       const verificar = !!_loginReto;
       if (verificar && !/^\d{4}$/.test(campoOtp.value)) { campoOtp.focus(); return; }
       const username = document.getElementById('loginUser').value.trim();
@@ -3883,59 +4077,65 @@
       document.getElementById('loginEntrar').disabled = true;
       actualizarReenvio();
       renderOtp();
+      _loginPeticion = new AbortController();
       try {
         let device = null;
         try { device = localStorage.getItem('device_token'); } catch { }
         const ruta = _loginReto ? '/api/login/verificar' : '/api/login';
-        const body = _loginReto ? {reto: _loginReto, codigo: document.getElementById('loginCode').value.trim()} : {username, password, device};
-        const res = await fetch(ruta, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const body = _loginReto ? {reto: _loginReto, codigo: campoOtp.value.trim()} : {username, password, device};
+        if (verificar) await prepararDeck(ciclo);
+        if (ciclo !== _loginCiclo) return;
+        // El indicador permanece mientras llega la respuesta, al menos 700 ms.
+        const peticion = fetch(ruta, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body), signal: _loginPeticion.signal })
+          .then(async res => ({res, data: await res.json()})).catch(error => ({error}));
+        const [resultado] = await Promise.all([peticion, verificar ? esperarLogin(700) : Promise.resolve()]);
+        if (ciclo !== _loginCiclo) return;
+        if (resultado.error) throw resultado.error;
+        const {res, data} = resultado;
         if (!res.ok) {
-          const e = await res.json();
-          errEl.textContent = e.detail || 'Credenciales incorrectas';
-          errEl.style.display = 'block';
-          if (verificar) await otpError();
+          const mensaje = typeof data.detail === 'string' ? data.detail : 'Credenciales incorrectas';
+          if (verificar) await otpError(ciclo, mensaje);
+          else { errEl.textContent = mensaje; errEl.style.display = 'block'; }
           return;
         }
-        const data = await res.json();
         if (data.verificar) {
           _loginReto = data.reto;
-          document.getElementById('loginCodeBox').style.display = 'block';
-          document.getElementById('loginEntrar').style.display = 'none';
-          campoOtp.value = '';
-          campoOtp.removeAttribute('aria-invalid');
-          const otp = document.getElementById('otp');
-          otp.className = 'otp';
-          renderOtp();
-          void otp.offsetWidth;
-          otp.classList.add('entra');
-          clearInterval(_otpIntervalo);
+          limpiarDeck();
+          limpiarReenvio();
           _otpReenvioHasta = Date.now() + 30000;
           _otpIntervalo = setInterval(actualizarReenvio, 1000);
           actualizarReenvio();
+          await cambiarPasoLogin(true, ciclo);
+          if (ciclo !== _loginCiclo) return;
+          const otp = document.getElementById('otp');
+          if (!_otpMovimientoReducido.matches) { void otp.offsetWidth; otp.classList.add('entra'); }
           campoOtp.focus();
           return;
         }
+        if (verificar) await otpOk(ciclo);
+        if (ciclo !== _loginCiclo) return;
         if (data.device) { try { localStorage.setItem('device_token', data.device); } catch { } }
-        if (verificar) await otpOk();
         _loginReto = null;
-        clearInterval(_otpIntervalo);
-        _otpIntervalo = null;
-        _otpReenvioHasta = 0;
-        document.getElementById('loginCodeBox').style.display = 'none';
+        limpiarReenvio();
+        cancelarAnimacionesLogin();
         campoOtp.value = '';
         sessionStorage.setItem('session', JSON.stringify({username: data.username, role: data.role, token: data.token}));
         _currentRole = data.role;
         if (data.role === 'deco') { showDecoApp(); init(); }
         else showEstacionApp();
       } catch(e) {
-        errEl.textContent = 'Error de conexión'; errEl.style.display = 'block';
-        if (verificar) await otpError();
+        if (ciclo !== _loginCiclo) return;
+        if (verificar) await otpError(ciclo, 'Error de conexión');
+        else { errEl.textContent = 'Error de conexión'; errEl.style.display = 'block'; }
       } finally {
-        _verificando = false;
-        campoOtp.readOnly = !_loginReto;
-        document.getElementById('loginEntrar').disabled = false;
-        actualizarReenvio();
-        renderOtp();
+        if (ciclo === _loginCiclo) {
+          _loginPeticion = null;
+          _verificando = false;
+          campoOtp.readOnly = !_loginReto;
+          document.getElementById('loginEntrar').disabled = false;
+          actualizarReenvio();
+          renderOtp();
+        }
       }
     }
 

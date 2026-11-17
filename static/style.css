@@ -45,6 +45,7 @@
       --radius-lg: 18px;
       --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
       --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --ease-rebote: cubic-bezier(.175,.885,.32,1.275);
       --transition: all 0.18s var(--ease-out);
 
       /* Gráficas: orden fijo validado (CVD y contraste, claro sobre #EAE8F8 y oscuro sobre #1C1735) con la skill dataviz. No reordenar sin re-validar. */
@@ -2824,39 +2825,67 @@
     @keyframes entraDer    { from { opacity: 0; transform: translateX(28px); } }
     @keyframes entraArriba { from { opacity: 0; transform: translateY(12px); } }
 
-    /* Login: la tarjeta cae como una nota sobre la mesa. */
-    #loginScreen > div { animation: nota .6s var(--ease-spring) backwards; }
+    /* Login: dos pasos dentro de la misma hoja. */
+    #loginScreen { overflow-y: auto; overflow-x: clip; }
+    .login-tarjeta { background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 40px 36px; width: 100%; max-width: 360px; margin: auto; animation: nota .6s var(--ease-spring) backwards; }
 
+    /* La tarjeta cae como una nota sobre la mesa. */
     @keyframes nota {
       from { opacity: 0; transform: translateY(-18px) rotate(-2.5deg) scale(.97); }
     }
+    .login-paso { display: flex; flex-direction: column; gap: 18px; align-items: center; width: 100%; }
+    .login-paso[hidden], .otp-verificado[hidden] { display: none; }
+    .login-hoja { gap: 0; }
+    .login-grabber { width: 36px; height: 4px; border-radius: 2px; background: var(--border); margin: -18px auto 16px; }
+    .login-volver { align-self: flex-start; border: 0; padding: 8px 0; background: none; color: var(--text-secondary); font-size: 12px; cursor: pointer; border-radius: var(--radius-sm); }
+    .login-volver:hover { color: var(--violeta); }
+    .login-otp-textos { width: 100%; margin-top: 14px; text-align: center; }
+    #loginOtpTitulo { display: grid; place-items: center; min-height: 58px; font: 700 24px/1.2 var(--font-brand); color: var(--violeta); text-wrap: balance; }
+    #loginOtpSub { min-height: 63px; margin-top: 8px; color: var(--text-secondary); font-size: 13px; line-height: 21px; overflow-wrap: anywhere; }
+    #loginOtpTitulo.verificado { color: var(--green-ok); }
+    #loginCodeBox { width: 100%; }
+    #loginError { margin-top: 18px; }
 
-    /* Código: un solo campo con cuatro casillas visuales. */
-    .otp { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: 248px; max-width: 100%; margin: 12px auto 0; }
-    .otp input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; opacity: 0; font-size: 32px; cursor: text; }
-    .otp-slot { display: grid; place-items: center; height: 64px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--violeta); font: 600 32px var(--font-num); transition: border-color .18s, box-shadow .18s; }
+    /* Un solo campo real sobre las cuatro cartas. */
+    .otp { position: relative; isolation: isolate; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: 248px; max-width: 100%; margin: 30px auto 32px; }
+    .otp input { position: absolute; inset: 0; z-index: 10; width: 100%; height: 100%; opacity: 0; font-size: 32px; cursor: text; }
+    .otp input:read-only { cursor: default; }
+    .otp-slot { position: relative; display: grid; place-items: center; height: 64px; border: 1.5px solid var(--border); border-radius: 14px; background: var(--bg); color: var(--violeta); font: 600 32px var(--font-num); box-shadow: 0 6px 16px rgba(0,0,0,.12); transform-origin: 50% 320%; transition: border-color .18s, box-shadow .18s; }
     .otp.entra .otp-slot { animation: otpEntra .3s var(--ease-spring) backwards; }
-    .otp-slot.activa { border-color: var(--violeta); box-shadow: 0 0 0 2px var(--violeta); }
-    .otp-slot.llena > span { animation: otpPop .28s var(--ease-spring); }
+    .otp-slot.activa { border-color: var(--violeta); box-shadow: 0 0 0 3px color-mix(in srgb, var(--violeta) 25%, transparent), 0 6px 16px rgba(0,0,0,.12); }
+    .otp-slot.llena .otp-digito { animation: otpPop .28s var(--ease-spring); }
     .otp-caret { width: 2px; height: 28px; background: var(--violeta); visibility: hidden; }
     .otp-slot.activa .otp-caret { visibility: visible; animation: otpParpadeo 1s step-end infinite; }
+    .slot__spark, .seal__borde, .seal__palomita { position: absolute; inset: -1.5px; width: calc(100% + 3px); height: calc(100% + 3px); overflow: visible; pointer-events: none; }
+    .slot__spark rect, .seal__seg { fill: none; stroke: var(--violeta); stroke-width: 2; stroke-linecap: round; }
+    .slot__spark rect { stroke-dasharray: .22 .78; stroke-dashoffset: 1; opacity: 0; filter: drop-shadow(0 0 3px var(--violeta)); }
+    .seal { position: absolute; left: 50%; top: 0; width: calc((100% - 24px) / 4); height: 64px; transform: translateX(-50%); z-index: 5; border: 1.5px solid var(--border); border-radius: 14px; background: var(--bg); box-shadow: 0 6px 16px rgba(0,0,0,.12); opacity: 0; pointer-events: none; }
+    .otp.apilado .seal { opacity: 1; }
+    .seal__seg { stroke-dasharray: .25 .75; stroke-dashoffset: 1; opacity: 0; filter: drop-shadow(0 0 3px var(--violeta)); }
+    .otp.comprobando .seal__seg { opacity: 1; }
+    .seal__destello { position: absolute; width: 120px; height: 128px; left: calc(50% - 60px); top: calc(50% - 64px); overflow: visible; opacity: 0; stroke: var(--green-ok); stroke-width: 2.5; stroke-linecap: round; }
+    .seal__palomita { fill: none; stroke: var(--green-ok); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+    .seal__palomita path { stroke-dasharray: 1; stroke-dashoffset: 1; }
     .otp.error { animation: otpShake .4s ease; }
     .otp.error .otp-slot { border-color: var(--red); color: var(--red); box-shadow: none; }
-    .otp.ok .otp-slot { animation: otpOk .28s var(--ease-spring) forwards; box-shadow: none; }
+    .otp.ok .seal, .otp.ok .otp-slot { border-color: var(--green-ok); color: var(--green-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-ok) 18%, transparent), 0 0 24px color-mix(in srgb, var(--green-ok) 22%, transparent); }
+    .otp.ok .seal__palomita { opacity: 1; }
+    .otp.ok .seal__palomita path { stroke-dashoffset: 0; }
     .otp .otp-slot:nth-child(2) { animation-delay: .04s; }
     .otp .otp-slot:nth-child(3) { animation-delay: .08s; }
     .otp .otp-slot:nth-child(4) { animation-delay: .12s; }
     .otp.error .otp-caret, .otp.ok .otp-caret { visibility: hidden; }
-    .otp-reenviar { display: block; margin: 8px auto 0; padding: 8px 4px; border: 0; background: none; color: var(--violeta); font: 600 13px var(--font-ui); cursor: pointer; }
+    .otp-reenvio { text-align: center; color: var(--text-secondary); font-size: 12px; }
+    .otp-reenviar { display: inline-block; padding: 8px 2px; border: 0; background: none; color: var(--violeta); font: 600 12px var(--font-ui); cursor: pointer; }
     .otp-reenviar:disabled { opacity: .55; cursor: default; }
     .otp-reenviar:enabled:hover { text-decoration: underline; }
     .otp-reenviar:focus-visible { outline: 2px solid var(--violeta); outline-offset: 2px; border-radius: var(--radius-sm); }
+    .otp-verificado { margin-top: 12px; text-align: center; font-size: 12px; font-weight: 600; color: var(--green-ok); }
 
     @keyframes otpEntra { from { opacity: 0; transform: translateY(10px); } }
     @keyframes otpPop { from { transform: scale(.65); } 65% { transform: scale(1.14); } to { transform: scale(1); } }
     @keyframes otpShake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
     @keyframes otpParpadeo { 50% { opacity: 0; } }
-    @keyframes otpOk { to { border-color: var(--green-ok); color: var(--green-ok); } }
 
     /* Mesas: aparecen en cascada corta cada vez que se dibujan. */
     .mesa-card { animation: entraArriba .4s var(--ease-out) backwards; }
@@ -2872,7 +2901,10 @@
     .catalog-view:not(.hidden) { animation: entraArriba .35s var(--ease-out); }
 
     @media (prefers-reduced-motion: reduce) {
-      .otp, .otp .otp-slot, .otp .otp-slot > span { animation: none !important; transition: none !important; }
+      .login-tarjeta, .login-paso, .login-otp-textos, .otp, .otp *, .otp-verificado { animation: none !important; transition: none !important; }
+      .otp .otp-slot { transform: none !important; opacity: 1 !important; }
+      .otp .slot__spark, .otp .seal { display: none; }
+      .otp.comprobando .otp-slot { border-color: var(--violeta); }
       .otp.ok .otp-slot { border-color: var(--green-ok); color: var(--green-ok); }
       *, *::before, *::after {
         animation-duration: .01ms !important;

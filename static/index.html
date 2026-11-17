@@ -23,37 +23,54 @@
        LOGIN SCREEN
   ═══════════════════════════════════════════════════════════════ -->
   <div id="loginScreen" style="display:none;position:fixed;inset:0;z-index:99999;background:var(--bg);align-items:center;justify-content:center;padding:20px;">
-    <div style="background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:40px 36px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:18px;align-items:center;">
-      <img src="/assets/logo-estudio-deco.svg" alt="Estudio Deco" width="128" height="128" class="logo-circulo" style="display:block;box-sizing:border-box;padding:22px;object-fit:contain;">
-      <div style="font-family:var(--font-brand);font-variation-settings:'SOFT' 100,'WONK' 1;font-size:30px;font-weight:800;color:var(--violeta);letter-spacing:-.3px;">Estudio Deco</div>
-      <div style="font-size:13px;color:var(--text-secondary);margin-top:-8px;">Sistema de Punto de Venta</div>
-      <div style="width:100%;display:flex;flex-direction:column;gap:10px;margin-top:6px;">
-        <input id="loginUser" type="text" placeholder="Usuario" autocomplete="username"
-          style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit;box-sizing:border-box;outline:none;transition:var(--transition);"
-          onfocus="this.style.borderColor='var(--sage)'" onblur="this.style.borderColor='var(--border)'"
-          onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
-        <input id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password"
-          style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit;box-sizing:border-box;outline:none;transition:var(--transition);"
-          onfocus="this.style.borderColor='var(--sage)'" onblur="this.style.borderColor='var(--border)'"
-          onkeydown="if(event.key==='Enter')doLogin()">
-        <div id="loginCodeBox" style="display:none;">
+    <div class="login-tarjeta" id="loginTarjeta">
+      <div id="loginPaso1" class="login-paso">
+        <img src="/assets/logo-estudio-deco.svg" alt="Estudio Deco" width="128" height="128" class="logo-circulo" style="display:block;box-sizing:border-box;padding:22px;object-fit:contain;">
+        <div style="font-family:var(--font-brand);font-variation-settings:'SOFT' 100,'WONK' 1;font-size:30px;font-weight:800;color:var(--violeta);letter-spacing:-.3px;">Estudio Deco</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-top:-8px;">Sistema de Punto de Venta</div>
+        <div style="width:100%;display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+          <input id="loginUser" type="text" placeholder="Usuario" autocomplete="username"
+            style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit;box-sizing:border-box;outline:none;transition:var(--transition);"
+            onfocus="this.style.borderColor='var(--sage)'" onblur="this.style.borderColor='var(--border)'"
+            onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
+          <input id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password"
+            style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit;box-sizing:border-box;outline:none;transition:var(--transition);"
+            onfocus="this.style.borderColor='var(--sage)'" onblur="this.style.borderColor='var(--border)'"
+            onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <button id="loginEntrar" type="button" onclick="doLogin()" style="width:100%;padding:13px;background:var(--sage);color:#fff;border:none;border-radius:var(--radius-sm);font-size:16px;font-weight:700;cursor:pointer;transition:var(--transition);" onmouseover="this.style.background='var(--sage-dark)'" onmouseout="this.style.background='var(--sage)'">
+          Entrar
+        </button>
+      </div>
+      <div id="loginPaso2" class="login-paso login-hoja" hidden>
+        <div class="login-grabber" aria-hidden="true"></div>
+        <button id="loginVolver" type="button" class="login-volver" onclick="volverLogin()">← Cambiar usuario</button>
+        <div class="login-otp-textos" aria-live="polite" aria-atomic="true">
+          <h2 id="loginOtpTitulo">Revisa tu correo</h2>
+          <p id="loginOtpSub">Escribe el código de 4 dígitos que enviamos al correo del negocio para <b id="loginUsuarioOtp"></b>.</p>
+        </div>
+        <div id="loginCodeBox">
           <div class="otp" id="otp">
-            <span class="otp-slot" aria-hidden="true"></span>
-            <span class="otp-slot" aria-hidden="true"></span>
-            <span class="otp-slot" aria-hidden="true"></span>
-            <span class="otp-slot" aria-hidden="true"></span>
+            <span class="otp-slot slot" aria-hidden="true"><span class="otp-digito"></span><svg class="slot__spark" viewBox="0 0 56 64"><rect x="1" y="1" width="54" height="62" rx="13" pathLength="1"/></svg></span>
+            <span class="otp-slot slot" aria-hidden="true"><span class="otp-digito"></span><svg class="slot__spark" viewBox="0 0 56 64"><rect x="1" y="1" width="54" height="62" rx="13" pathLength="1"/></svg></span>
+            <span class="otp-slot slot" aria-hidden="true"><span class="otp-digito"></span><svg class="slot__spark" viewBox="0 0 56 64"><rect x="1" y="1" width="54" height="62" rx="13" pathLength="1"/></svg></span>
+            <span class="otp-slot slot" aria-hidden="true"><span class="otp-digito"></span><svg class="slot__spark" viewBox="0 0 56 64"><rect x="1" y="1" width="54" height="62" rx="13" pathLength="1"/></svg></span>
+            <span class="seal" aria-hidden="true">
+              <svg class="seal__borde" viewBox="0 0 56 64"><rect class="seal__seg" x="1" y="1" width="54" height="62" rx="13" pathLength="1"/></svg>
+              <svg class="seal__destello" viewBox="0 0 120 128">
+                <g><line x1="60" y1="15" x2="60" y2="6"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(30 60 64)"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(60 60 64)"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(90 60 64)"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(120 60 64)"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(150 60 64)"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(180 60 64)"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(210 60 64)"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(240 60 64)"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(270 60 64)"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(300 60 64)"/><line x1="60" y1="15" x2="60" y2="6" transform="rotate(330 60 64)"/></g>
+              </svg>
+              <svg class="seal__palomita" viewBox="0 0 56 64"><path d="M16 32l8 8 17-18" pathLength="1"/></svg>
+            </span>
             <input id="loginCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="4" pattern="\d{4}"
-              aria-label="Código de 4 dígitos" aria-describedby="loginCodeAyuda loginError"
+              aria-label="Código de 4 dígitos" aria-describedby="loginOtpSub loginError"
               onkeydown="if(event.key==='Enter')doLogin()">
           </div>
-          <div id="loginCodeAyuda" style="font-size:12px;color:var(--text-secondary);margin-top:12px;text-align:center;">Te enviamos un código al correo del negocio</div>
-          <button id="loginReenviar" type="button" class="otp-reenviar" onclick="reenviarCodigo()" disabled>Reenviar código (30 s)</button>
+          <div class="otp-reenvio">¿No te llegó? <button id="loginReenviar" type="button" class="otp-reenviar" onclick="reenviarCodigo()" disabled>Reenviar código (30 s)</button></div>
+          <div id="loginVerificado" class="otp-verificado" hidden>🔒 Verificado</div>
         </div>
       </div>
       <div id="loginError" role="alert" style="display:none;color:var(--red);font-size:13px;text-align:center;"></div>
-      <button id="loginEntrar" onclick="doLogin()" style="width:100%;padding:13px;background:var(--sage);color:#fff;border:none;border-radius:var(--radius-sm);font-size:16px;font-weight:700;cursor:pointer;transition:var(--transition);" onmouseover="this.style.background='var(--sage-dark)'" onmouseout="this.style.background='var(--sage)'">
-        Entrar
-      </button>
     </div>
   </div>
 
