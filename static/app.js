@@ -72,6 +72,22 @@
       return el ? el.checked : true;
     }
 
+    // Sesión: el servidor exige X-Auth-Token en /api/*. Un 401 (token vencido o servidor reiniciado) regresa al login.
+    function _sessionToken() {
+      try { return JSON.parse(sessionStorage.getItem('session') || 'null')?.token || null; } catch { return null; }
+    }
+    const _fetchOriginal = window.fetch.bind(window);
+    window.fetch = async (input, init = {}) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (!url.startsWith('/api/') || url.startsWith('/api/login')) return _fetchOriginal(input, init);
+      const headers = new Headers(init.headers || {});
+      const token = _sessionToken();
+      if (token) headers.set('X-Auth-Token', token);
+      const res = await _fetchOriginal(input, { ...init, headers });
+      if (res.status === 401 && token) { try { sessionStorage.removeItem('session'); } catch { } showLogin(); }
+      return res;
+    };
+
     async function api(p, o = {}) {
       const r = await fetch(`/api${p}`, { headers: { 'Content-Type': 'application/json' }, ...o, body: o.body ? JSON.stringify(o.body) : undefined });
       if (!r.ok) {
@@ -178,12 +194,14 @@
     }
 
     async function init() {
+      if (!_sessionToken()) return;  // sin sesión el servidor responde 401; init() corre tras el login
       loadPrintTicketPref();
       tiendas = await api('/tiendas');
       fillIcons();
       await refreshMesas();
       renderTabs();
       api('/catalog').then(d => { allProductsGlobal = d; }).catch(() => { });
+      loadNotes();  // las notas también necesitan la sesión
     }
 
     /* ── VIEWS ── */
@@ -219,16 +237,8 @@
     }
 
     /* ── RESUMEN SEMANAL ── */
-    const TIENDA_COLORS = [
-      '#9575CD', '#BA68C8', '#7986CB', '#4DB6AC', '#FFB74D', '#F06292', '#81C784', '#A1887F'
-    ];
-    const tiendaColorMap = {};
     function getTiendaColor(nombre) {
-      if (!tiendaColorMap[nombre]) {
-        const idx = Object.keys(tiendaColorMap).length % TIENDA_COLORS.length;
-        tiendaColorMap[nombre] = TIENDA_COLORS[idx];
-      }
-      return tiendaColorMap[nombre];
+      return colorTienda(nombre);
     }
 
     const DIAS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -265,7 +275,7 @@
       </div>
       <div class="kpi-card">
         <div class="kpi-label">💲 Ingresos Semana</div>
-        <div class="kpi-val" style="color:#26A69A;">${$pesos(totalIngresos)}</div>
+        <div class="kpi-val" style="color:#1E9E92;">${$pesos(totalIngresos)}</div>
       </div>
 `;
 
@@ -594,7 +604,7 @@
         let html = '';
         for (const [tiendaNombre, prods] of Object.entries(byTienda)) {
           const tiendaObj = tiendas.find(t => t.nombre === tiendaNombre) || { id: prods[0].tienda_id, nombre: tiendaNombre, precio_abierto: 0, es_barra: 0 };
-          html += `<div style="padding:10px 10px 5px;font-weight:700;font-size:13px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;">📍 ${tiendaNombre}</div>`;
+          html += `<div style="padding:10px 10px 5px;font-weight:700;font-size:13px;color:var(--text-secondary);letter-spacing:.5px;">📍 ${tiendaNombre}</div>`;
           html += `<div class="products-grid" style="margin-bottom:12px;">${prods.map(p => renderProd(p, tiendaObj)).join('')}</div>`;
         }
         sc.innerHTML = html;
@@ -628,7 +638,7 @@
       let html = '';
       for (const [catName, prods] of Object.entries(cats)) {
         const bg = colorsByCat[catName] || "var(--bg-warm)";
-        html += `<div style="padding:12px 10px 4px 10px; font-weight:700; font-size:13px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.5px;">${catName}</div>`;
+        html += `<div style="padding:12px 10px 4px 10px; font-weight:700; font-size:13px; color:var(--text-secondary); letter-spacing:.5px;">${catName}</div>`;
         html += `<div style="background:${bg}; padding:10px; border-radius:10px; margin-bottom:10px;">`;
         html += `<div class="products-grid">${prods.map(p => renderProd(p, currentTienda)).join('')}</div>`;
         html += `</div>`;
@@ -1072,19 +1082,19 @@
       showModal(`<div class="modal-body">
     <div class="modal-title">💵 Cobro en Efectivo</div>
     <div style="text-align:center;padding:16px 0 8px;">
-      <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Total a cobrar</div>
-      <div style="font-size:52px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">$${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+      <div style="font-size:12px;color:var(--text-muted);letter-spacing:1px;">Total a cobrar</div>
+      <div style="font-size:52px;font-weight:800;font-family:var(--font-num);color:var(--sage-dark);">$${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
     </div>
     <div class="field">
       <label>Monto recibido del cliente</label>
-      <input type="number" id="cashIn" class="input" style="font-size:28px;text-align:center;font-family:'JetBrains Mono',monospace;padding:14px;" placeholder="0.00" step="0.01" oninput="updateCashChange(${total})" onkeydown="if(event.key==='Enter')confirmarCobroCash(${total})">
+      <input type="number" id="cashIn" class="input" style="font-size:28px;text-align:center;font-family:var(--font-num);padding:14px;" placeholder="0.00" step="0.01" oninput="updateCashChange(${total})" onkeydown="if(event.key==='Enter')confirmarCobroCash(${total})">
     </div>
     <div id="cashChangeBox" style="text-align:center;padding:20px 0;display:none;">
-      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Cambio a entregar</div>
-      <div id="cashChangeAmt" style="font-size:64px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);line-height:1;"></div>
+      <div style="font-size:11px;color:var(--text-muted);letter-spacing:1px;margin-bottom:6px;">Cambio a entregar</div>
+      <div id="cashChangeAmt" style="font-size:64px;font-weight:800;font-family:var(--font-num);color:var(--green-ok);line-height:1;"></div>
     </div>
     <div id="cashFaltaBox" style="text-align:center;padding:12px 0;display:none;">
-      <div id="cashFaltaAmt" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--red);"></div>
+      <div id="cashFaltaAmt" style="font-size:20px;font-weight:700;font-family:var(--font-num);color:var(--red);"></div>
     </div>
   </div>
   <div class="modal-footer">
@@ -1324,7 +1334,7 @@
         <div style="text-align:center;padding:24px 0 12px;">
           <div style="font-size:48px;margin-bottom:8px;">✅</div>
           <div style="font-size:14px;color:var(--text-secondary);margin-bottom:6px;">La caja ya fue abierta hoy</div>
-          <div style="font-size:28px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">$${res.fondo.toFixed(2)}</div>
+          <div style="font-size:28px;font-weight:800;font-family:var(--font-num);color:var(--sage-dark);">$${res.fondo.toFixed(2)}</div>
           <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">Solo se puede abrir una vez al día</div>
         </div>
         <div class="modal-btns"><button class="btn btn-sage" onclick="closeModal()">Entendido</button></div></div>`);
@@ -1356,7 +1366,7 @@
     <div class="field"><label>Concepto</label><input id="iC" class="input" placeholder="Ej: Anticipo taller, abono cliente"></div>
     <div class="field"><label>Monto</label><input type="number" id="iM" class="input" placeholder="0.00" step="0.01"></div>
     <div class="field"><label>Método de pago</label><select id="iP" class="input"><option value="Efectivo">💵 Efectivo</option><option value="Tarjeta">💳 Tarjeta / Transferencia</option></select></div>
-    <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn" style="background:#26A69A;color:white;" onclick="doIngreso()">Guardar Ingreso</button></div></div>`);
+    <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn" style="background:#1E9E92;color:white;" onclick="doIngreso()">Guardar Ingreso</button></div></div>`);
       setTimeout(() => document.getElementById('iC')?.focus(), 100);
     }
     async function doIngreso() {
@@ -1418,14 +1428,12 @@
 
       // Charts data
       const segsPago = [
-        { label: 'Efectivo', value: r.total_efectivo || 0, color: '#4CAF50' },
-        { label: 'Tarjeta', value: r.total_tarjeta || 0, color: '#C9A84C' },
-        { label: 'Transfer.', value: (r.metodos_pago || []).find(m => m.metodo_pago === 'Transferencia')?.monto || 0, color: '#26A69A' },
+        { label: 'Efectivo', value: r.total_efectivo || 0, color: VIZ_SEM.efectivo },
+        { label: 'Tarjeta', value: r.total_tarjeta || 0, color: VIZ_SEM.tarjeta },
+        { label: 'Transfer.', value: (r.metodos_pago || []).find(m => m.metodo_pago === 'Transferencia')?.monto || 0, color: VIZ_SEM.transferencia },
       ].filter(s => s.value > 0);
-      const legendPago = segsPago.map(s => `<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:10px;height:10px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0;"></span>${s.label}<br><strong style="font-size:12px;">$${s.value.toFixed(0)}</strong></div>`).join('');
 
-      const TIENDA_COLORS = ['#7C9A7E', '#C4755A', '#C9A84C', '#26A69A', '#5C6BC0', '#EC407A', '#8D6E63'];
-      const barsTienda = (r.ventas_por_tienda || []).map((t, i) => ({ label: t.tienda, value: t.neto ?? t.total, color: TIENDA_COLORS[i % TIENDA_COLORS.length] }));
+      const barsTienda = (r.ventas_por_tienda || []).map((t, i) => ({ label: t.tienda, value: t.neto ?? t.total, color: colorTienda(t.tienda) }));
 
       // Canceladas del día
       const canceladasBadge = r.num_canceladas > 0 ? `<span style="background:var(--red);color:white;border-radius:4px;padding:1px 7px;font-size:11px;margin-left:8px;">${r.num_canceladas} cancelada(s)</span>` : '';
@@ -1451,37 +1459,28 @@
     <div class="resumen-grid" style="margin-bottom:12px;grid-template-columns:repeat(${totalTransfer > 0 ? 4 : 3},1fr);">
       <div class="res-card" style="background:var(--green-light);border:1px solid var(--sage);"><div class="res-label" style="color:var(--green-ok)">💵 Ef. en Caja</div><div class="res-val" style="color:var(--green-ok)">$${esp.toFixed(2)}</div></div>
       <div class="res-card" style="background:var(--gold-light);border:1px solid var(--gold);"><div class="res-label" style="color:var(--gold)">💳 Tarjeta Neta</div><div class="res-val" style="color:var(--gold)">$${tarNeta.toFixed(2)}</div></div>
-      ${totalTransfer > 0 ? `<div class="res-card" style="background:#E0F2F1;border:1px solid #26A69A;"><div class="res-label" style="color:#00796B">🏦 Transferencia</div><div class="res-val" style="color:#00796B">$${totalTransfer.toFixed(2)}</div></div>` : ''}
+      ${totalTransfer > 0 ? `<div class="res-card" style="background:#E0F2F1;border:1px solid #1E9E92;"><div class="res-label" style="color:#00796B">🏦 Transferencia</div><div class="res-val" style="color:#00796B">$${totalTransfer.toFixed(2)}</div></div>` : ''}
       <div class="res-card" style="background:var(--sage-light);border:1px solid var(--sage);"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${totalEsp.toFixed(2)}</div></div>
     </div>
 
     <!-- Gráficas -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Métodos de pago</div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          ${svgDonut(segsPago, 100)}
-          <div style="display:flex;flex-direction:column;gap:6px;">${legendPago}</div>
-        </div>
-      </div>
-      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;overflow:hidden;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Ventas neto por tienda</div>
-        ${barsTienda.length ? svgBarsH(barsTienda, 140, 20, 6) : '<span style="font-size:11px;color:var(--text-muted)">Sin datos</span>'}
-      </div>
+    <div class="viz-grid">
+      <div class="viz-card"><h3>Métodos de pago</h3>${svgDonut(segsPago, 220)}</div>
+      <div class="viz-card"><h3>Ventas neto por tienda</h3>${barsTienda.length ? svgBarsH(barsTienda, 140, 20, 6) : '<span style="font-size:12px;color:var(--text-muted)">Sin datos</span>'}</div>
     </div>
 
     ${sabroCard}
     <div class="field"><label>🏦 Fondo de caja inicial</label><input type="number" id="cFondo" class="input" value="${fondoApertura}" min="0" placeholder="0.00" oninput="calcCorte(${esp})"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-      <div><div style="font-size:10px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">💵 Billetes</div>${bRows}</div>
-      <div><div style="font-size:10px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">🪙 Monedas</div>${cRows}</div>
+      <div><div style="font-size:10px;font-weight:700;color:var(--text-secondary);letter-spacing:.5px;margin-bottom:6px;">💵 Billetes</div>${bRows}</div>
+      <div><div style="font-size:10px;font-weight:700;color:var(--text-secondary);letter-spacing:.5px;margin-bottom:6px;">🪙 Monedas</div>${cRows}</div>
     </div>
     <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;margin-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text-muted)">Total contado:</span><span id="cTotalCont" style="font-family:'JetBrains Mono',monospace;font-weight:700;">$0.00</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text-muted)">Menos fondo de caja:</span><span id="cMenosFondo" style="font-family:'JetBrains Mono',monospace;">-$0.00</span></div>
-      <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);margin-bottom:3px;"><span style="font-weight:700;">Efectivo real (ventas):</span><span id="cReal" style="font-family:'JetBrains Mono',monospace;font-weight:700;">$0.00</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text-muted)">Esperado (sistema):</span><span style="font-family:'JetBrains Mono',monospace;color:var(--text-muted);">$${esp.toFixed(2)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);"><span style="font-weight:700;">Diferencia:</span><span id="cDif" style="font-family:'JetBrains Mono',monospace;font-weight:700;">$0.00</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text-muted)">Total contado:</span><span id="cTotalCont" style="font-family:var(--font-num);font-weight:700;">$0.00</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text-muted)">Menos fondo de caja:</span><span id="cMenosFondo" style="font-family:var(--font-num);">-$0.00</span></div>
+      <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);margin-bottom:3px;"><span style="font-weight:700;">Efectivo real (ventas):</span><span id="cReal" style="font-family:var(--font-num);font-weight:700;">$0.00</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--text-muted)">Esperado (sistema):</span><span style="font-family:var(--font-num);color:var(--text-muted);">$${esp.toFixed(2)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);"><span style="font-weight:700;">Diferencia:</span><span id="cDif" style="font-family:var(--font-num);font-weight:700;">$0.00</span></div>
     </div>
   </div>
   <div class="modal-footer">
@@ -1572,7 +1571,7 @@
       showModal(`<div class="modal-title">✅ Venta Registrada</div>
     <div class="modal-sub">Folio: ${d.venta.folio} · ${printNote} · Cajero: ${d.cajero}</div>
     <div style="background:var(--bg);border-radius:var(--radius-sm);padding:16px;text-align:center;margin-top:14px;">
-      <div style="font-size:28px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">$${d.venta.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+      <div style="font-size:28px;font-weight:800;font-family:var(--font-num);color:var(--sage-dark);">$${d.venta.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
       <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${d.venta.metodo_pago}</div>
     </div>
     <div class="modal-btns"><button class="btn btn-sage" onclick="closeModal()">Cerrar</button></div>`);
@@ -1587,8 +1586,8 @@
       <td>${p.tienda_nombre}</td>
       <td style="color:var(--text-muted);font-size:11px;">${p.categoria_producto || '-'}</td>
       <td style="font-weight:600">${p.nombre}</td>
-      <td style="font-family:'JetBrains Mono',monospace;color:var(--sage)">$${p.precio.toFixed(2)}</td>
-      <td style="font-family:'JetBrains Mono',monospace;color:var(--text-muted)">$${(p.costo || 0).toFixed(2)}</td>
+      <td style="font-family:var(--font-num);color:var(--sage)">$${p.precio.toFixed(2)}</td>
+      <td style="font-family:var(--font-num);color:var(--text-muted)">$${(p.costo || 0).toFixed(2)}</td>
       <td>${p.stock_local}</td>
       <td style="color:var(--text-muted)">${p.stock_minimo}</td>
       <td>${p.es_precio_abierto ? 'Sí' : (p.es_bundle ? '📦 Bundle' : 'No')}</td>
@@ -1722,7 +1721,7 @@
           <span style="font-size:12px;${isCancelled ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${it.nombre_producto}</span>
           <span style="font-size:11px;color:var(--text-muted);margin-left:6px;">x${it.cantidad} · $${it.precio_unitario.toFixed(2)}</span>
         </div>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--text-muted);flex-shrink:0;">$${it.subtotal.toFixed(2)}</span>
+        <span style="font-family:var(--font-num);font-size:12px;font-weight:600;color:var(--text-muted);flex-shrink:0;">$${it.subtotal.toFixed(2)}</span>
       </div>`).join('');
 
         const comisionTar = (v.metodo_pago === 'Tarjeta' || v.metodo_pago === 'Mixto') && v.monto_tarjeta > 0
@@ -1738,12 +1737,12 @@
         return `<div style="background:var(--surface);border:1px solid ${borderColor};border-radius:var(--radius-sm);margin-bottom:10px;overflow:hidden;${isCancelled ? 'opacity:0.75' : ''}">
       <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${bgHead};">
         <div style="flex:1;min-width:0;">
-          <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;${isCancelled ? 'text-decoration:line-through;' : ''}">${v.folio}</span>
+          <span style="font-size:12px;font-weight:700;font-family:var(--font-num);${isCancelled ? 'text-decoration:line-through;' : ''}">${v.folio}</span>
           ${isCancelled ? '<span style="font-size:10px;background:var(--red);color:white;border-radius:4px;padding:1px 6px;margin-left:6px;">CANCELADA</span>' : ''}
           <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">${hora} · ${v.cajero_nombre}</span>
         </div>
         <span style="font-size:11px;color:var(--text-secondary);margin-right:6px;">${pagoInfo}</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:${totalColor};">$${v.total.toFixed(2)}</span>
+        <span style="font-family:var(--font-num);font-weight:700;font-size:15px;color:${totalColor};">$${v.total.toFixed(2)}</span>
         <button class="btn-icon" style="background:var(--sage-light);color:var(--sage);flex-shrink:0;" onclick="reimprimirTicket(${v.id})" title="Reimprimir ticket">${icon('print', 15)}</button>
         <button class="btn-icon" style="background:#FFF3E0;color:#E65100;flex-shrink:0;" onclick="reimprimirComanda(${v.id})" title="Reimprimir comanda">${icon('list', 15)}</button>
         ${!isCancelled && usuario.perfil === 'Administrador' ? `
@@ -1776,7 +1775,7 @@
 
         const canceladasHtml = canceladas.length
           ? `<div style="margin-top:16px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red);letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">${icon('trash', 13)} Ventas Canceladas (${canceladas.length})</div>
+        <div style="font-size:10px;font-weight:700;color:var(--red);letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">${icon('trash', 13)} Ventas Canceladas (${canceladas.length})</div>
         ${canceladas.map(v => renderVentaCard(v, true)).join('')}
        </div>` : '';
 
@@ -1942,7 +1941,7 @@
     <div class="modal-sub">Precio del paquete: <strong>$${precioBundle.toFixed(2)}</strong> · Asignado a tiendas: <span style="color:${diffColor};font-weight:700;">$${sumaAsignada.toFixed(2)}</span>${Math.abs(diff) > 0.01 ? ` · <span style="color:var(--red);">Diferencia: $${diff.toFixed(2)}</span>` : ' ✓'}</div>
     <div style="max-height:220px;overflow-y:auto;margin-bottom:14px;">${filas}</div>
     <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:14px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">+ Agregar componente</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin-bottom:8px;">+ Agregar componente</div>
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <div class="field" style="margin:0;flex:1;"><label>Tienda</label>
           <select id="bcTienda" class="input" onchange="filterBcTienda()">
@@ -2029,7 +2028,7 @@
           <div style="font-size:13px;font-weight:600;">${p.nombre}</div>
           <div style="font-size:11px;color:var(--text-muted);">${p.tienda_nombre}${p.stock_local <= 0 ? ' · ⚠ Sin stock' : ''}</div>
         </div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--sage);">${p.es_precio_abierto ? 'Abierto' : '$' + p.precio.toFixed(2)}</div>
+        <div style="font-family:var(--font-num);font-size:14px;font-weight:600;color:var(--sage);">${p.es_precio_abierto ? 'Abierto' : '$' + p.precio.toFixed(2)}</div>
       </div>`).join('');
       }
       inp.addEventListener('input', render);
@@ -2078,18 +2077,18 @@
       const tiendaRows = r.ventas_por_tienda.map(t => `
     <div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border-light);">
       <span style="color:var(--text-secondary);flex:1;">${t.tienda}</span>
-      ${t.comision > 0 ? `<span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--red);">-$${t.comision.toFixed(2)}</span>` : ''}
-      <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--sage-dark);">$${(t.neto ?? t.total).toFixed(2)}</span>
+      ${t.comision > 0 ? `<span style="font-family:var(--font-num);font-size:11px;color:var(--red);">-$${t.comision.toFixed(2)}</span>` : ''}
+      <span style="font-family:var(--font-num);font-weight:700;color:var(--sage-dark);">$${(t.neto ?? t.total).toFixed(2)}</span>
     </div>`).join('');
       const gastosRows = r.gastos_detalle.map(g => `
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-light);">
       <span style="color:var(--text-muted)">${g.concepto}</span>
-      <span style="font-family:'JetBrains Mono',monospace;color:var(--red);">-$${g.monto.toFixed(2)}</span>
+      <span style="font-family:var(--font-num);color:var(--red);">-$${g.monto.toFixed(2)}</span>
     </div>`).join('');
       const ingRows = (r.ingresos_detalle || []).map(i => `
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border-light);">
       <span style="color:var(--text-muted)">${i.concepto} <span style="opacity:.6">(${i.metodo_pago})</span></span>
-      <span style="font-family:'JetBrains Mono',monospace;color:var(--green-ok);">+$${i.monto.toFixed(2)}</span>
+      <span style="font-family:var(--font-num);color:var(--green-ok);">+$${i.monto.toFixed(2)}</span>
     </div>`).join('');
       showModal(`<div class="modal-body">
     <div class="modal-title">👁 Pre-Corte</div>
@@ -2108,9 +2107,9 @@
       <div class="res-card" style="background:var(--gold-light);border:1px solid var(--gold);"><div class="res-label" style="color:var(--gold)">💳 Tarjeta Neta</div><div class="res-val" style="color:var(--gold)">$${_tarNeta.toFixed(2)}</div></div>
       <div class="res-card" style="background:var(--sage-light);border:1px solid var(--sage);"><div class="res-label" style="color:var(--sage-dark)">TOTAL GENERAL</div><div class="res-val" style="color:var(--sage-dark)">$${_totalEsp.toFixed(2)}</div></div>
     </div>
-    ${tiendaRows ? `<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">Ventas por tienda <span style="font-weight:400;opacity:.7">(neto tras comisión tarjeta)</span></div>${tiendaRows}</div>` : ''}
-    ${gastosRows ? `<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Gastos del turno</div>${gastosRows}</div>` : ''}
-    ${ingRows ? `<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Ingresos registrados</div>${ingRows}</div>` : ''}
+    ${tiendaRows ? `<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:4px;">Ventas por tienda <span style="font-weight:400;opacity:.7">(neto tras comisión tarjeta)</span></div>${tiendaRows}</div>` : ''}
+    ${gastosRows ? `<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:6px;">Gastos del turno</div>${gastosRows}</div>` : ''}
+    ${ingRows ? `<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:6px;">Ingresos registrados</div>${ingRows}</div>` : ''}
   </div>
   <div class="modal-footer">
     <div class="modal-btns" style="margin-top:0">
@@ -2122,70 +2121,251 @@
     }
 
     /* ── SVG CHART HELPERS ── */
-    let _gc = 0;
-    function _glowFilter(blur = 2.5) {
-      const id = 'gf' + (++_gc);
-      return { id, def: `<defs><filter id="${id}" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur in="SourceGraphic" stdDeviation="${blur}" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>` };
+    const VIZ = ['var(--viz-1)', 'var(--viz-2)', 'var(--viz-3)', 'var(--viz-4)', 'var(--viz-5)', 'var(--viz-6)', 'var(--viz-7)', 'var(--viz-8)'];
+    const VIZ_SEM = { ventas: 'var(--viz-1)', gastos: 'var(--viz-2)', pagos: 'var(--viz-3)', tarjeta: 'var(--viz-3)', efectivo: 'var(--viz-4)', caja: 'var(--viz-4)', ingresos: 'var(--viz-5)', banco: 'var(--viz-5)', transferencia: 'var(--viz-5)', mixto: 'var(--viz-7)', futuro: 'var(--viz-other)' };
+
+    function colorTienda(nombre) {
+      const normalizar = n => String(n ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+      const idx = tiendas.findIndex(t => normalizar(t.nombre) === normalizar(nombre));
+      return idx >= 0 && idx < VIZ.length ? VIZ[idx] : 'var(--viz-other)';
     }
-    function _tc() {
-      const d = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    function _attr(value) {
+      return String(value ?? '').replace(/[&"'<>]/g, c => ({ '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' }[c]));
+    }
+
+    function _vizMoney(value) {
+      return '$' + (value || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+    }
+
+    const _charts = {};
+    const _chartFabricas = new Map();
+    let _chartSeq = 0;
+
+    function _cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function _vizColor(c) {
+      const variable = typeof c === 'string' && c.match(/^var\(\s*(--[\w-]+)\s*\)$/);
+      return variable ? _vizColor(_cssVar(variable[1])) : c;
+    }
+
+    function _vizAlpha(color, a) {
+      if (!/^#[\da-f]{6}$/i.test(color)) return color;
+      const n = parseInt(color.slice(1), 16);
+      return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+    }
+
+    function _vizCompacto(v) {
+      const n = Math.abs(v);
+      const unidad = n >= 1000000 ? 1000000 : n >= 1000 ? 1000 : 1;
+      const monto = Number((v / unidad).toFixed(unidad === 1 || n / unidad >= 10 ? 0 : 1));
+      return '$' + monto + (unidad === 1000000 ? 'M' : unidad === 1000 ? 'k' : '');
+    }
+
+    function applyChartDefaults() {
+      if (typeof Chart === 'undefined') return;
+      Chart.defaults.font.family = "'Figtree', system-ui, sans-serif";
+      Chart.defaults.font.size = 11;
+      Chart.defaults.color = _cssVar('--text-secondary');
+      Chart.defaults.borderColor = _cssVar('--viz-grid');
+      Chart.defaults.scale.ticks.color = _cssVar('--text-muted');
+      Chart.defaults.scale.grid.color = _cssVar('--viz-grid');
+      Chart.defaults.plugins.legend.display = false;
+      Object.assign(Chart.defaults.plugins.tooltip, {
+        backgroundColor: _cssVar('--surface'),
+        titleColor: _cssVar('--text-secondary'),
+        bodyColor: _cssVar('--text'),
+        borderColor: _cssVar('--border'),
+        borderWidth: 1, padding: 10, cornerRadius: 10,
+        boxWidth: 12, boxHeight: 2, boxPadding: 6,
+        titleFont: { weight: '600' }, bodyFont: { weight: '700' },
+        displayColors: true,
+      });
+    }
+
+    function renderChart(canvasId, fabrica) {
+      if (_charts[canvasId]) {
+        _charts[canvasId].destroy();
+        delete _charts[canvasId];
+      }
+      const canvas = document.getElementById(canvasId);
+      if (!canvas || typeof Chart === 'undefined') return null;
+      const config = fabrica();
+      config.options ??= {};
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) config.options.animation = false;
+      config.options.responsive = true;
+      config.options.maintainAspectRatio = false;
+      _charts[canvasId] = new Chart(canvas.getContext('2d'), config);
+      return _charts[canvasId];
+    }
+
+    function _chartFrame(alto, fabrica, opciones = {}) {
+      if (typeof Chart === 'undefined') return `<div class="chart-frame" style="height:${alto}px"><div class="chart-sin-datos">Gráfica no disponible</div></div>`;
+      const id = 'cj' + (++_chartSeq);
+      _chartFabricas.set(id, fabrica);
+      return `<div class="chart-frame" style="height:${alto}px;${opciones.style || ''}"><canvas id="${id}" role="img" aria-label="${_attr(opciones.titulo || 'Gráfica')}"></canvas></div>`;
+    }
+
+    new MutationObserver(muts => {
+      const pendientes = new Set();
+      const retirados = new Set();
+      const recoger = (nodo, ids) => {
+        if (nodo.nodeType !== 1) return;
+        if (nodo.matches('canvas[id^="cj"]')) ids.add(nodo.id);
+        nodo.querySelectorAll('canvas[id^="cj"]').forEach(canvas => ids.add(canvas.id));
+      };
+      for (const mut of muts) {
+        mut.addedNodes.forEach(nodo => recoger(nodo, pendientes));
+        mut.removedNodes.forEach(nodo => recoger(nodo, retirados));
+      }
+      for (const id of Object.keys(_charts)) {
+        if (!document.getElementById(id)) {
+          _charts[id].destroy();
+          delete _charts[id];
+          _chartFabricas.delete(id);
+        }
+      }
+      for (const id of retirados) {
+        if (!document.getElementById(id)) _chartFabricas.delete(id);
+      }
+      let defaultsAplicados = false;
+      for (const id of pendientes) {
+        if (!_charts[id] && _chartFabricas.has(id) && document.getElementById(id)) {
+          if (!defaultsAplicados) { applyChartDefaults(); defaultsAplicados = true; }
+          renderChart(id, _chartFabricas.get(id));
+        }
+      }
+    }).observe(document.documentElement, { childList: true, subtree: true });
+
+    function _vizTooltipLabel(context) {
+      const valor = context.chart.options.indexAxis === 'y' ? context.parsed.x : context.parsed.y;
+      return (context.dataset.label ? context.dataset.label + ': ' : '') + _vizMoney(valor);
+    }
+
+    const _VIZ_ALTO = 260;  // como .chart-frame de Suki
+
+    function _vizLeyenda() {
+      return { display: true, position: 'bottom', labels: { color: _cssVar('--text-secondary'), boxWidth: 12, boxHeight: 12, padding: 14, font: { size: 11 } } };
+    }
+
+    function _vizOptions() {
       return {
-        label:  d ? '#9e8cc5' : '#555',
-        val:    d ? '#ede7f6' : '#333',
-        axis:   d ? '#7e6baa' : '#666',
-        valSm:  d ? '#b39ddb' : '#444',
-        tick:   d ? '#6b5b8a' : '#888',
-        muted:  d ? '#5a4a78' : '#aaa',
-        track:  d ? '#2a2040' : '#f0f0f0',
-        center: d ? '#1a1628' : 'white',
-        zero:   d ? '#3a2d56' : '#ddd',
+        scales: {
+          x: { grid: { display: false }, border: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+          y: { beginAtZero: true, grid: { color: _cssVar('--viz-grid') }, border: { display: false }, ticks: { callback: _vizCompacto, maxTicksLimit: 4 } },
+        },
+        plugins: { tooltip: { callbacks: { label: _vizTooltipLabel } } },
+      };
+    }
+
+    function _vizBarStyle(horizontal = false) {
+      return {
+        borderWidth: 0, borderSkipped: false,
+        borderRadius: horizontal
+          ? { topLeft: 0, bottomLeft: 0, topRight: 6, bottomRight: 6 }
+          : context => context.parsed?.y < 0
+            ? { topLeft: 0, topRight: 0, bottomLeft: 6, bottomRight: 6 }
+            : { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 },
+        barPercentage: 0.7, categoryPercentage: 0.8, maxBarThickness: 24,
+      };
+    }
+
+    // Plugin local: las etiquetas se pintan con las posiciones animadas de las barras.
+    function _vizEtiquetas({ horizontal = false, todos = false, mostrar = () => true } = {}) {
+      return {
+        id: 'vizEtiquetas',
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          ctx.save();
+          ctx.fillStyle = _cssVar('--text-secondary');
+          ctx.font = '700 10px Figtree, sans-serif';
+          ctx.textAlign = horizontal ? 'left' : 'center';
+          ctx.textBaseline = horizontal ? 'middle' : 'bottom';
+          chart.data.datasets.forEach((dataset, di) => {
+            if ((!todos && di !== 0) || !chart.isDatasetVisible(di)) return;
+            chart.getDatasetMeta(di).data.forEach((barra, i) => {
+              if (!mostrar(i, di) || barra.hidden || barra.skip) return;
+              ctx.fillText(_vizMoney(dataset.data[i]), horizontal ? barra.x + 6 : barra.x, horizontal ? barra.y : barra.y - 4);
+            });
+          });
+          ctx.restore();
+        },
       };
     }
 
     function svgDonut(segments, size = 130) {
       const total = segments.reduce((s, x) => s + x.value, 0);
-      const tc = _tc();
-      if (!total) return `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size * 0.35}" fill="none" stroke="${tc.track}" stroke-width="${size * 0.18}"/><text x="${size / 2}" y="${size / 2 + 4}" text-anchor="middle" font-size="11" fill="${tc.muted}">Sin datos</text></svg>`;
-      const r = size * 0.35, cx = size / 2, cy = size / 2, circ = 2 * Math.PI * r;
-      const { id, def } = _glowFilter(3);
-      let offset = 0, arcs = '';
-      for (const seg of segments) {
-        if (!seg.value) continue;
-        const dash = (seg.value / total) * circ;
-        arcs += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${size * 0.19}" stroke-dasharray="${dash} ${circ - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" opacity="0.92" filter="url(#${id})"/>`;
-        offset += dash;
-      }
-      return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${def}<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${tc.track}" stroke-width="${size * 0.19}"/>${arcs}<circle cx="${cx}" cy="${cy}" r="${r * 0.56}" fill="${tc.center}"/></svg>`;
+      if (!total) return `<div class="chart-frame" style="height:${size}px;width:${size}px;flex-shrink:0"><div class="chart-sin-datos">Sin datos</div></div>`;
+      return _chartFrame(size, () => {
+        const visibles = segments.filter(s => s.value > 0);
+        return {
+          type: 'doughnut',
+          data: {
+            labels: visibles.map(s => s.label),
+            datasets: [{
+              data: visibles.map(s => s.value),
+              backgroundColor: visibles.map(s => _vizColor(s.color)),
+              borderColor: _cssVar('--surface'), borderWidth: 2, hoverOffset: 4,
+            }],
+          },
+          options: {
+            cutout: '62%',
+            plugins: {
+              legend: size >= 160 ? _vizLeyenda() : { display: false },
+              tooltip: { callbacks: { label: context => `${context.label}: ${_vizMoney(context.parsed)}` } },
+            },
+          },
+        };
+      }, { style: size >= 160 ? '' : `width:${size}px;flex-shrink:0` });
     }
 
     function svgBarsH(items, barMaxW = 170, barH = 22, gap = 7) {
       if (!items.length) return '';
-      const tc = _tc();
-      const max = Math.max(...items.map(i => i.value), 1), labelW = 92, valueW = 72;
-      const W = labelW + barMaxW + valueW, H = items.length * (barH + gap);
-      const { id, def } = _glowFilter(2.5);
-      const bars = items.map((item, i) => {
-        const y = i * (barH + gap), w = Math.max(3, (item.value / max) * barMaxW);
-        const lbl = item.label.length > 13 ? item.label.slice(0, 12) + '…' : item.label;
-        const val = '$' + (item.value || 0).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-        return `<text x="${labelW - 5}" y="${y + barH * 0.72}" text-anchor="end" font-size="11" fill="${tc.label}">${lbl}</text><rect x="${labelW}" y="${y + 2}" width="${w}" height="${barH - 4}" rx="5" fill="${item.color || '#7C9A7E'}" opacity="0.85" filter="url(#${id})"/><text x="${labelW + w + 5}" y="${y + barH * 0.72}" font-size="11" font-weight="700" fill="${tc.val}">${val}</text>`;
-      }).join('');
-      return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
+      return _chartFrame(items.length * (barH + gap) + 16, () => {
+        const options = _vizOptions();
+        options.indexAxis = 'y';
+        options.layout = { padding: { right: 70 } };
+        options.scales.x = { display: false, beginAtZero: true };
+        options.scales.y = {
+          grid: { display: false }, border: { display: false },
+          ticks: {
+            autoSkip: false,
+            callback(value) {
+              const label = String(this.getLabelForValue(value));
+              return label.length > 13 ? label.slice(0, 12) + '…' : label;
+            },
+          },
+        };
+        return {
+          type: 'bar',
+          data: {
+            labels: items.map(item => item.label),
+            datasets: [{ ..._vizBarStyle(true), data: items.map(item => item.value), backgroundColor: items.map(item => _vizColor(item.color || VIZ_SEM.ventas)) }],
+          },
+          options,
+          plugins: [_vizEtiquetas({ horizontal: true })],
+        };
+      });
     }
 
     function svgBarsV(items, maxH = 90, barW = 32, gap = 8) {
       if (!items.length) return '';
-      const tc = _tc();
-      const maxVal = Math.max(...items.map(i => i.value), 1);
-      const W = items.length * (barW + gap), H = maxH + 28;
-      const { id, def } = _glowFilter(2.5);
-      const bars = items.map((item, i) => {
-        const x = i * (barW + gap), bh = Math.max(2, (item.value / maxVal) * maxH), y = maxH - bh;
-        const lbl = item.label.length > 3 ? item.label.slice(0, 3) : item.label;
-        const val = item.value > 0 ? '$' + (item.value / 1000).toFixed(1) + 'k' : '';
-        return `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="5" fill="${item.color || '#7C9A7E'}" opacity="0.85" filter="url(#${id})"/><text x="${x + barW / 2}" y="${maxH + 13}" text-anchor="middle" font-size="10" fill="${tc.axis}">${lbl}</text>${item.value > 0 ? `<text x="${x + barW / 2}" y="${y - 3}" text-anchor="middle" font-size="9" font-weight="700" fill="${tc.valSm}">${val}</text>` : ''}`;
-      }).join('');
-      return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
+      return _chartFrame(_VIZ_ALTO, () => {
+        const maxIndex = items.reduce((best, item, i) => item.value > items[best].value ? i : best, 0);
+        const options = _vizOptions();
+        options.layout = { padding: { top: 18 } };
+        return {
+          type: 'bar',
+          data: {
+            labels: items.map(item => item.label),
+            datasets: [{ ..._vizBarStyle(), data: items.map(item => item.value), backgroundColor: items.map(item => _vizColor(item.color || VIZ_SEM.ventas)) }],
+          },
+          options,
+          plugins: [_vizEtiquetas({ mostrar: i => items[i].value > 0 && (items.length <= 12 || i === maxIndex) })],
+        };
+      });
     }
 
     /* ── ESTADÍSTICAS ── */
@@ -2201,57 +2381,65 @@
       // Grouped bar chart (2 series)
       function svgGrouped(items, s1, s2, maxH = 110, bW = 12, gap = 10) {
         if (!items.length) return '';
-        const tc = _tc();
-        const maxV = Math.max(...items.flatMap(it => [it[s1.k] || 0, it[s2.k] || 0]), 1);
-        const gW = bW * 2 + 3 + gap, W = items.length * gW, H = maxH + 28;
-        const { id, def } = _glowFilter(2.5);
-        const bars = items.map((it, i) => {
-          const gx = i * gW;
-          const h1 = Math.max(2, (it[s1.k] || 0) / maxV * maxH), h2 = Math.max(2, (it[s2.k] || 0) / maxV * maxH);
-          return `<rect x="${gx}" y="${maxH - h1}" width="${bW}" height="${h1}" rx="3" fill="${s1.c}" opacity="0.85" filter="url(#${id})"/>
-              <rect x="${gx + bW + 3}" y="${maxH - h2}" width="${bW}" height="${h2}" rx="3" fill="${s2.c}" opacity="0.85" filter="url(#${id})"/>
-              <text x="${gx + bW}" y="${maxH + 13}" text-anchor="middle" font-size="8" fill="${tc.tick}">${it.label}</text>`;
-        }).join('');
-        return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
+        return _chartFrame(_VIZ_ALTO, () => ({
+          type: 'bar',
+          data: {
+            labels: items.map(item => item.label),
+            datasets: [s1, s2].map(s => ({
+              ..._vizBarStyle(), label: s.k.charAt(0).toUpperCase() + s.k.slice(1),
+              data: items.map(item => item[s.k] || 0), backgroundColor: _vizColor(s.c),
+            })),
+          },
+          options: { ..._vizOptions(), plugins: { ..._vizOptions().plugins, legend: _vizLeyenda() } },
+        }));
       }
 
       // Line/area chart (single or multi series) — escala adaptativa por día
       function svgLineArea(items, series, maxH = 110) {
         if (!items.length) return `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">Sin datos aún</div>`;
-        const tc = _tc();
-        // Escala: ancho por punto decrece conforme hay más días (mín 7px, máx 28px)
-        const ptW = Math.max(7, Math.min(28, Math.floor(560 / items.length)));
-        const W = items.length === 1 ? 200 : items.length * ptW + 20;
-        const H = maxH + 28;
-        const allV = items.flatMap(it => series.map(s => it[s.k] || 0));
-        const maxV = Math.max(...allV, 1), minV = Math.min(...allV, 0);
-        const range = maxV - minV || 1;
-        const xStep = items.length === 1 ? 0 : (W - 20) / (items.length - 1);
-        const { id, def } = _glowFilter(2);
-        const labelEvery = Math.ceil(items.length / 8);
-        const paths = series.map(s => {
-          const pts = items.map((it, i) => [10 + i * xStep, maxH - ((it[s.k] - minV) / range) * maxH]);
-          if (pts.length === 1) {
-            const [px, py] = pts[0];
-            return `<circle cx="${px}" cy="${py}" r="5" fill="${s.c}" filter="url(#${id})"/>
-              <text x="${px}" y="${py - 10}" text-anchor="middle" font-size="9" fill="${s.c}" font-weight="700">$${((items[0][s.k] || 0) / 1000).toFixed(1)}k</text>`;
-          }
-          const d = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-          const area = `M${pts[0][0]},${maxH} ` + pts.map(p => `L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ') + ` L${pts[pts.length-1][0]},${maxH} Z`;
-          const dots = pts.map((p, i) => {
-            const showDot = ptW >= 10;
-            const showLbl = i % labelEvery === 0;
-            return `${showDot ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" fill="${s.c}" filter="url(#${id})"/>` : ''}
-              ${showLbl ? `<text x="${p[0].toFixed(1)}" y="${(p[1]-7).toFixed(1)}" text-anchor="middle" font-size="7" fill="${s.c}" font-weight="700">$${((items[i][s.k]||0)/1000).toFixed(0)}k</text>` : ''}`;
-          }).join('');
-          return `<path d="${area}" fill="${s.c}" opacity="0.12"/>
-              <path d="${d}" fill="none" stroke="${s.c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" filter="url(#${id})"/>
-              ${dots}`;
-        }).join('');
-        const zy = minV < 0 ? maxH - (0 - minV) / range * maxH : null;
-        const zeroline = zy !== null ? `<line x1="10" y1="${zy.toFixed(1)}" x2="${W-10}" y2="${zy.toFixed(1)}" stroke="${tc.zero}" stroke-width="1" stroke-dasharray="4,3"/>` : '';
-        const xlabels = items.map((it, i) => i % labelEvery === 0 ? `<text x="${(10+i*xStep).toFixed(1)}" y="${H-4}" text-anchor="middle" font-size="7" fill="${tc.muted}">${it.label}</text>` : '').join('');
-        return `<svg width="${W}" height="${H}" style="display:block;overflow:visible;min-width:${W}px">${def}${zeroline}${paths}${xlabels}</svg>`;
+        return _chartFrame(_VIZ_ALTO, () => {
+          const options = _vizOptions();
+          if (series.length > 1) options.plugins.legend = _vizLeyenda();
+          options.interaction = { mode: 'index', intersect: false };
+          options.plugins.tooltip.mode = 'index';
+          return {
+            type: 'line',
+            data: {
+              labels: items.map(item => item.label),
+              datasets: series.map(s => {
+                const color = _vizColor(s.c);
+                return {
+                  label: s.k.charAt(0).toUpperCase() + s.k.slice(1),
+                  data: items.map(item => item[s.k] || 0),
+                  borderColor: color, borderWidth: 2, tension: 0,
+                  pointRadius: 0, pointHoverRadius: 4, pointHoverBorderWidth: 2,
+                  pointHoverBorderColor: _cssVar('--bg-warm'),
+                  fill: series.length === 1 ? 'origin' : false,
+                  backgroundColor: series.length === 1 ? _vizAlpha(color, 0.1) : color,
+                };
+              }),
+            },
+            options,
+            plugins: [{
+              id: 'vizGuia',
+              afterDatasetsDraw(chart) {
+                const activos = chart.tooltip?.getActiveElements();
+                if (!activos?.length) return;
+                const { ctx, chartArea } = chart;
+                const x = activos[0].element.x;
+                ctx.save();
+                ctx.strokeStyle = _cssVar('--text-muted');
+                ctx.globalAlpha = 0.6;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, chartArea.top);
+                ctx.lineTo(x, chartArea.bottom);
+                ctx.stroke();
+                ctx.restore();
+              },
+            }],
+          };
+        });
       }
 
       function renderContent(tab) {
@@ -2260,7 +2448,7 @@
         const fmt = l => tab === 'mes' ? fmtMes(l) : l;
         if (!rows.length) return '<div style="padding:40px;text-align:center;color:var(--text-muted);">Sin datos registrados</div>';
 
-        const items = rows.map(r => ({ ...r, label: fmt(r[lk]), balance: r.ventas + r.ingresos - r.gastos - (r.pagos || 0) }));
+        const items = rows.map(r => ({ ...r, label: fmt(r[lk]), balance: r.ventas + r.ingresos - r.gastos - (r.pagos_sin_gasto ?? r.pagos ?? 0) }));
         let acc = 0; const accItems = items.map(r => ({ ...r, acumulado: (acc += r.balance) }));
 
         // Datos diarios del año en curso para gráficas de línea
@@ -2274,42 +2462,31 @@
 
         const kpis = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
       <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:2px;">Ventas</div>
-        <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);">${fmt$(totV)}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--green-ok);margin-bottom:2px;">Ventas</div>
+        <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--green-ok);">${fmt$(totV)}</div>
       </div>
       <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:2px;">Ingresos</div>
-        <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--blue);">${fmt$(totI)}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--blue);margin-bottom:2px;">Ingresos</div>
+        <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--blue);">${fmt$(totI)}</div>
       </div>
       <div style="background:var(--red-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red);margin-bottom:2px;">Gastos</div>
-        <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--red);">${fmt$(totG)}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--red);margin-bottom:2px;">Gastos</div>
+        <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--red);">${fmt$(totG)}</div>
       </div>
       <div style="background:var(--terracotta-light,#FFF3E0);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--terracotta,#E65100);margin-bottom:2px;">Pagos Tiendas</div>
-        <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--terracotta,#E65100);">${fmt$(totP)}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--terracotta,#E65100);margin-bottom:2px;">Pagos Tiendas</div>
+        <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--terracotta,#E65100);">${fmt$(totP)}</div>
       </div>
     </div>`;
 
         const bW = tab === 'mes' ? 20 : 36, gp = tab === 'mes' ? 6 : 16;
-        const chart1 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">📊 Ventas por ${tab}</div>
-      <div style="overflow-x:auto;">${svgBarsV(items.map(r => ({ label: r.label, value: r.ventas, color: '#7C9A7E' })), 90, bW, gp)}</div>
-    </div>`;
-
-        const chart2 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">📉 Ventas vs Gastos (barras)</div>
-      <div style="display:flex;gap:12px;margin-bottom:6px;font-size:10px;">
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#7C9A7E;display:inline-block;"></span>Ventas</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#EF9A9A;display:inline-block;"></span>Gastos</span>
-      </div>
-      <div style="overflow-x:auto;">${svgGrouped(items, { k: 'ventas', c: '#7C9A7E' }, { k: 'gastos', c: '#EF9A9A' }, 90, tab === 'mes' ? 13 : 28, tab === 'mes' ? 7 : 16)}</div>
-    </div>`;
+        const card = (titulo, contenido, ancha = false) => `<div class="viz-card${ancha ? ' viz-card--ancha' : ''}"><h3>${titulo}</h3>${contenido}</div>`;
+        const chart1 = card(`Ventas por ${tab}`, svgBarsV(items.map(r => ({ label: r.label, value: r.ventas, color: VIZ_SEM.ventas })), 90, bW, gp));
+        const chart2 = card('Ventas vs gastos', svgGrouped(items, { k: 'ventas', c: VIZ_SEM.ventas }, { k: 'gastos', c: VIZ_SEM.gastos }, 90, tab === 'mes' ? 13 : 28, tab === 'mes' ? 7 : 16));
 
         // Gráfica ventas por tienda
-        const TCOLORS = ['#7C9A7E', '#C4755A', '#C9A84C', '#26A69A', '#5C6BC0', '#EC407A', '#8D6E63', '#546E7A'];
         const tiendas = data.tiendas || [];
-        const tiendaSeries = tiendas.map((t, i) => ({ k: t, c: TCOLORS[i % TCOLORS.length] }));
+        const tiendaSeries = tiendas.map((t, i) => ({ k: t, c: colorTienda(t) }));
         const tiendaItems = items.map(r => {
           const obj = { label: r.label };
           tiendas.forEach(t => { obj[t] = r.por_tienda?.[t] || 0; });
@@ -2319,72 +2496,30 @@
         // Multi-bar chart for N tiendas
         function svgMultiN(its, series, maxH = 120) {
           if (!its.length || !series.length) return '';
-          const bW = 10, pad = 2, gp = 8;
-          const gW = series.length * (bW + pad) + gp;
-          const W = its.length * gW, H = maxH + 28;
-          const maxV = Math.max(...its.flatMap(it => series.map(s => it[s.k] || 0)), 1);
-          const { id, def } = _glowFilter(2.5);
-          const bars = its.map((it, gi) => {
-            const gx = gi * gW;
-            const bs = series.map((s, si) => {
-              const v = it[s.k] || 0, h = Math.max(2, v / maxV * maxH), y = maxH - h;
-              return `<rect x="${gx + si * (bW + pad)}" y="${y}" width="${bW}" height="${h}" rx="2" fill="${s.c}" opacity="0.85" filter="url(#${id})"/>`;
-            }).join('');
-            return bs + `<text x="${gx + series.length * (bW + pad) / 2}" y="${maxH + 13}" text-anchor="middle" font-size="8" fill="${_tc().tick}">${it.label}</text>`;
-          }).join('');
-          return `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${def}${bars}</svg>`;
+          return _chartFrame(_VIZ_ALTO, () => ({
+            type: 'bar',
+            data: {
+              labels: its.map(item => item.label),
+              datasets: series.map(s => ({
+                ..._vizBarStyle(), label: s.k,
+                data: its.map(item => item[s.k] || 0), backgroundColor: _vizColor(s.c),
+              })),
+            },
+            options: { ..._vizOptions(), plugins: { ..._vizOptions().plugins, legend: _vizLeyenda() } },
+          }));
         }
 
-        const chart5 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">💵 Efectivo vs 💳 Tarjeta (diario)</div>
-      <div style="display:flex;gap:12px;margin-bottom:6px;font-size:10px;">
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#4CAF50;display:inline-block;"></span>Efectivo</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#C9A84C;display:inline-block;"></span>Tarjeta</span>
-      </div>
-      <div style="overflow-x:auto;">${svgLineArea(diasItems, [{ k: 'efectivo', c: '#4CAF50' }, { k: 'tarjeta', c: '#C9A84C' }], 90)}</div>
-    </div>`;
-
-        const chart3 = tiendas.length ? `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">🏪 Ventas por tienda</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;font-size:10px;">
-        ${tiendaSeries.map(s => `<span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.k}</span>`).join('')}
-      </div>
-      <div style="overflow-x:auto;">${svgMultiN(tiendaItems, tiendaSeries, 90)}</div>
-    </div>` : '';
-
-        const chart4 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">🍩 Distribución total</div>
-      <div style="display:flex;align-items:center;gap:16px;justify-content:center;">
-        ${svgDonut([{ label: 'Ventas', value: totV, color: '#7C9A7E' }, { label: 'Ingresos', value: totI, color: '#64B5F6' }, { label: 'Gastos', value: totG, color: '#EF9A9A' }, { label: 'Pagos', value: totP, color: '#E65100' }].filter(s => s.value > 0), 90)}
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          ${[{ label: 'Ventas', v: totV, c: '#7C9A7E' }, { label: 'Ingresos', v: totI, c: '#64B5F6' }, { label: 'Gastos', v: totG, c: '#EF9A9A' }, { label: 'Pagos', v: totP, c: '#E65100' }].map(s => `<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:9px;height:9px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.label}: <strong>${fmt$(s.v)}</strong></div>`).join('')}
-        </div>
-      </div>
-    </div>`;
-
-        const chart6 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">📈 Ventas vs Gastos (diario)</div>
-      <div style="display:flex;gap:12px;margin-bottom:6px;font-size:10px;">
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#7C9A7E;display:inline-block;"></span>Ventas</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#EF9A9A;display:inline-block;"></span>Gastos</span>
-      </div>
-      <div style="overflow-x:auto;">${svgLineArea(diasItems, [{ k: 'ventas', c: '#7C9A7E' }, { k: 'gastos', c: '#EF9A9A' }], 90)}</div>
-    </div>`;
-
+        const chart5 = card('Efectivo vs tarjeta por día', svgLineArea(diasItems, [{ k: 'efectivo', c: VIZ_SEM.efectivo }, { k: 'tarjeta', c: VIZ_SEM.tarjeta }], 90));
+        const chart3 = tiendas.length ? card('Ventas por tienda', svgMultiN(tiendaItems, tiendaSeries, 90)) : '';
+        const chart4 = card('Distribución total', svgDonut([{ label: 'Ventas', value: totV, color: VIZ_SEM.ventas }, { label: 'Ingresos', value: totI, color: VIZ_SEM.ingresos }, { label: 'Gastos', value: totG, color: VIZ_SEM.gastos }, { label: 'Pagos', value: totP, color: VIZ_SEM.pagos }].filter(s => s.value > 0), _VIZ_ALTO));
+        const chart6 = card('Ventas vs gastos por día', svgLineArea(diasItems, [{ k: 'ventas', c: VIZ_SEM.ventas }, { k: 'gastos', c: VIZ_SEM.gastos }], 90));
         // Balance acumulado diario caja vs banco
-        const chart7 = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:10px;margin-bottom:7px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">💰 Balance Acumulado · Caja vs Banco</div>
-      <div style="display:flex;gap:12px;margin-bottom:6px;font-size:10px;">
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#4CAF50;display:inline-block;"></span>Caja</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#90CAF9;display:inline-block;"></span>Banco</span>
-      </div>
-      <div style="overflow-x:auto;">${svgLineArea(diasBalAcc, [{ k: 'caja', c: '#4CAF50' }, { k: 'banco', c: '#90CAF9' }], 100)}</div>
-    </div>`;
+        const chart7 = card('Balance acumulado: caja vs banco', svgLineArea(diasBalAcc, [{ k: 'caja', c: VIZ_SEM.caja }, { k: 'banco', c: VIZ_SEM.banco }], 100), true);
 
-        const table = `<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Detalle</div>
+        const table = `<div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:6px;">Detalle</div>
     <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr style="background:var(--bg-warm);font-size:10px;text-transform:uppercase;color:var(--text-secondary);">
+        <thead><tr style="background:var(--bg-warm);font-size:10px;color:var(--text-secondary);">
           <th style="padding:7px 10px;text-align:left;">${tab === 'mes' ? 'Mes' : 'Año'}</th>
           <th style="padding:7px 10px;text-align:right;">Ventas</th>
           <th style="padding:7px 10px;text-align:right;"># Tickets</th>
@@ -2394,36 +2529,36 @@
           <th style="padding:7px 10px;text-align:right;">Balance</th>
         </tr></thead>
         <tbody>${rows.map((r, i) => {
-          const b = r.ventas + r.ingresos - r.gastos - (r.pagos || 0);
+          const b = r.ventas + r.ingresos - r.gastos - (r.pagos_sin_gasto ?? r.pagos ?? 0);
           return `<tr style="border-top:1px solid var(--border-light);${i % 2 === 1 ? 'background:var(--bg-warm);' : ''}">
             <td style="padding:7px 10px;font-weight:600;">${fmt(r[lk])}</td>
-            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;">${fmt$(r.ventas)}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:var(--font-num);">${fmt$(r.ventas)}</td>
             <td style="padding:7px 10px;text-align:right;color:var(--text-secondary);">${r.num_ventas}</td>
-            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:#2E7D32;">${fmt$(r.ingresos)}</td>
-            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--red);">${fmt$(r.gastos)}</td>
-            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--terracotta,#E65100);">${fmt$(r.pagos || 0)}</td>
-            <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:800;color:${b >= 0 ? 'var(--sage-dark)' : 'var(--red)'}">${fmt$(b)}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:var(--font-num);color:#2E7D32;">${fmt$(r.ingresos)}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:var(--font-num);color:var(--red);">${fmt$(r.gastos)}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:var(--font-num);color:var(--terracotta,#E65100);">${fmt$(r.pagos || 0)}</td>
+            <td style="padding:7px 10px;text-align:right;font-family:var(--font-num);font-weight:800;color:${b >= 0 ? 'var(--sage-dark)' : 'var(--red)'}">${fmt$(b)}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>
     </div>`;
 
-        return kpis + chart7 + chart5 + chart6 + chart1 + chart2 + chart3 + chart4 + table;
+        return kpis + `<div class="viz-grid">${chart7 + chart5 + chart6 + chart1 + chart2 + chart3 + chart4}</div>` + table;
       }
 
       const balanceHtml = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
       <div style="background:var(--surface);border:2px solid var(--sage);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:6px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);">📊 Balance Actual</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${_balTotal >= 0 ? 'var(--sage-dark)' : 'var(--red)'};">${$pesos(_balTotal)}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--text-secondary);">📊 Balance Actual</div>
+        <div style="font-family:var(--font-num);font-size:22px;font-weight:800;color:${_balTotal >= 0 ? 'var(--sage-dark)' : 'var(--red)'};">${$pesos(_balTotal)}</div>
         <button style="align-self:flex-start;font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-secondary);cursor:pointer;" onclick="showAjusteBalanceModal(${_balCaja},${_balBanco})">✏️ Ajustar</button>
       </div>
       <div style="background:var(--green-light);border:2px solid var(--sage);border-radius:var(--radius-sm);padding:14px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:6px;">💵 Efectivo en Caja</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${_balCaja >= 0 ? 'var(--green-ok)' : 'var(--red)'};">${$pesos(_balCaja)}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--green-ok);margin-bottom:6px;">💵 Efectivo en Caja</div>
+        <div style="font-family:var(--font-num);font-size:22px;font-weight:800;color:${_balCaja >= 0 ? 'var(--green-ok)' : 'var(--red)'};">${$pesos(_balCaja)}</div>
       </div>
       <div style="background:var(--gold-light);border:2px solid var(--gold);border-radius:var(--radius-sm);padding:14px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">🏦 Tarjeta / Banco</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--gold);">${$pesos(_balBanco)}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--gold);margin-bottom:6px;">🏦 Tarjeta / Banco</div>
+        <div style="font-family:var(--font-num);font-size:22px;font-weight:800;color:var(--gold);">${$pesos(_balBanco)}</div>
       </div>
     </div>`;
 
@@ -2456,7 +2591,7 @@
       }
       function _periodoFiltroHtml(idPrefix, preset, desde, hasta, onPreset, onApply, includeAll) {
         return `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Periodo de ventas</div>
+          <div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:8px;">Periodo de ventas</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
             ${_presetBtn(preset === 'mes', 'Este mes', onPreset + "('mes')")}
             ${_presetBtn(preset === '7d', 'Últimos 7 días', onPreset + "('7d')")}
@@ -2505,10 +2640,10 @@
             const sub = subKey != null ? `<span style="color:var(--text-muted);font-weight:500;">${it[subKey]} u.</span>` : '';
             return `<div style="margin-bottom:8px;">
               <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
-                <span style="font-weight:600;color:var(--text);">${i + 1}. ${it[labelKey]}</span>
-                <span style="display:flex;gap:8px;align-items:center;"><span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:${color};">${fmt$(it[valueKey])}</span>${sub}</span>
+                <span style="font-weight:600;color:var(--text);">${i + 1}. ${_attr(it[labelKey])}</span>
+                <span style="display:flex;gap:8px;align-items:center;"><span style="font-family:var(--font-num);font-weight:700;color:var(--text);">${_vizMoney(it[valueKey])}</span>${sub}</span>
               </div>
-              <div style="height:8px;background:var(--bg-warm);border-radius:5px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${color};border-radius:5px;"></div></div>
+              <div style="height:8px;background:var(--border-light);border-radius:0 4px 4px 0;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${color};border-radius:0 4px 4px 0;"></div></div>
             </div>`;
           }).join('');
         }
@@ -2530,38 +2665,38 @@
         const r = d.resumen || {};
         const kpis = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
           <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:2px;">Vendido</div>
-            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);">${fmt$(r.total)}</div>
+            <div style="font-size:10px;font-weight:700;color:var(--green-ok);margin-bottom:2px;">Vendido</div>
+            <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--green-ok);">${fmt$(r.total)}</div>
           </div>
           <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:2px;">Tickets</div>
-            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--blue);">${r.num_ventas || 0}</div>
+            <div style="font-size:10px;font-weight:700;color:var(--blue);margin-bottom:2px;">Tickets</div>
+            <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--blue);">${r.num_ventas || 0}</div>
           </div>
           <div style="background:var(--rose-light,#F8E4FF);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--rose,#CE93D8);margin-bottom:2px;">Unidades</div>
-            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--rose,#CE93D8);">${r.unidades || 0}</div>
+            <div style="font-size:10px;font-weight:700;color:var(--rose,#CE93D8);margin-bottom:2px;">Unidades</div>
+            <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--rose,#CE93D8);">${r.unidades || 0}</div>
           </div>
           <div style="background:var(--gold-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">Ticket prom.</div>
-            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--gold);">${fmt$(r.ticket_promedio)}</div>
+            <div style="font-size:10px;font-weight:700;color:var(--gold);margin-bottom:2px;">Ticket prom.</div>
+            <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--gold);">${fmt$(r.ticket_promedio)}</div>
           </div>
         </div>
         <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Periodo: <strong style="color:var(--text-secondary);">${periodoLabel}</strong></div>`;
 
         const card = (titulo, contenido) => `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:10px;">${titulo}</div>
+          <div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:10px;">${titulo}</div>
           ${contenido}
         </div>`;
 
-        const talleres = card('🎨 Talleres que más venden', barList(d.ranking_talleres, 'producto', 'total', '#7E57C2', 'cantidad'));
-        const dias = card('📅 Días que más venden', barList(d.ranking_dias_semana, 'dia', 'total', '#26A69A', 'num_ventas'));
-        const tiendasCard = card('🏪 Tiendas (excluye Estación 304)', barList(d.ranking_tiendas, 'tienda', 'total', '#5C6BC0', 'cantidad'));
-        const productos = card('⭐ Top productos', barList(d.ranking_productos, 'producto', 'total', '#C4755A', 'cantidad'));
+        const talleres = card('🎨 Talleres que más venden', barList(d.ranking_talleres, 'producto', 'total', VIZ[0], 'cantidad'));
+        const dias = card('📅 Días que más venden', barList(d.ranking_dias_semana, 'dia', 'total', VIZ[3], 'num_ventas'));
+        const tiendasCard = card('🏪 Tiendas (excluye Estación 304)', barList(d.ranking_tiendas, 'tienda', 'total', VIZ[4], 'cantidad'));
+        const productos = card('⭐ Top productos', barList(d.ranking_productos, 'producto', 'total', VIZ[1], 'cantidad'));
 
         const topDiasRows = (d.top_dias || []).map((t, i) => `<tr style="border-top:1px solid var(--border-light);${i % 2 === 1 ? 'background:var(--bg-warm);' : ''}">
             <td style="padding:6px 10px;font-weight:600;">${i + 1}. ${t.fecha}</td>
             <td style="padding:6px 10px;text-align:right;color:var(--text-secondary);">${t.num_ventas} tickets</td>
-            <td style="padding:6px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--sage-dark);">${fmt$(t.total)}</td>
+            <td style="padding:6px 10px;text-align:right;font-family:var(--font-num);font-weight:700;color:var(--sage-dark);">${fmt$(t.total)}</td>
           </tr>`).join('');
         const topDias = card('🔥 Mejores fechas', `<div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
           <table style="width:100%;border-collapse:collapse;font-size:12px;">${topDiasRows || '<tr><td style="padding:16px;text-align:center;color:var(--text-muted);">Sin datos</td></tr>'}</table>
@@ -2583,8 +2718,7 @@
       let calPeriodoData = null;
       let calTiendaTab = 0;
       const MESES_CAL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-      const CAL_TCOLORS = ['#7C9A7E', '#C4755A', '#C9A84C', '#26A69A', '#5C6BC0', '#EC407A', '#8D6E63', '#546E7A'];
-      const PAGO_COLORS = { 'Efectivo': '#4CAF50', 'Tarjeta': '#C9A84C', 'Transferencia': '#26A69A', 'Mixto': '#5C6BC0' };
+      const PAGO_COLORS = { 'Efectivo': VIZ_SEM.efectivo, 'Tarjeta': VIZ_SEM.tarjeta, 'Transferencia': VIZ_SEM.transferencia, 'Mixto': VIZ_SEM.mixto };
 
       async function loadCalendario() {
         let url = `/ventas/calendario?anio=${calYear}&mes=${calMonth}`;
@@ -2616,20 +2750,20 @@
 
         const kpis = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
           <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green-ok);margin-bottom:2px;">Total periodo</div>
-            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--green-ok);">${fmt$(r.total)}</div>
+            <div style="font-size:10px;font-weight:700;color:var(--green-ok);margin-bottom:2px;">Total periodo</div>
+            <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--green-ok);">${fmt$(r.total)}</div>
           </div>
           <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:2px;">Tickets</div>
-            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--blue);">${r.num_ventas || 0}</div>
+            <div style="font-size:10px;font-weight:700;color:var(--blue);margin-bottom:2px;">Tickets</div>
+            <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--blue);">${r.num_ventas || 0}</div>
           </div>
           <div style="background:var(--gold-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">Ticket prom.</div>
-            <div style="font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--gold);">${fmt$(r.ticket_promedio)}</div>
+            <div style="font-size:10px;font-weight:700;color:var(--gold);margin-bottom:2px;">Ticket prom.</div>
+            <div style="font-size:16px;font-weight:800;font-family:var(--font-num);color:var(--gold);">${fmt$(r.ticket_promedio)}</div>
           </div>
           <div style="background:var(--sage-light);border-radius:var(--radius-sm);padding:9px 12px;text-align:center;border:1px solid var(--border-light);">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--sage-dark);margin-bottom:2px;">Día más fuerte</div>
-            <div style="font-size:13px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">${mejor ? fmt$(mejor.total) : '—'}</div>
+            <div style="font-size:10px;font-weight:700;color:var(--sage-dark);margin-bottom:2px;">Día más fuerte</div>
+            <div style="font-size:13px;font-weight:800;font-family:var(--font-num);color:var(--sage-dark);">${mejor ? fmt$(mejor.total) : '—'}</div>
             <div style="font-size:9px;color:var(--text-muted);">${mejor ? mejor.fecha : ''}</div>
           </div>
         </div>`;
@@ -2637,42 +2771,29 @@
         const diasItems = (d.ranking_dias_semana || []).map(x => ({
           label: x.label || x.dia.slice(0, 3),
           value: x.total,
-          color: '#26A69A',
+          color: VIZ_SEM.transferencia,
         }));
         const chartDias = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Días más fuertes</div>
+          <div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:8px;">Días más fuertes</div>
           <div style="overflow-x:auto;">${svgBarsV(diasItems, 90, 36, 8)}</div>
         </div>`;
 
         const diarioItems = (d.diario || []).map(x => ({ label: x.label, total: x.total }));
-        const chartDiario = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Ventas diarias del periodo</div>
-          <div style="overflow-x:auto;">${svgLineArea(diarioItems, [{ k: 'total', c: '#7C9A7E' }], 90)}</div>
-        </div>`;
+        const chartDiario = `<div class="viz-card"><h3>Ventas diarias del periodo</h3>${svgLineArea(diarioItems, [{ k: 'total', c: VIZ_SEM.ventas }], 90)}</div>`;
 
         const tiendaBars = (d.ventas_por_tienda || []).map((t, i) => ({
           label: t.tienda,
           value: t.total,
-          color: CAL_TCOLORS[i % CAL_TCOLORS.length],
+          color: colorTienda(t.tienda),
         }));
-        const chartTiendas = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Cuánto vendió cada tienda</div>
-          <div style="overflow-x:auto;">${tiendaBars.length ? svgBarsH(tiendaBars, 180, 22, 7) : '<div style="color:var(--text-muted);font-size:12px;">Sin ventas</div>'}</div>
-        </div>`;
+        const chartTiendas = `<div class="viz-card"><h3>Cuánto vendió cada tienda</h3>${tiendaBars.length ? svgBarsH(tiendaBars, 180, 22, 7) : '<div style="color:var(--text-muted);font-size:12px;">Sin ventas</div>'}</div>`;
 
         const pagoSegs = (d.metodos_pago || []).map(p => ({
           label: p.metodo,
           value: p.total,
-          color: PAGO_COLORS[p.metodo] || '#8D6E63',
+          color: PAGO_COLORS[p.metodo] || 'var(--viz-other)',
         }));
-        const pagoLegend = pagoSegs.map(s => `<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:9px;height:9px;border-radius:2px;background:${s.color};display:inline-block;"></span>${s.label}: <strong>${fmt$(s.value)}</strong></div>`).join('');
-        const chartPago = `<div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Métodos de pago</div>
-          <div style="display:flex;align-items:center;gap:14px;justify-content:center;">
-            ${svgDonut(pagoSegs, 100)}
-            <div style="display:flex;flex-direction:column;gap:5px;">${pagoLegend || '<span style="color:var(--text-muted);font-size:12px;">Sin datos</span>'}</div>
-          </div>
-        </div>`;
+        const chartPago = `<div class="viz-card"><h3>Métodos de pago</h3>${pagoSegs.length ? svgDonut(pagoSegs, 220) : '<span style="color:var(--text-muted);font-size:12px;">Sin datos</span>'}</div>`;
 
         // Qué vendió cada tienda
         const detalle = d.detalle_por_tienda || {};
@@ -2690,13 +2811,13 @@
           const rows = items.map(p => `<tr style="border-top:1px solid var(--border-light);">
             <td style="padding:5px 8px;font-size:12px;">${p.producto}</td>
             <td style="padding:5px 8px;font-size:12px;text-align:right;color:var(--text-secondary);">${p.cantidad}</td>
-            <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;">$${p.total.toFixed(2)}</td>
+            <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:var(--font-num);font-weight:700;">$${p.total.toFixed(2)}</td>
           </tr>`).join('');
           detalleHtml = `
             <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">${tabs}</div>
             <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
               <table style="width:100%;border-collapse:collapse;">
-                <thead><tr style="background:var(--bg-warm);font-size:10px;text-transform:uppercase;color:var(--text-secondary);">
+                <thead><tr style="background:var(--bg-warm);font-size:10px;color:var(--text-secondary);">
                   <th style="padding:6px 8px;text-align:left;">Producto</th>
                   <th style="padding:6px 8px;text-align:right;">Cant.</th>
                   <th style="padding:6px 8px;text-align:right;">Total</th>
@@ -2704,7 +2825,7 @@
                 <tbody>${rows}</tbody>
                 <tfoot><tr style="background:var(--sage-light);">
                   <td colspan="2" style="padding:6px 8px;font-size:12px;font-weight:700;">TOTAL ${nombres[calTiendaTab]}</td>
-                  <td style="padding:6px 8px;font-size:14px;font-weight:800;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">${fmt$(totalT)}</td>
+                  <td style="padding:6px 8px;font-size:14px;font-weight:800;text-align:right;font-family:var(--font-num);color:var(--sage-dark);">${fmt$(totalT)}</td>
                 </tr></tfoot>
               </table>
             </div>`;
@@ -2713,7 +2834,7 @@
         const topRows = (d.top_dias || []).slice(0, 5).map((t, i) => `<tr style="border-top:1px solid var(--border-light);">
           <td style="padding:5px 8px;font-size:12px;font-weight:600;">${i + 1}. ${t.fecha}</td>
           <td style="padding:5px 8px;font-size:12px;text-align:right;color:var(--text-secondary);">${t.num_ventas} tickets</td>
-          <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--sage-dark);">${fmt$(t.total)}</td>
+          <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:var(--font-num);font-weight:700;color:var(--sage-dark);">${fmt$(t.total)}</td>
         </tr>`).join('');
 
         return `
@@ -2728,11 +2849,11 @@
               ${chartTiendas}${chartPago}
             </div>
             <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:10px;">Qué vendió cada tienda</div>
+              <div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:10px;">Qué vendió cada tienda</div>
               ${detalleHtml}
             </div>
             <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Top fechas del periodo</div>
+              <div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:8px;">Top fechas del periodo</div>
               <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);">
                 <table style="width:100%;border-collapse:collapse;font-size:12px;">
                   ${topRows || '<tr><td style="padding:14px;text-align:center;color:var(--text-muted);">Sin datos</td></tr>'}
@@ -2758,7 +2879,7 @@
           const inPeriod = calDesde && calHasta && fecha >= calDesde && fecha <= calHasta;
           cells.push(`<button onclick="window._calSelect('${fecha}')" style="padding:8px 4px;border-radius:10px;border:1px solid ${selected ? 'var(--sage)' : inPeriod && has ? 'var(--sage)' : 'var(--border)'};background:${selected ? 'var(--sage-light)' : has ? 'var(--surface)' : 'var(--bg-warm)'};cursor:pointer;text-align:left;min-height:64px;opacity:${inPeriod || !calDesde ? 1 : 0.45};">
             <div style="font-size:12px;font-weight:700;color:var(--text);">${day}</div>
-            ${has ? `<div style="font-size:10px;color:var(--sage-dark);font-family:'JetBrains Mono',monospace;margin-top:4px;">$${info.total.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</div>
+            ${has ? `<div style="font-size:10px;color:var(--sage-dark);font-family:var(--font-num);margin-top:4px;">$${info.total.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</div>
             <div style="font-size:9px;color:var(--text-muted);">${info.num_ventas} venta${info.num_ventas !== 1 ? 's' : ''}</div>` : '<div style="font-size:9px;color:var(--text-muted);margin-top:6px;">—</div>'}
           </button>`);
         }
@@ -2785,7 +2906,7 @@
             return `<div style="padding:8px 0;border-bottom:1px solid var(--border-light);font-size:12px;">
               <div style="display:flex;justify-content:space-between;gap:8px;">
                 <span><strong>${v.folio}</strong> · ${hora} · ${v.metodo_pago}</span>
-                <span style="font-family:'JetBrains Mono',monospace;font-weight:700;">$${v.total.toFixed(2)}</span>
+                <span style="font-family:var(--font-num);font-weight:700;">$${v.total.toFixed(2)}</span>
               </div>
               ${itemsTxt ? `<div style="font-size:10px;color:var(--text-muted);margin-top:3px;">${itemsTxt}</div>` : ''}
             </div>`;
@@ -2841,6 +2962,7 @@
       }
 
       function renderModal(tab) {
+        if (_fpActive) _fpRendered = false;  // en modo página, cada redibujado reemplaza la página en vez de abrir un modal encima
         const bs = t => t === tab ? 'background:var(--sage-dark);color:#fff;border:none;' : 'background:var(--bg-warm);color:var(--text-secondary);border:1px solid var(--border);';
         let contenido = '';
         if (tab === 'estudio') contenido = renderEstudio();
@@ -2992,13 +3114,12 @@
       catch (e) { toast('❌', e.message, 'var(--red)'); return; }
 
       const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-      const TIENDA_COLORS = ['#7C9A7E', '#C4755A', '#C9A84C', '#26A69A', '#5C6BC0', '#EC407A', '#8D6E63'];
 
       // Donut métodos de pago
       const segsPago = [
-        { label: 'Efectivo', value: r.total_efectivo, color: '#4CAF50' },
-        { label: 'Tarjeta', value: r.total_tarjeta, color: '#C9A84C' },
-        { label: 'Transfer.', value: r.total_transferencia || 0, color: '#26A69A' },
+        { label: 'Efectivo', value: r.total_efectivo, color: VIZ_SEM.efectivo },
+        { label: 'Tarjeta', value: r.total_tarjeta, color: VIZ_SEM.tarjeta },
+        { label: 'Transfer.', value: r.total_transferencia || 0, color: VIZ_SEM.transferencia },
       ].filter(s => s.value > 0);
 
       // Barras verticales por día (lunes-domingo)
@@ -3008,7 +3129,7 @@
       for (let i = 0; i < 7; i++) {
         const d = new Date(lunes); d.setDate(lunes.getDate() + i);
         const key = fmt(d);
-        barsDia.push({ label: DIAS_SEMANA[i], value: diasMap[key]?.total || 0, color: d <= hoy ? '#7C9A7E' : '#ddd' });
+        barsDia.push({ label: DIAS_SEMANA[i], value: diasMap[key]?.total || 0, color: d <= hoy ? VIZ_SEM.ventas : VIZ_SEM.futuro });
       }
 
       // Check which tiendas have already been paid this week
@@ -3048,19 +3169,18 @@
 
         return `<tr>
       <td style="padding:7px 10px;font-size:12px;display:flex;align-items:center;gap:6px;">
-        <span style="width:10px;height:10px;border-radius:50%;background:${TIENDA_COLORS[i % TIENDA_COLORS.length]};flex-shrink:0;display:inline-block;"></span>
+        <span style="width:8px;height:8px;border-radius:2px;background:${colorTienda(t.tienda)};flex-shrink:0;display:inline-block;"></span>
         ${t.tienda}
       </td>
-      <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;">$${t.total.toFixed(2)}</td>
-      <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;color:var(--red);">${t.comision > 0 ? '-$' + t.comision.toFixed(2) : '-'}</td>
-      <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;text-align:right;color:var(--sage-dark);">$${montoSugerido.toFixed(2)}</td>
+      <td style="padding:7px 10px;font-family:var(--font-num);font-size:12px;text-align:right;">$${t.total.toFixed(2)}</td>
+      <td style="padding:7px 10px;font-family:var(--font-num);font-size:12px;text-align:right;color:var(--red);">${t.comision > 0 ? '-$' + t.comision.toFixed(2) : '-'}</td>
+      <td style="padding:7px 10px;font-family:var(--font-num);font-size:13px;font-weight:800;text-align:right;color:var(--sage-dark);">$${montoSugerido.toFixed(2)}</td>
       <td style="padding:7px 10px;text-align:center;">${pagarBtn}</td>
     </tr>`;
       }).join('');
 
       const sabroCard = '';
 
-      const legend = segsPago.map(s => `<div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:10px;height:10px;border-radius:50%;background:${s.color};display:inline-block;"></span>${s.label}: <strong>$${s.value.toFixed(0)}</strong></div>`).join('');
 
       // Balance cards for the modal
       const balEstudio = r.balance_estudio_deco || 0;
@@ -3087,33 +3207,24 @@
     <!-- Balance cards -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
       <div style="background:var(--sage-light);border-radius:var(--radius-sm);padding:14px;border-left:4px solid var(--sage);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--sage-dark);margin-bottom:4px;">🏠 Balance Estudio Deco</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${balEstudio >= 0 ? 'var(--sage-dark)' : 'var(--red)'};">${$pesos(balEstudio)}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--sage-dark);margin-bottom:4px;">🏠 Balance Estudio Deco</div>
+        <div style="font-family:var(--font-num);font-size:22px;font-weight:800;color:${balEstudio >= 0 ? 'var(--sage-dark)' : 'var(--red)'};">${$pesos(balEstudio)}</div>
       </div>
       <div style="background:var(--terracotta-light);border-radius:var(--radius-sm);padding:14px;border-left:4px solid var(--terracotta);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--terracotta);margin-bottom:4px;">☕ Balance Estación 304</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--terracotta);">${$pesos(balEstacion)}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--terracotta);margin-bottom:4px;">☕ Balance Estación 304</div>
+        <div style="font-family:var(--font-num);font-size:22px;font-weight:800;color:var(--terracotta);">${$pesos(balEstacion)}</div>
       </div>
     </div>
 
     <!-- Gráfica semanal -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;align-items:start;">
-      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Ventas por día</div>
-        <div style="overflow-x:auto;">${svgBarsV(barsDia, 80, 28, 6)}</div>
-      </div>
-      <div style="background:var(--bg-warm);border-radius:var(--radius-sm);padding:12px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Métodos de pago</div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          ${svgDonut(segsPago, 90)}
-          <div style="display:flex;flex-direction:column;gap:5px;">${legend}</div>
-        </div>
-      </div>
+    <div class="viz-grid">
+      <div class="viz-card"><h3>Ventas por día</h3>${svgBarsV(barsDia, 80, 28, 6)}</div>
+      <div class="viz-card"><h3>Métodos de pago</h3>${svgDonut(segsPago, 220)}</div>
     </div>
 
     <!-- Ventas por tienda (artículos) -->
     <div style="margin-bottom:16px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Ventas por tienda</div>
+      <div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:8px;">Ventas por tienda</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="semanal-tienda-tabs">
         ${Object.keys(r.detalle_por_tienda || {}).map((nombre, i) => `
           <button onclick="semanalSelectTienda('${nombre.replace(/'/g, "\\'")}')" id="stab-${i}"
@@ -3131,7 +3242,7 @@
             const costoTienda = items.reduce((s, x) => s + x.costo_total, 0);
             return `<div id="stienda-${i}" style="display:${i === 0 ? 'block' : 'none'}">
               <table style="width:100%;border-collapse:collapse;">
-                <thead><tr style="font-size:10px;text-transform:uppercase;color:var(--text-secondary);">
+                <thead><tr style="font-size:10px;color:var(--text-secondary);">
                   <th style="padding:4px 8px;text-align:left;font-weight:700;">Producto</th>
                   <th style="padding:4px 8px;text-align:right;font-weight:700;">Cant.</th>
                   <th style="padding:4px 8px;text-align:right;font-weight:700;">Costo</th>
@@ -3141,14 +3252,14 @@
                   ${items.map(p => `<tr style="border-top:1px solid var(--border-light);">
                     <td style="padding:5px 8px;font-size:12px;">${p.producto}</td>
                     <td style="padding:5px 8px;font-size:12px;text-align:right;color:var(--text-secondary);">${p.cantidad}</td>
-                    <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text-secondary);">$${p.costo_total.toFixed(2)}</td>
-                    <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;">$${p.total.toFixed(2)}</td>
+                    <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:var(--font-num);color:var(--text-secondary);">$${p.costo_total.toFixed(2)}</td>
+                    <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:var(--font-num);font-weight:700;">$${p.total.toFixed(2)}</td>
                   </tr>`).join('')}
                 </tbody>
                 <tfoot><tr style="background:var(--sage-light);">
                   <td colspan="2" style="padding:6px 8px;font-size:12px;font-weight:700;">TOTAL SEMANA</td>
-                  <td style="padding:6px 8px;font-size:12px;font-weight:700;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text-secondary);">$${costoTienda.toFixed(2)}</td>
-                  <td style="padding:6px 8px;font-size:14px;font-weight:800;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--sage-dark);">$${totalTienda.toFixed(2)}</td>
+                  <td style="padding:6px 8px;font-size:12px;font-weight:700;text-align:right;font-family:var(--font-num);color:var(--text-secondary);">$${costoTienda.toFixed(2)}</td>
+                  <td style="padding:6px 8px;font-size:14px;font-weight:800;text-align:right;font-family:var(--font-num);color:var(--sage-dark);">$${totalTienda.toFixed(2)}</td>
                 </tr></tfoot>
               </table>
             </div>`;
@@ -3158,10 +3269,10 @@
     </div>
 
     <!-- Tabla por tienda -->
-    <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Pago por tienda (neto tras comisión)</div>
+    <div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:6px;">Pago por tienda (neto tras comisión)</div>
     <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:2px;">
       <table style="width:100%;border-collapse:collapse;">
-        <thead><tr style="background:var(--bg-warm);font-size:10px;text-transform:uppercase;color:var(--text-secondary);">
+        <thead><tr style="background:var(--bg-warm);font-size:10px;color:var(--text-secondary);">
           <th style="padding:6px 10px;text-align:left;font-weight:700;">Tienda</th>
           <th style="padding:6px 10px;text-align:right;font-weight:700;">Bruto</th>
           <th style="padding:6px 10px;text-align:right;font-weight:700;">Comisión</th>
@@ -3171,9 +3282,9 @@
         <tbody>${tiendaRows || '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">Sin ventas en este período</td></tr>'}</tbody>
         ${r.ventas_por_tienda?.length ? `<tfoot><tr style="background:var(--sage-light);">
           <td style="padding:7px 10px;font-size:12px;font-weight:700;">TOTAL</td>
-          <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;font-weight:700;">$${r.total_ventas.toFixed(2)}</td>
-          <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;color:var(--red);font-weight:700;">-$${(r.ventas_por_tienda.reduce((s, t) => s + t.comision, 0)).toFixed(2)}</td>
-          <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;text-align:right;color:var(--sage-dark);">$${(r.ventas_por_tienda.reduce((s, t) => s + t.neto, 0)).toFixed(2)}</td>
+          <td style="padding:7px 10px;font-family:var(--font-num);font-size:12px;text-align:right;font-weight:700;">$${r.total_ventas.toFixed(2)}</td>
+          <td style="padding:7px 10px;font-family:var(--font-num);font-size:12px;text-align:right;color:var(--red);font-weight:700;">-$${(r.ventas_por_tienda.reduce((s, t) => s + t.comision, 0)).toFixed(2)}</td>
+          <td style="padding:7px 10px;font-family:var(--font-num);font-size:14px;font-weight:800;text-align:right;color:var(--sage-dark);">$${(r.ventas_por_tienda.reduce((s, t) => s + t.neto, 0)).toFixed(2)}</td>
           <td></td>
         </tr></tfoot>`: ''}
       </table>
@@ -3205,7 +3316,7 @@
     <div class="modal-title">💰 Pagar a ${tiendaNombre}</div>
     <div class="modal-sub">Registrar pago semanal</div>
     <div class="field"><label>Monto a pagar</label>
-      <input type="number" id="ptMonto" class="input" value="${montoSugerido.toFixed(2)}" step="0.01" min="0" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;text-align:center;">
+      <input type="number" id="ptMonto" class="input" value="${montoSugerido.toFixed(2)}" step="0.01" min="0" style="font-size:20px;font-weight:700;font-family:var(--font-num);text-align:center;">
     </div>
     <div class="field"><label>Método de pago</label>
       <select id="ptMetodo" class="input">
@@ -3272,7 +3383,7 @@
         <div style="font-size:11px;color:var(--text-muted);">${n.concepto} · ${n.created_at?.slice(0, 16) || ''} · ${n.cajero || ''}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;margin-margin-right:4px;">
-        <div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:var(--sage-dark);">$${n.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+        <div style="font-family:var(--font-num);font-weight:700;font-size:15px;color:var(--sage-dark);">$${n.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
         <div style="font-size:11px;color:var(--text-muted);">${metIcon(n.metodo_pago)} ${n.metodo_pago}</div>
       </div>
       <button class="btn" style="padding:6px 10px;background:#fdedec;color:#922b21;border:1px solid #f5b7b1;font-size:12px;font-weight:700;border-radius:8px;cursor:pointer;flex-shrink:0;" title="Borrar nómina" onclick="borrarNomina(${n.id}, '${empEsc}', ${n.monto})">🗑️ Borrar</button>
@@ -3376,7 +3487,7 @@
       const gastoTiendas = tiendas.filter(t => t.nombre === 'Estudio Deco' || t.nombre === 'Estación 304');
       const gasOpts = gastoTiendas.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('');
 
-      const th = `padding:8px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);border-bottom:2px solid var(--border);`;
+      const th = `padding:8px 10px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--text-secondary);border-bottom:2px solid var(--border);`;
       const tbl = `width:100%;border-collapse:collapse;font-size:13px;`;
 
       const filaG = g => {
@@ -3385,7 +3496,7 @@
           <td style="padding:8px 10px;font-size:12px;color:var(--text-muted);">${f}</td>
           <td style="padding:8px 10px;">${g.concepto}</td>
           <td style="padding:8px 10px;font-size:12px;color:var(--text-secondary);">${g.tienda} · ${g.origen}</td>
-          <td style="padding:8px 10px;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--red);text-align:right;">-$${g.monto.toFixed(2)}</td>
+          <td style="padding:8px 10px;font-family:var(--font-num);font-weight:700;color:var(--red);text-align:right;">-$${g.monto.toFixed(2)}</td>
           ${esAdmin ? `<td style="padding:8px 6px;text-align:center;"><button onclick="anularGasto(${g.id})" style="padding:3px 9px;font-size:11px;background:var(--red-light);color:var(--red);border:none;border-radius:6px;cursor:pointer;font-weight:600;">Anular</button></td>` : '<td></td>'}
         </tr>`;
       };
@@ -3395,7 +3506,7 @@
           <td style="padding:8px 10px;font-size:12px;color:var(--text-muted);">${f}</td>
           <td style="padding:8px 10px;">${i.concepto}</td>
           <td style="padding:8px 10px;font-size:12px;color:var(--text-secondary);">${i.metodo_pago}</td>
-          <td style="padding:8px 10px;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--green-ok);text-align:right;">+$${i.monto.toFixed(2)}</td>
+          <td style="padding:8px 10px;font-family:var(--font-num);font-weight:700;color:var(--green-ok);text-align:right;">+$${i.monto.toFixed(2)}</td>
           ${esAdmin ? `<td style="padding:8px 6px;text-align:center;"><button onclick="anularIngreso(${i.id})" style="padding:3px 9px;font-size:11px;background:var(--red-light);color:var(--red);border:none;border-radius:6px;cursor:pointer;font-weight:600;">Anular</button></td>` : '<td></td>'}
         </tr>`;
       };
@@ -3500,6 +3611,10 @@
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       const next = isDark ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', next);
+      applyChartDefaults();
+      for (const id of Object.keys(_charts)) {
+        if (document.getElementById(id) && _chartFabricas.has(id)) renderChart(id, _chartFabricas.get(id));
+      }
       localStorage.setItem('theme', next);
       ['themeToggle','themeToggleE'].forEach(id => {
         const btn = document.getElementById(id);
@@ -3555,14 +3670,15 @@
         const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username, password}) });
         if (!res.ok) { const e = await res.json(); errEl.textContent = e.detail || 'Credenciales incorrectas'; errEl.style.display = 'block'; return; }
         const data = await res.json();
-        sessionStorage.setItem('session', JSON.stringify({username: data.username, role: data.role}));
+        sessionStorage.setItem('session', JSON.stringify({username: data.username, role: data.role, token: data.token}));
         _currentRole = data.role;
-        if (data.role === 'deco') showDecoApp();
+        if (data.role === 'deco') { showDecoApp(); init(); }
         else showEstacionApp();
       } catch(e) { errEl.textContent = 'Error de conexión'; errEl.style.display = 'block'; }
     }
 
     function doLogout() {
+      fetch('/api/logout', { method: 'POST' }).catch(() => { });
       sessionStorage.removeItem('session');
       _currentRole = null;
       document.getElementById('loginUser').value = '';
@@ -3575,6 +3691,7 @@
       if (!raw) { showLogin(); return; }
       try {
         const s = JSON.parse(raw);
+        if (!s.token) { sessionStorage.removeItem('session'); showLogin(); return; }  // sesión de antes de la actualización
         _currentRole = s.role;
         if (s.role === 'deco') showDecoApp();
         else if (s.role === 'estacion') showEstacionApp();
@@ -3674,7 +3791,7 @@
           ? `Sin: ${info.faltantes.join(', ')}`
           : (info.cuello_de_botella ? `Límite: ${info.cuello_de_botella}` : '');
         return `<div style="background:${bg};border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:2px;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${bebida}</div>
+          <div style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${bebida}</div>
           <div style="font-size:22px;font-weight:800;color:${color};">${n}</div>
           ${cuello ? `<div style="font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cuello}">${cuello}</div>` : ''}
         </div>`;
@@ -4526,4 +4643,4 @@
     window.startDrag = startDrag;
     window.startResize = startResize;
 
-    window.addEventListener('load', loadNotes);
+    // loadNotes() corre dentro de init(), cuando ya hay sesión.

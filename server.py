@@ -5,10 +5,10 @@ server.py — Estudio Deco POS v2
 """
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from pathlib import Path
-import uvicorn, hashlib, secrets
+import uvicorn, hashlib, secrets, os
 
 from modules.database import (
     init_db, listar_tiendas, obtener_productos, validar_nip,
@@ -48,8 +48,8 @@ def _hash_pw(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
 SYSTEM_USERS = {
-    "estudiodeco": {"password_hash": _hash_pw("19jul"),    "role": "deco"},
-    "estacion304": {"password_hash": _hash_pw("telefono"), "role": "estacion"},
+    "estudiodeco": {"password_hash": _hash_pw(os.environ.get("ESTUDIO_PASS_DECO", "19jul")), "role": "deco"},
+    "estacion304": {"password_hash": _hash_pw(os.environ.get("ESTUDIO_PASS_304", "telefono")), "role": "estacion"},
 }
 
 # S-2: tokens de sesión en memoria (se invalidan al reiniciar el servidor)
@@ -63,6 +63,9 @@ app.mount("/assets", StaticFiles(directory=str(ASSETS)), name="assets")
 
 @app.middleware("http")
 async def no_cache_static(request, call_next):
+    if request.url.path.startswith("/api/") and request.url.path != "/api/login":
+        if request.headers.get("X-Auth-Token") not in _active_tokens:
+            return JSONResponse(status_code=401, content={"detail": "Sesión expirada. Inicia sesión de nuevo."})
     response = await call_next(request)
     if request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -85,6 +88,25 @@ class EditItemReq(BaseModel):
 class CerrarMesaReq(BaseModel):
     usuario_id: int
     metodo_pago: str
+    monto_efectivo: float = Field(default=0.0, ge=0.0)
+    monto_tarjeta: float = Field(default=0.0, ge=0.0)
+    efectivo_recibido: float = Field(default=0.0, ge=0.0)
+    imprimir_ticket: bool = True
+
+class VentaItemReq(BaseModel):
+    model_config = {"extra": "ignore"}
+    producto_id: int | None = None
+    tienda_id: int
+    nombre: str
+    cantidad: int = Field(ge=1)
+    precio_unitario: float = Field(ge=0.0)
+    es_precio_abierto: bool = False
+
+class VentaDirectaReq(BaseModel):
+    model_config = {"extra": "ignore"}
+    usuario_id: int
+    metodo_pago: str
+    items: list[VentaItemReq]
     monto_efectivo: float = Field(default=0.0, ge=0.0)
     monto_tarjeta: float = Field(default=0.0, ge=0.0)
     efectivo_recibido: float = Field(default=0.0, ge=0.0)
@@ -515,6 +537,7 @@ def _descontar_bebidas_venta(items: list):
         # Fallback: comparar nombre en mayúsculas (compatibilidad con productos sin receta asignada)
         if not receta_key:
             receta_key = (it.get("nombre_producto") or it.get("nombre") or "").strip().upper()
+            receta_key = receta_key.removesuffix(" (FRÍO)").removesuffix(" (CALIENTE)")
         if not receta_key:
             continue
         cantidad = int(it.get("cantidad", 1))
@@ -528,11 +551,12 @@ def _descontar_bebidas_venta(items: list):
 
 @app.post("/api/ordenes/{oid}/cerrar")
 async def api_cerrar(oid: int, r: CerrarMesaReq):
-    # Obtener items de comanda ANTES de cerrar (items de barra no impresos)
-    items_comanda = obtener_items_comanda(oid)
-
-    venta = cerrar_mesa(oid, r.usuario_id, r.metodo_pago, r.monto_efectivo, r.monto_tarjeta, r.efectivo_recibido)
+    try:
+        venta = cerrar_mesa(oid, r.usuario_id, r.metodo_pago, r.monto_efectivo, r.monto_tarjeta, r.efectivo_recibido)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     if not venta: raise HTTPException(400, "No se pudo cerrar")
+    items_comanda = obtener_items_comanda(oid)
 
     # Descontar ingredientes del inventario para bebidas de Estación 304
     _descontar_bebidas_venta(venta.get("items", []))
@@ -563,15 +587,19 @@ async def api_cerrar(oid: int, r: CerrarMesaReq):
 
 # ── Ventas directas (sin mesa) ──
 @app.post("/api/ventas")
-async def api_venta_directa(r: dict):
-    venta = registrar_venta(r["usuario_id"], r["metodo_pago"], r["items"], r.get("monto_efectivo", 0.0), r.get("monto_tarjeta", 0.0), r.get("efectivo_recibido", 0.0))
+async def api_venta_directa(r: VentaDirectaReq):
+    try:
+        venta = registrar_venta(r.usuario_id, r.metodo_pago, [item.model_dump() for item in r.items],
+                                r.monto_efectivo, r.monto_tarjeta, r.efectivo_recibido)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     conn = get_connection()
-    row = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (r["usuario_id"],)).fetchone()
+    row = conn.execute("SELECT nombre FROM usuarios WHERE id=?", (r.usuario_id,)).fetchone()
     conn.close()
     cajero = row["nombre"] if row else "?"
     # Descontar ingredientes del inventario para bebidas de Estación 304
     _descontar_bebidas_venta(venta.get("items", []))
-    imprimir_solicitado = r.get("imprimir_ticket", True)
+    imprimir_solicitado = r.imprimir_ticket
     impreso = False
     if imprimir_solicitado:
         impreso = imprimir_ticket(venta, cajero)
@@ -825,7 +853,10 @@ async def api_ventas_dia_csv(fecha: str = None):
 
 @app.put("/api/ventas/{vid}")
 async def api_corregir_venta(vid: int, r: CorregirVentaReq):
-    corregir_venta(vid, r.metodo_pago, r.monto_efectivo, r.monto_tarjeta)
+    try:
+        corregir_venta(vid, r.metodo_pago, r.monto_efectivo, r.monto_tarjeta)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     return {"ok": True}
 
 @app.delete("/api/ventas/{vid}")

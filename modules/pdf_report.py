@@ -1,439 +1,416 @@
 """
 modules/pdf_report.py
-Genera el PDF del Corte de Caja diario usando FPDF2.
+Genera los PDF del POS con FPDF2. El corte de caja usa la identidad de Estudio Deco:
+colores del logo, Fraunces para el veredicto y los totales, Figtree para las tablas.
 """
 
+import logging
 from fpdf import FPDF
 from pathlib import Path
 from datetime import datetime
 
-REPORTS_DIR = Path(__file__).resolve().parent.parent / "reports"
-LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "logo.png"
+ROOT = Path(__file__).resolve().parent.parent
+REPORTS_DIR = ROOT / "reports"
+LOGO_PATH = ROOT / "assets" / "logo.png"              # monocromático (tickets y PDF de nómina)
+LOGO_SVG = ROOT / "assets" / "logo-estudio-deco.svg"  # logo a color para el corte
+FONTS_DIR = ROOT / "assets" / "fonts"
 
-# Colores pastel del branding
+# Colores pastel del branding (los usan nómina y ventas del día)
 AZUL_PASTEL = (174, 198, 207)     # #AEC6CF
 MORADO_PASTEL = (179, 157, 219)   # #B39DDB
 GRIS_CLARO = (245, 245, 250)
 
+# Paleta del logo de Estudio Deco para el corte
+VIOLETA = (110, 95, 160)        # contorno de las letras
+LAVANDA = (180, 156, 228)       # relleno de "estudio"
+CIELO = (168, 204, 252)         # corazón y "deco"
+CIELO_FUERTE = (61, 120, 201)
+LILA = (243, 242, 252)          # fondo estrellado del logo
+LINEA = (222, 217, 241)
+TINTA = (43, 35, 80)
+SUAVE = (112, 104, 145)
+ROJO = (194, 65, 79)            # solo para "faltan"
+
+MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+         "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+logging.getLogger("fpdf.svg").setLevel(logging.ERROR)  # el SVG trae <title>, que fpdf ignora
+
+
+def _dinero(v) -> str:
+    v = float(v or 0)
+    return f"-${abs(v):,.2f}" if v < 0 else f"${v:,.2f}"
+
+
+def _fecha_larga(fecha: str) -> str:
+    try:
+        d = datetime.strptime(fecha[:10], "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return str(fecha)
+    return f"{DIAS[d.weekday()].capitalize()} {d.day} de {MESES[d.month - 1]} de {d.year}"
+
+
+def _inicio_turno(desde: str, fecha: str) -> str:
+    """'desde las 09:00' o, si el turno empezó otro día, 'desde el 15 de noviembre, 18:00'."""
+    try:
+        d = datetime.strptime(str(desde)[:16], "%Y-%m-%d %H:%M")
+    except (ValueError, TypeError):
+        return ""
+    if str(desde)[:10] == str(fecha)[:10]:
+        return "Turno del día completo" if d.strftime("%H:%M") == "00:00" else f"Turno desde las {d:%H:%M}"
+    return f"Turno desde el {d.day} de {MESES[d.month - 1]}, {d:%H:%M}"
+
 
 class CortePDF(FPDF):
+    """Hoja del corte de caja. Sin las fuentes de marca cae a Helvetica y sigue funcionando."""
+
+    def __init__(self, fecha: str = ""):
+        super().__init__(format="A4")
+        self.fecha_corte = fecha
+        self.set_margins(18, 16, 18)
+        self.set_auto_page_break(True, 20)
+        self.alias_nb_pages()
+        self.marca = self._cargar_fuentes()
+
+    def _cargar_fuentes(self) -> bool:
+        archivos = {
+            ("Figtree", ""): "Figtree-Regular.ttf",
+            ("Figtree", "B"): "Figtree-Bold.ttf",
+            ("FigtreeSemi", ""): "Figtree-SemiBold.ttf",
+            ("FigtreeExtra", ""): "Figtree-ExtraBold.ttf",
+            ("FrauncesDisplay", ""): "Fraunces-Display.ttf",
+            ("FrauncesText", ""): "Fraunces-Text.ttf",
+        }
+        try:
+            for (familia, estilo), archivo in archivos.items():
+                self.add_font(familia, estilo, str(FONTS_DIR / archivo))
+            return True
+        except Exception as e:
+            logging.error(f"Fuentes del corte no disponibles, uso Helvetica: {e}")
+            return False
+
+    def fuente(self, rol: str, tam: float):
+        """rol: texto, texto_b, semi, extra, display, titulo."""
+        if self.marca:
+            familia, estilo = {
+                "texto": ("Figtree", ""), "texto_b": ("Figtree", "B"), "semi": ("FigtreeSemi", ""),
+                "extra": ("FigtreeExtra", ""), "display": ("FrauncesDisplay", ""), "titulo": ("FrauncesText", ""),
+            }[rol]
+        else:
+            familia, estilo = "Helvetica", ("" if rol == "texto" else "B")
+        self.set_font(familia, estilo, tam)
+
     def header(self):
-        # Logo
-        if LOGO_PATH.exists():
-            self.image(str(LOGO_PATH), x=10, y=8, w=25)
-        # Título
-        self.set_font("Helvetica", "B", 18)
-        self.set_text_color(*MORADO_PASTEL)
-        self.cell(0, 10, "Estudio Deco", new_x="LMARGIN", new_y="NEXT", align="C")
-        self.set_font("Helvetica", "", 11)
-        self.set_text_color(100, 100, 100)
-        self.cell(0, 6, "Corte de Caja", new_x="LMARGIN", new_y="NEXT", align="C")
-        self.ln(4)
-        # Línea decorativa
-        self.set_draw_color(*AZUL_PASTEL)
-        self.set_line_width(0.8)
-        self.line(10, self.get_y(), 200, self.get_y())
+        if self.page_no() == 1:
+            return  # la primera página lleva el encabezado grande
+        self.fuente("semi", 8.5)
+        self.set_text_color(*SUAVE)
+        self.cell(0, 6, f"Corte de caja del {_fecha_larga(self.fecha_corte).lower()}", new_x="LMARGIN", new_y="NEXT")
+        self.set_draw_color(*LINEA)
+        self.set_line_width(0.3)
+        self.line(self.l_margin, self.get_y() + 1, self.w - self.r_margin, self.get_y() + 1)
         self.ln(6)
 
     def footer(self):
-        self.set_y(-20)
-        self.set_font("Helvetica", "I", 8)
-        self.set_text_color(150, 150, 150)
-        self.cell(0, 10, f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}", align="L")
-        self.cell(0, 10, f"Página {self.page_no()}", align="R")
+        self.set_y(-14)
+        self.fuente("texto", 8)
+        self.set_text_color(*SUAVE)
+        self.cell(0, 6, f"Estudio Deco, generado el {datetime.now():%d/%m/%Y a las %H:%M}", align="L")
+        self.set_x(self.l_margin)
+        self.cell(0, 6, f"Página {self.page_no()} de {{nb}}", align="R")
+
+    # ── piezas ──
+    def caja(self, x, y, w, h, radio):
+        """Rectángulo relleno con esquinas redondeadas; fpdf2 viejo no tiene round_corners y dibuja uno recto."""
+        try:
+            self.rect(x, y, w, h, style="F", round_corners=True, corner_radius=radio)
+        except TypeError:
+            self.rect(x, y, w, h, style="F")
+
+    @property
+    def ancho(self) -> float:
+        return self.w - self.l_margin - self.r_margin
+
+    def titulo(self, texto: str, extra: str = "", necesita: float = 30):
+        """necesita: alto en mm que la sección quiere mantener junto a su título."""
+        if self.get_y() + 14 + necesita > self.h - self.b_margin:
+            self.add_page()
+        self.ln(4)
+        self.fuente("titulo", 13)
+        self.set_text_color(*VIOLETA)
+        self.cell(self.ancho - 60, 8, texto)
+        if extra:
+            self.fuente("texto", 9)
+            self.set_text_color(*SUAVE)
+            self.cell(60, 8, extra, align="R")
+        self.ln(10)
+
+    def tabla(self, columnas, filas, total=None, tam=9.5, alto=7.2, detalle=None):
+        """columnas: [(etiqueta, ancho_mm, 'L'|'C'|'R')]; detalle(i) devuelve una línea gris bajo la fila."""
+        def encabezado():
+            self.fuente("semi", tam - 1.5)
+            self.set_text_color(*SUAVE)
+            for etiqueta, w, al in columnas:
+                self.cell(w, 6, etiqueta, align=al)
+            self.ln(6)
+            self.set_draw_color(*VIOLETA)
+            self.set_line_width(0.4)
+            self.line(self.l_margin, self.get_y(), self.l_margin + sum(c[1] for c in columnas), self.get_y())
+            self.ln(1)
+        encabezado()
+        for i, fila in enumerate(filas):
+            if self.get_y() > self.h - 28:
+                self.add_page()
+                encabezado()
+            self.fuente("texto", tam)
+            self.set_text_color(*TINTA)
+            for (etiqueta, w, al), valor in zip(columnas, fila):
+                self.cell(w, alto, str(valor), align=al)
+            self.ln(alto)
+            if detalle:
+                linea = detalle(i)
+                if linea:
+                    self.fuente("texto", tam - 2)
+                    self.set_text_color(*SUAVE)
+                    self.cell(self.ancho, 4.5, linea, new_x="LMARGIN", new_y="NEXT")
+                    self.ln(0.8)
+            self.set_draw_color(*LINEA)
+            self.set_line_width(0.2)
+            self.line(self.l_margin, self.get_y(), self.l_margin + sum(c[1] for c in columnas), self.get_y())
+        if total:
+            self.set_draw_color(*TINTA)
+            self.set_line_width(0.5)
+            self.line(self.l_margin, self.get_y(), self.l_margin + sum(c[1] for c in columnas), self.get_y())
+            self.fuente("texto_b", tam)
+            self.set_text_color(*TINTA)
+            for (etiqueta, w, al), valor in zip(columnas, total):
+                self.cell(w, alto + 1, str(valor), align=al)
+            self.ln(alto + 1)
+
+    def barras(self, items, total):
+        """Una fila por concepto: nombre y monto, y debajo una barra fina proporcional al total."""
+        total = total or 1
+        for nombre, monto, color in items:
+            self.fuente("texto", 10)
+            self.set_text_color(*TINTA)
+            self.cell(self.ancho - 50, 6, nombre)
+            self.fuente("texto_b", 10)
+            self.cell(50, 6, _dinero(monto), align="R")
+            self.ln(6.5)
+            y = self.get_y()
+            self.set_fill_color(*LILA)
+            self.caja(self.l_margin, y, self.ancho, 2.2, 1.1)
+            w = max(1.6, self.ancho * max(0, monto) / total) if monto else 0
+            if w:
+                self.set_fill_color(*color)
+                self.caja(self.l_margin, y, w, 2.2, 1.1)
+            self.ln(5.5)
 
 
 def generar_corte_pdf(resumen: dict, cajero: str, ventas_turno: list = None) -> str:
     """
-    Genera un PDF con el resumen del corte de caja.
+    Genera el PDF del corte de caja que se envía por correo.
     ventas_turno: lista de dicts de ventas individuales del turno (opcional).
     Retorna la ruta absoluta del archivo generado.
     """
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     fecha = resumen["fecha"]
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    filename = f"Corte_{timestamp}.pdf"
-    filepath = REPORTS_DIR / filename
+    filepath = REPORTS_DIR / f"Corte_{timestamp}.pdf"
 
-    pdf = CortePDF()
+    pdf = CortePDF(fecha)
     pdf.add_page()
+    x0 = pdf.l_margin
 
-    # ── INFO GENERAL ──
-    pdf.set_font("Helvetica", "", 11)
-    pdf.set_text_color(60, 60, 60)
-    pdf.cell(95, 8, f"Fecha: {fecha}")
-    pdf.cell(95, 8, f"Cajero: {cajero}", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(95, 8, f"Num. Ventas: {resumen['num_ventas']}")
-    pdf.ln(10)
+    # ── Encabezado: logo, título y datos del turno ──
+    try:
+        pdf.image(str(LOGO_SVG), x=x0, y=14, w=26)
+    except Exception:
+        if LOGO_PATH.exists():
+            pdf.image(str(LOGO_PATH), x=x0, y=14, w=24)
+    pdf.set_xy(x0 + 32, 15)
+    pdf.fuente("display", 24)
+    pdf.set_text_color(*VIOLETA)
+    pdf.cell(0, 11, "Corte de caja", new_x="LEFT", new_y="NEXT")
+    pdf.fuente("texto_b", 10.5)
+    pdf.set_text_color(*TINTA)
+    pdf.cell(0, 6, _fecha_larga(fecha), new_x="LEFT", new_y="NEXT")
+    pdf.fuente("texto", 9.5)
+    pdf.set_text_color(*SUAVE)
+    turno = _inicio_turno(resumen.get("desde", ""), fecha)
+    pdf.cell(0, 5.2, f"Cajero: {cajero}", new_x="LEFT", new_y="NEXT")
+    if turno:
+        pdf.cell(0, 5.2, turno, new_x="LEFT", new_y="NEXT")
+    pdf.set_y(max(pdf.get_y(), 14 + 26 * 311 / 323) + 7)
 
-    # ── VENTAS POR TIENDA ──
-    pdf.set_font("Helvetica", "B", 13)
-    pdf.set_text_color(*MORADO_PASTEL)
-    pdf.cell(0, 8, "Ventas por Tienda", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
+    # ── Veredicto: lo primero que se necesita saber es si la caja cuadró ──
+    dif = float(resumen.get("diferencia", 0) or 0)
+    esperado = float(resumen.get("efectivo_esperado", 0) or 0)
+    real = float(resumen.get("efectivo_real", 0) or 0)
+    if abs(dif) < 0.005:
+        veredicto, color_v = "La caja cuadró", VIOLETA
+    elif dif > 0:
+        veredicto, color_v = f"Sobran {_dinero(dif)}", CIELO_FUERTE
+    else:
+        veredicto, color_v = f"Faltan {_dinero(abs(dif))}", ROJO
 
-    # Encabezado tabla
-    pdf.set_fill_color(*AZUL_PASTEL)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(120, 8, "  Tienda", fill=True)
-    pdf.cell(70, 8, "Total", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+    y = pdf.get_y()
+    alto_panel = 46
+    pdf.set_fill_color(*LILA)
+    pdf.caja(x0, y, pdf.ancho, alto_panel, 4)
+    pdf.set_fill_color(*color_v)
+    pdf.caja(x0, y, 2.4, alto_panel, 1.2)
+    pdf.set_xy(x0 + 10, y + 7)
+    pdf.fuente("display", 30)
+    pdf.set_text_color(*color_v)
+    pdf.cell(pdf.ancho - 20, 14, veredicto)
+    col = (pdf.ancho - 20) / 3
+    for i, (etiqueta, valor) in enumerate([("Efectivo esperado", esperado), ("Efectivo contado", real),
+                                           ("Diferencia", dif)]):
+        cx = x0 + 10 + i * col
+        pdf.set_xy(cx, y + 26)
+        pdf.fuente("texto", 9)
+        pdf.set_text_color(*SUAVE)
+        pdf.cell(col, 5, etiqueta)
+        pdf.set_xy(cx, y + 31.5)
+        pdf.fuente("titulo", 15)
+        pdf.set_text_color(*(color_v if etiqueta == "Diferencia" else TINTA))
+        pdf.cell(col, 8, ("+" if dif > 0.005 and etiqueta == "Diferencia" else "") + _dinero(valor))
+    pdf.set_y(y + alto_panel + 4)
+    pdf.fuente("texto", 8.5)
+    pdf.set_text_color(*SUAVE)
+    fondo = float(resumen.get("fondo_caja", 0) or 0)
+    pdf.multi_cell(pdf.ancho, 4.4, f"El efectivo contado no incluye el fondo de caja inicial ({_dinero(fondo)}). "
+                                   f"Esperado = ventas en efectivo + ingresos en efectivo - gastos pagados de caja.")
 
-    # Filas
-    pdf.set_text_color(60, 60, 60)
-    pdf.set_font("Helvetica", "", 10)
-    fill = False
-    for vt in resumen.get("ventas_por_tienda", []):
-        if fill:
-            pdf.set_fill_color(*GRIS_CLARO)
-        pdf.cell(120, 7, f"  {vt['tienda']}", fill=fill)
-        pdf.cell(70, 7, f"${vt['total']:,.2f}  ", fill=fill, align="R",
-                 new_x="LMARGIN", new_y="NEXT")
-        fill = not fill
+    # ── Ventas del turno por método de pago ──
+    total_ventas = float(resumen.get("total_ventas", 0) or 0)
+    num = resumen.get("num_ventas", 0)
+    canceladas = resumen.get("num_canceladas", 0)
+    extra = f"{num} ticket{'s' if num != 1 else ''}" + (f", {canceladas} cancelado{'s' if canceladas != 1 else ''}" if canceladas else "")
+    pdf.titulo("Ventas del turno", extra)
+    pdf.fuente("display", 22)
+    pdf.set_text_color(*TINTA)
+    pdf.cell(0, 11, _dinero(total_ventas), new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+    colores = {"Efectivo": LAVANDA, "Tarjeta": CIELO, "Transferencia": VIOLETA}
+    metodos = [(m["metodo_pago"], float(m["monto"] or 0), colores.get(m["metodo_pago"], LAVANDA))
+               for m in resumen.get("metodos_pago", [])]
+    if metodos:
+        pdf.barras(metodos, max(total_ventas, sum(m[1] for m in metodos)))
 
-    # Total ventas
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_fill_color(*MORADO_PASTEL)
-    pdf.set_text_color(255, 255, 255)
-    pdf.cell(120, 8, "  TOTAL VENTAS", fill=True)
-    pdf.cell(70, 8, f"${resumen['total_ventas']:,.2f}  ", fill=True, align="R",
-             new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(8)
+    # ── Ventas por tienda ──
+    vpt = resumen.get("ventas_por_tienda", [])
+    if vpt:
+        pdf.titulo("Ventas por tienda")
+        w = pdf.ancho
+        pdf.tabla(
+            [("Tienda", w * 0.46, "L"), ("Vendido", w * 0.18, "R"), ("Comisión tarjeta", w * 0.18, "R"), ("Neto", w * 0.18, "R")],
+            [(t["tienda"], _dinero(t["total"]), _dinero(t.get("comision", 0)), _dinero(t.get("neto", t["total"]))) for t in vpt],
+            total=("Total", _dinero(total_ventas), _dinero(sum(t.get("comision", 0) for t in vpt)),
+                   _dinero(sum(t.get("neto", t["total"]) for t in vpt))),
+        )
 
-    # ── DETALLE DE VENTAS DEL TURNO ──
-    if ventas_turno:
-        pdf.set_font("Helvetica", "B", 13)
-        pdf.set_text_color(*MORADO_PASTEL)
-        pdf.cell(0, 8, "Detalle de Ventas del Turno", new_x="LMARGIN", new_y="NEXT")
+    # ── Ingresos y gastos ──
+    ingresos = resumen.get("ingresos_detalle", [])
+    if ingresos:
+        pdf.titulo("Ingresos", _dinero(resumen.get("total_ingresos", 0)))
+        w = pdf.ancho
+        pdf.tabla([("Concepto", w * 0.6, "L"), ("Método", w * 0.2, "L"), ("Monto", w * 0.2, "R")],
+                  [(i["concepto"], i.get("metodo_pago", "Efectivo"), _dinero(i["monto"])) for i in ingresos])
+
+    gastos = resumen.get("gastos_detalle", [])
+    pdf.titulo("Gastos", _dinero(resumen.get("total_gastos", 0)))
+    if gastos:
+        w = pdf.ancho
+        pdf.tabla([("Concepto", w * 0.42, "L"), ("Tienda", w * 0.22, "L"), ("Sale de", w * 0.16, "L"), ("Monto", w * 0.2, "R")],
+                  [(g["concepto"], g.get("tienda", "General"), g.get("origen", "Caja"), _dinero(g["monto"])) for g in gastos])
+    else:
+        pdf.fuente("texto", 10)
+        pdf.set_text_color(*SUAVE)
+        pdf.cell(0, 7, "No hubo gastos en este turno.", new_x="LMARGIN", new_y="NEXT")
+
+    # ── Desglose del efectivo contado ──
+    desglose = resumen.get("desglose_billetes", {}) or {}
+    if desglose or fondo > 0:
+        renglones = sum(1 for k, c in desglose.items() if c)
+        pdf.titulo("Efectivo contado", necesita=(renglones + 2) * 7.4 + 20)
+        nombres = {f"B{d}": f"Billete de ${d:,}" for d in [1000, 500, 200, 100, 50, 20]}
+        nombres.update({f"M{d}": f"Moneda de ${d}" for d in [10, 5, 2, 1]})
+        nombres["M0.5"] = "Moneda de $0.50"
+        filas, total_contado = [], 0.0
+        for clave, cant in desglose.items():
+            try:
+                denom = float(clave[1:])
+            except ValueError:
+                continue
+            if not cant:
+                continue
+            total_contado += denom * cant
+            filas.append((nombres.get(clave, clave), cant, _dinero(denom * cant)))
+        w = pdf.ancho
+        if not filas:
+            total_contado = real + fondo
+        else:
+            pdf.tabla([("Denominación", w * 0.5, "L"), ("Cantidad", w * 0.2, "R"), ("Subtotal", w * 0.3, "R")],
+                      filas, total=("Total en caja", "", _dinero(total_contado)))
         pdf.ln(2)
+        for etiqueta, valor, fuerte in [("Menos fondo de caja inicial", -fondo, False),
+                                        ("Efectivo de ventas del turno", real, True)]:
+            pdf.fuente("texto_b" if fuerte else "texto", 10)
+            pdf.set_text_color(*TINTA if fuerte else SUAVE)
+            pdf.cell(w * 0.7, 6.5, etiqueta)
+            pdf.cell(w * 0.3, 6.5, _dinero(valor), align="R", new_x="LMARGIN", new_y="NEXT")
 
-        # Encabezados
-        pdf.set_fill_color(*AZUL_PASTEL)
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "B", 7)
-        pdf.cell(18, 8, " FOLIO", fill=True)
-        pdf.cell(13, 8, "FECHA", fill=True, align="C")
-        pdf.cell(27, 8, "CUENTA", fill=True, align="C")
-        pdf.cell(16, 8, "IRC DESC.", fill=True, align="R")
-        pdf.cell(13, 8, "PROP.", fill=True, align="R")
-        pdf.cell(17, 8, "IMPORTE", fill=True, align="R")
-        pdf.cell(18, 8, "EFECTIVO", fill=True, align="R")
-        pdf.cell(18, 8, "TARJETA", fill=True, align="R")
-        pdf.cell(18, 8, "CXC", fill=True, align="R")
-        pdf.cell(32, 8, "MONTO MENOS COMISIÓN", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
-
-        pdf.set_text_color(60, 60, 60)
-        pdf.set_font("Helvetica", "", 7)
-        fill = False
-        
-        sum_importe = 0.0
-        sum_efectivo = 0.0
-        sum_tarjeta = 0.0
-        sum_cxc = 0.0
-        sum_neto = 0.0
-
+    # ── Detalle de tickets ──
+    if ventas_turno:
+        pdf.titulo("Tickets del turno", f"{len(ventas_turno)} en total")
+        cols = [("Folio", 20, "L"), ("Hora", 12, "L"), ("Cuenta", 26, "L"), ("IRC desc.", 15, "R"), ("Prop.", 13, "R"),
+                ("Importe", 18, "R"), ("Efectivo", 18, "R"), ("Tarjeta", 18, "R"), ("CxC", 16, "R"), ("Neto", 18, "R")]
+        filas, detalles = [], []
+        s_imp = s_ef = s_tar = s_cxc = s_neto = 0.0
         for v in ventas_turno:
-            if fill:
-                pdf.set_fill_color(*GRIS_CLARO)
-
-            folio_short = v.get("folio", "")
-            if len(folio_short) > 12:
-                folio_short = folio_short[-8:]
-
-            hora = ""
-            created = v.get("created_at", "")
-            if created and len(created) >= 16:
-                hora = created[11:16]
-
-            # Determine the account or table name
-            if v.get("mesa_numero"):
-                cuenta_str = f"Mesa {v['mesa_numero']}"
-            else:
-                cuenta_str = "Venta Directa"
-
+            folio = v.get("folio", "")
+            folio = folio[-8:] if len(folio) > 12 else folio
+            creado = v.get("created_at", "") or ""
+            hora = creado[11:16] if len(creado) >= 16 else ""
+            cuenta = f"Mesa {v['mesa_numero']}" if v.get("mesa_numero") else "Venta directa"
             metodo = v.get("metodo_pago", "Efectivo")
-            total_venta = v.get("total", 0)
-            monto_tarjeta = v.get("monto_tarjeta", 0)
-            monto_efectivo = v.get("monto_efectivo", 0)
-
-            # Determine CXC / Efectivo / Tarjeta amounts based on method
-            val_efvo = monto_efectivo if metodo in ["Efectivo", "Mixto"] else 0.0
-            val_tarj = monto_tarjeta if metodo in ["Tarjeta", "Mixto"] else 0.0
-            val_cxc  = total_venta if metodo in ["Transferencia", "Transfer"] else 0.0
-
-            # Assuming 0 for these columns explicitly requested without DB support
-            val_irc = 0.0
-            val_prop = 0.0
-
-            # Calcular comisión según método de pago
+            total_v = float(v.get("total", 0) or 0)
+            m_tar = float(v.get("monto_tarjeta", 0) or 0)
+            m_ef = float(v.get("monto_efectivo", 0) or 0)
+            ef = m_ef if metodo in ("Efectivo", "Mixto") else 0.0
+            tar = m_tar if metodo in ("Tarjeta", "Mixto") else 0.0
+            cxc = total_v if metodo in ("Transferencia", "Transfer") else 0.0
             if metodo == "Tarjeta":
-                comision = round(total_venta * 0.04, 2)
-            elif metodo == "Mixto" and total_venta > 0:
-                comision = round(monto_tarjeta * 0.04, 2)
+                comision = round(total_v * 0.04, 2)
+            elif metodo == "Mixto" and total_v > 0:
+                comision = round(m_tar * 0.04, 2)
             else:
                 comision = 0.0
+            neto = total_v - comision
+            s_imp += total_v; s_ef += ef; s_tar += tar; s_cxc += cxc; s_neto += neto
+            filas.append((folio, hora, cuenta[:15], _dinero(0), _dinero(0), _dinero(total_v), _dinero(ef),
+                          _dinero(tar), _dinero(cxc), _dinero(neto)))
+            items = v.get("items", []) or []
+            desc = ", ".join(f"{i.get('nombre_producto', i.get('nombre', '?'))} x{i.get('cantidad', 1)}" for i in items[:5])
+            if len(items) > 5:
+                desc += f" y {len(items) - 5} más"
+            detalles.append(desc)
+        pdf.tabla(cols, filas, tam=8.5, alto=6.2, detalle=lambda i: detalles[i],
+                  total=("Totales", "", "", _dinero(0), _dinero(0), _dinero(s_imp), _dinero(s_ef),
+                         _dinero(s_tar), _dinero(s_cxc), _dinero(s_neto)))
 
-            neto = total_venta - comision
-            sum_importe += total_venta
-            sum_efectivo += val_efvo
-            sum_tarjeta += val_tarj
-            sum_cxc += val_cxc
-            sum_neto += neto
-
-            pdf.cell(18, 7, f" {folio_short}", fill=fill)
-            pdf.cell(13, 7, hora, fill=fill, align="C")
-            pdf.cell(27, 7, cuenta_str[:15], fill=fill, align="C")
-            
-            pdf.cell(16, 7, f"${val_irc:,.2f}", fill=fill, align="R")
-            pdf.cell(13, 7, f"${val_prop:,.2f}", fill=fill, align="R")
-            
-            pdf.cell(17, 7, f"${total_venta:,.2f}", fill=fill, align="R")
-            pdf.cell(18, 7, f"${val_efvo:,.2f}", fill=fill, align="R")
-            pdf.cell(18, 7, f"${val_tarj:,.2f}", fill=fill, align="R")
-            pdf.cell(18, 7, f"${val_cxc:,.2f}", fill=fill, align="R")
-            
-            pdf.cell(32, 7, f"${neto:,.2f}", fill=fill, align="R", new_x="LMARGIN", new_y="NEXT")
-
-            # Detallar items debajo
-            items = v.get("items", [])
-            if items:
-                pdf.set_font("Helvetica", "I", 7)
-                pdf.set_text_color(120, 120, 120)
-                items_desc = ", ".join(
-                    f"{i.get('nombre_producto', i.get('nombre','?'))} x{i.get('cantidad',1)}"
-                    for i in items[:5]
-                )
-                if len(items) > 5:
-                    items_desc += f" (+{len(items)-5} más)"
-                pdf.cell(190, 5, f"    {items_desc}",
-                         new_x="LMARGIN", new_y="NEXT")
-                pdf.set_font("Helvetica", "", 7)
-                pdf.set_text_color(60, 60, 60)
-
-            fill = not fill
-
-        # Totales del detalle
-        pdf.set_font("Helvetica", "B", 7)
-        pdf.set_fill_color(*MORADO_PASTEL)
-        pdf.set_text_color(255, 255, 255)
-        pdf.cell(58, 8, "  TOTALES", fill=True)
-        pdf.cell(16, 8, "$0.00", fill=True, align="R")
-        pdf.cell(13, 8, "$0.00", fill=True, align="R")
-        pdf.cell(17, 8, f"${sum_importe:,.2f}", fill=True, align="R")
-        pdf.cell(18, 8, f"${sum_efectivo:,.2f}", fill=True, align="R")
-        pdf.cell(18, 8, f"${sum_tarjeta:,.2f}", fill=True, align="R")
-        pdf.cell(18, 8, f"${sum_cxc:,.2f}", fill=True, align="R")
-        pdf.cell(32, 8, f"${sum_neto:,.2f}", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(8)
-
-    # ── INGRESOS ──
-    ingresos_det = resumen.get("ingresos_detalle", [])
-    if ingresos_det:
-        pdf.set_font("Helvetica", "B", 13)
-        pdf.set_text_color(*MORADO_PASTEL)
-        pdf.cell(0, 8, "Ingresos / Entradas", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(2)
-
-        pdf.set_fill_color(*AZUL_PASTEL)
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(65, 8, "  Concepto", fill=True)
-        pdf.cell(45, 8, "Destino", fill=True, align="C")
-        pdf.cell(40, 8, u"M\xe9todo", fill=True, align="C")
-        pdf.cell(40, 8, "Monto", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
-
-        pdf.set_text_color(60, 60, 60)
-        pdf.set_font("Helvetica", "", 9)
-        fill = False
-        for ing in ingresos_det:
-            if fill:
-                pdf.set_fill_color(*GRIS_CLARO)
-            pdf.cell(65, 7, f"  {ing['concepto'][:30]}", fill=fill)
-            pdf.cell(45, 7, ing.get("tienda", "-"), fill=fill, align="C")
-            pdf.cell(40, 7, ing.get("metodo_pago", "Efectivo"), fill=fill, align="C")
-            pdf.cell(40, 7, f"${ing['monto']:,.2f}  ", fill=fill, align="R",
-                     new_x="LMARGIN", new_y="NEXT")
-            fill = not fill
-
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.set_fill_color(150, 200, 150)
-        pdf.set_text_color(255, 255, 255)
-        pdf.cell(150, 8, "  TOTAL INGRESOS", fill=True)
-        pdf.cell(40, 8, f"${resumen.get('total_ingresos', 0):,.2f}  ", fill=True, align="R",
-                 new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(8)
-
-    # ── GASTOS ──
-    pdf.set_font("Helvetica", "B", 13)
-    pdf.set_text_color(*MORADO_PASTEL)
-    pdf.cell(0, 8, "Gastos / Salidas", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
-
-    pdf.set_fill_color(*AZUL_PASTEL)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(55, 8, "  Concepto", fill=True)
-    pdf.cell(40, 8, "Tienda", fill=True, align="C")
-    pdf.cell(30, 8, u"Categor\xeda", fill=True, align="C")
-    pdf.cell(25, 8, "Origen", fill=True, align="C")
-    pdf.cell(40, 8, "Monto", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
-
-    pdf.set_text_color(60, 60, 60)
-    pdf.set_font("Helvetica", "", 9)
-    fill = False
-    for g in resumen.get("gastos_detalle", []):
-        if fill:
-            pdf.set_fill_color(*GRIS_CLARO)
-        pdf.cell(55, 7, f"  {g['concepto'][:25]}", fill=fill)
-        pdf.cell(40, 7, g.get("tienda", "General"), fill=fill, align="C")
-        pdf.cell(30, 7, g["categoria"], fill=fill, align="C")
-        pdf.cell(25, 7, g.get("origen", "Caja"), fill=fill, align="C")
-        pdf.cell(40, 7, f"${g['monto']:,.2f}  ", fill=fill, align="R",
-                 new_x="LMARGIN", new_y="NEXT")
-        fill = not fill
-
-    if not resumen.get("gastos_detalle"):
-        pdf.set_font("Helvetica", "I", 10)
-        pdf.cell(0, 7, "  Sin gastos registrados", new_x="LMARGIN", new_y="NEXT")
-
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_fill_color(220, 150, 150)
-    pdf.set_text_color(255, 255, 255)
-    pdf.cell(150, 8, "  TOTAL GASTOS", fill=True)
-    pdf.cell(40, 8, f"${resumen['total_gastos']:,.2f}  ", fill=True, align="R",
-             new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(10)
-
-    # ── MÉTODOS DE PAGO ──
-    metodos = resumen.get("metodos_pago", [])
-    if metodos:
-        pdf.set_font("Helvetica", "B", 13)
-        pdf.set_text_color(*MORADO_PASTEL)
-        pdf.cell(0, 8, "Ingresos por Método de Pago", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(2)
-
-        pdf.set_fill_color(*AZUL_PASTEL)
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(120, 8, "  Método de Pago", fill=True)
-        pdf.cell(70, 8, "Monto", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
-
-        pdf.set_text_color(60, 60, 60)
-        pdf.set_font("Helvetica", "", 10)
-        fill = False
-        for m in metodos:
-            if fill:
-                pdf.set_fill_color(*GRIS_CLARO)
-            pdf.cell(120, 7, f"  {m['metodo_pago']}", fill=fill)
-            pdf.cell(70, 7, f"${m['monto']:,.2f}  ", fill=fill, align="R",
-                     new_x="LMARGIN", new_y="NEXT")
-            fill = not fill
-        pdf.ln(8)
-
-    # ── DESGLOSE DE EFECTIVO ──
-    desglose = resumen.get("desglose_billetes", {})
-    fondo    = resumen.get("fondo_caja", 0.0)
-
-    if desglose or fondo > 0:
-        pdf.set_font("Helvetica", "B", 13)
-        pdf.set_text_color(*MORADO_PASTEL)
-        pdf.cell(0, 8, "Desglose de Efectivo Contado", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(2)
-
-        NOMBRES = {}
-        for d in [1000, 500, 200, 100, 50, 20]:
-            NOMBRES[f"B{d}"] = f"Billete ${d:,}"
-        for d in [10, 5, 2, 1]:
-            NOMBRES[f"M{d}"] = f"Moneda ${d}"
-        NOMBRES["M0.5"] = "Moneda $0.50"
-
-        if desglose:
-            # Encabezado tabla
-            pdf.set_fill_color(*AZUL_PASTEL)
-            pdf.set_text_color(255, 255, 255)
-            pdf.set_font("Helvetica", "B", 10)
-            pdf.cell(100, 8, "  Denominación", fill=True)
-            pdf.cell(45, 8, "Cantidad", fill=True, align="C")
-            pdf.cell(45, 8, "Subtotal", fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
-
-            pdf.set_text_color(60, 60, 60)
-            pdf.set_font("Helvetica", "", 10)
-            fill = False
-            total_contado = 0.0
-            for key, qty in desglose.items():
-                try:
-                    denom = float(key[1:])
-                except ValueError:
-                    continue
-                subtotal = denom * qty
-                total_contado += subtotal
-                nombre = NOMBRES.get(key, key)
-                if fill:
-                    pdf.set_fill_color(*GRIS_CLARO)
-                pdf.cell(100, 7, f"  {nombre}", fill=fill)
-                pdf.cell(45, 7, str(qty), fill=fill, align="C")
-                pdf.cell(45, 7, f"${subtotal:,.2f}  ", fill=fill, align="R",
-                         new_x="LMARGIN", new_y="NEXT")
-                fill = not fill
-
-            # Total contado
-            pdf.set_font("Helvetica", "B", 10)
-            pdf.set_fill_color(200, 230, 200)
-            pdf.set_text_color(40, 100, 40)
-            pdf.cell(100, 8, "  Total contado", fill=True)
-            pdf.cell(45, 8, "", fill=True)
-            pdf.cell(45, 8, f"${total_contado:,.2f}  ", fill=True, align="R",
-                     new_x="LMARGIN", new_y="NEXT")
-        else:
-            total_contado = resumen.get("efectivo_real", 0.0) + fondo
-
-        # Fondo de caja
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_text_color(60, 60, 60)
-        pdf.cell(145, 7, "  Menos fondo de caja inicial:")
-        pdf.cell(45, 7, f"-${fondo:,.2f}  ", align="R", new_x="LMARGIN", new_y="NEXT")
-
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(145, 7, "  Efectivo real (ventas):")
-        pdf.cell(45, 7, f"${resumen.get('efectivo_real', 0):,.2f}  ", align="R",
-                 new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(8)
-
-    # ── RESUMEN FINAL ──
-    pdf.set_draw_color(*AZUL_PASTEL)
-    pdf.set_line_width(0.5)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(6)
-
-    pdf.set_font("Helvetica", "", 12)
-    pdf.set_text_color(60, 60, 60)
-    pdf.cell(120, 8, "Efectivo Esperado en Caja:")
-    pdf.cell(70, 8, f"${resumen['efectivo_esperado']:,.2f}", align="R",
-             new_x="LMARGIN", new_y="NEXT")
-
-    efectivo_real = resumen.get("efectivo_real", 0)
-    pdf.cell(120, 8, "Efectivo Real (ventas):")
-    pdf.cell(70, 8, f"${efectivo_real:,.2f}", align="R",
-             new_x="LMARGIN", new_y="NEXT")
-
-    dif = resumen.get("diferencia", 0)
-    pdf.set_font("Helvetica", "B", 14)
-    color_dif = (0, 150, 0) if dif >= 0 else (200, 50, 50)
-    pdf.set_text_color(*color_dif)
-    signo = "+" if dif >= 0 else ""
-    pdf.cell(120, 10, "Diferencia:")
-    pdf.cell(70, 10, f"{signo}${dif:,.2f}", align="R", new_x="LMARGIN", new_y="NEXT")
-
-    # Guardar
     pdf.output(str(filepath))
-    
+
     # Abrir el PDF de manera automática para la vista del usuario
     import os
     try:
         os.startfile(str(filepath))
     except Exception as e:
         print(f"No se pudo abrir automáticamente el PDF: {e}")
-        
+
     return str(filepath)
 
 
