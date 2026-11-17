@@ -74,9 +74,13 @@ class AuthTests(EstadoAuth):
         self.assertTrue(auth.sesion_valida(token))
         self.assertFalse(auth.sesion_valida(None))
         self.assertFalse(auth.sesion_valida('falso'))
+        # Cada uso renueva la sesión: activa más de SESION_SEG en total sigue viva.
         self.reloj.return_value += auth.SESION_SEG - 1
         self.assertTrue(auth.sesion_valida(token))
-        self.reloj.return_value += 1
+        self.reloj.return_value += auth.SESION_SEG - 1
+        self.assertTrue(auth.sesion_valida(token))
+        # SESION_SEG sin usarse la vence.
+        self.reloj.return_value += auth.SESION_SEG
         self.assertFalse(auth.sesion_valida(token))
         self.assertNotIn(token, auth._sesiones)
 

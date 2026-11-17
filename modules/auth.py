@@ -63,6 +63,7 @@ def sesion_valida(token) -> bool:
         if sesion["expira"] <= time.time():
             _sesiones.pop(token, None)
             return False
+        sesion["expira"] = time.time() + SESION_SEG  # caduca por inactividad: cada uso la renueva
         return True
 
 
