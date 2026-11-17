@@ -3752,8 +3752,12 @@
 
     // ── LOGIN / SESSION ──────────────────────────────────────────────
     let _currentRole = null;
+    let _loginReto = null;
 
     function showLogin() {
+      _loginReto = null;
+      document.getElementById('loginCodeBox').style.display = 'none';
+      document.getElementById('loginCode').value = '';
       const ls = document.getElementById('loginScreen');
       ls.style.display = 'flex';
       ls.style.alignItems = 'center';
@@ -3784,11 +3788,26 @@
       const password = document.getElementById('loginPass').value;
       const errEl = document.getElementById('loginError');
       errEl.style.display = 'none';
-      if (!username || !password) { errEl.textContent = 'Ingresa usuario y contraseña'; errEl.style.display = 'block'; return; }
+      if (!_loginReto && (!username || !password)) { errEl.textContent = 'Ingresa usuario y contraseña'; errEl.style.display = 'block'; return; }
       try {
-        const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username, password}) });
+        let device = null;
+        try { device = localStorage.getItem('device_token'); } catch { }
+        const ruta = _loginReto ? '/api/login/verificar' : '/api/login';
+        const body = _loginReto ? {reto: _loginReto, codigo: document.getElementById('loginCode').value.trim()} : {username, password, device};
+        const res = await fetch(ruta, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
         if (!res.ok) { const e = await res.json(); errEl.textContent = e.detail || 'Credenciales incorrectas'; errEl.style.display = 'block'; return; }
         const data = await res.json();
+        if (data.verificar) {
+          _loginReto = data.reto;
+          document.getElementById('loginCodeBox').style.display = 'block';
+          document.getElementById('loginCode').value = '';
+          document.getElementById('loginCode').focus();
+          return;
+        }
+        if (data.device) { try { localStorage.setItem('device_token', data.device); } catch { } }
+        _loginReto = null;
+        document.getElementById('loginCodeBox').style.display = 'none';
+        document.getElementById('loginCode').value = '';
         sessionStorage.setItem('session', JSON.stringify({username: data.username, role: data.role, token: data.token}));
         _currentRole = data.role;
         if (data.role === 'deco') { showDecoApp(); init(); }

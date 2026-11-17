@@ -10,7 +10,7 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime
 
 
 def enviar_corte_email(pdf_path: str, resumen: dict, cajero: str,
@@ -136,6 +136,46 @@ def enviar_nomina_email(pdf_path: str, nomina: dict, cajero: str):
     threading.Thread(target=_enviar, daemon=True).start()
 
 
+def _enviar_texto(asunto: str, cuerpo: str) -> bool:
+    from modules.database import get_email_config
+    config = get_email_config()
+
+    email_from = config.get("email_from", "").strip()
+    email_pass = config.get("email_password", "").strip()
+    email_dest = config.get("email_destino", "").strip() or "estudiodecomx@gmail.com"
+    if not email_from or not email_pass:
+        print("[EMAIL] No hay credenciales configuradas, omitiendo notificación.")
+        return False
+
+    msg = MIMEMultipart()
+    msg["From"] = email_from
+    msg["To"] = email_dest
+    msg["Subject"] = asunto
+    msg.attach(MIMEText(cuerpo, "plain"))
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(email_from, email_pass)
+        server.sendmail(email_from, email_dest, msg.as_string())
+    return True
+
+
+def enviar_codigo_login(codigo: str, username: str) -> bool:
+    """Envía el código de acceso de forma síncrona, sin registrarlo en consola."""
+    asunto = f"Código de acceso Estudio Deco: {codigo}"
+    cuerpo = (
+        f"Código de acceso: {codigo}\n"
+        f"Usuario: {username}\n"
+        f"Fecha y hora: {datetime.now():%Y-%m-%d %H:%M:%S}\n\n"
+        "Vigencia: 10 minutos.\n"
+        "Si no fuiste tú, cambia la contraseña."
+    )
+    try:
+        return _enviar_texto(asunto, cuerpo)
+    except Exception as e:
+        # El texto de una excepción SMTP podría incluir el mensaje y su código.
+        print(f"[EMAIL] Error al enviar código de acceso: {type(e).__name__}")
+        return False
+
+
 def enviar_notificacion_email(asunto: str, cuerpo: str):
     """
     Envía un email de notificación simple (sin adjuntos) en un hilo separado.
@@ -143,31 +183,8 @@ def enviar_notificacion_email(asunto: str, cuerpo: str):
     """
     def _enviar():
         try:
-            from modules.database import get_email_config
-            config = get_email_config()
-
-            email_from = config.get("email_from", "").strip()
-            email_pass = config.get("email_password", "").strip()
-            email_dest = config.get("email_destino", "").strip()
-
-            if not email_from or not email_pass:
-                print("[EMAIL] No hay credenciales configuradas, omitiendo notificación.")
-                return
-
-            if not email_dest:
-                email_dest = "estudiodecomx@gmail.com"
-
-            msg = MIMEMultipart()
-            msg["From"] = email_from
-            msg["To"] = email_dest
-            msg["Subject"] = asunto
-            msg.attach(MIMEText(cuerpo, "plain"))
-
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-                server.login(email_from, email_pass)
-                server.sendmail(email_from, email_dest, msg.as_string())
-
-            print(f"[EMAIL] Notificación enviada: {asunto}")
+            if _enviar_texto(asunto, cuerpo):
+                print(f"[EMAIL] Notificación enviada: {asunto}")
         except Exception as e:
             print(f"[EMAIL] Error notificación: {e}")
 
