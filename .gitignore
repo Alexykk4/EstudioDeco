@@ -33,3 +33,8 @@ errores.log
 
 # Reportes y PDFs generados
 assets/*.pdf
+
+# Entregables y reportes con datos reales (repo público)
+entregas/
+reports/
+.directory

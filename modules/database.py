@@ -3,7 +3,7 @@ logging.basicConfig(filename="errores.log", level=logging.ERROR, format="%(ascti
 """
 modules/database.py — Estudio Deco POS v2
 """
-import sqlite3, hashlib
+import sqlite3, hashlib, json
 from datetime import datetime, date
 from pathlib import Path
 
@@ -459,59 +459,11 @@ def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0
         conn.close()
         return None
 
-    total = sum((i["cantidad"] * i["precio_unitario"]) for i in items)
-    folio = None
-    venta_id = None
-
-    try:  # F-1: bloque atómico con rollback en caso de fallo
+    try:  # Cobro y cierre de orden dentro de la misma transacción.
+        venta_id, folio, total, _, _ = _guardar_venta(
+            conn, usuario_id, metodo_pago, items, monto_efectivo, monto_tarjeta, mesa_id
+        )
         cur = conn.cursor()
-        folio = _generar_folio(conn)
-
-        # 3. Guardar en 'ventas'
-        if metodo_pago == "Mixto":
-            cur.execute("""
-                INSERT INTO ventas (folio, mesa_id, usuario_id, metodo_pago, monto_efectivo, monto_tarjeta, subtotal, total)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (folio, mesa_id, usuario_id, metodo_pago, monto_efectivo, monto_tarjeta, total, total))
-        else:
-            m_efectivo = total if metodo_pago == "Efectivo" else 0.0
-            m_tarjeta = total if metodo_pago in ("Tarjeta", "Transferencia") else 0.0
-            cur.execute("""
-                INSERT INTO ventas (folio, mesa_id, usuario_id, metodo_pago, monto_efectivo, monto_tarjeta, subtotal, total)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (folio, mesa_id, usuario_id, metodo_pago, m_efectivo, m_tarjeta, total, total))
-
-        venta_id = cur.execute("SELECT last_insert_rowid()").fetchone()[0]
-
-        # 4. Mover items a venta_detalle y descontar stock
-        for item in items:
-            pid = item["producto_id"]
-            is_bundle = False
-            if pid:
-                br = cur.execute("SELECT es_bundle FROM productos WHERE id=?", (pid,)).fetchone()
-                is_bundle = br and br["es_bundle"]
-
-            if is_bundle:
-                _expandir_bundle(conn, cur, venta_id, pid, item["cantidad"])
-            else:
-                costo_u = 0.0
-                if pid:
-                    row_prod = cur.execute("SELECT costo FROM productos WHERE id=?", (pid,)).fetchone()
-                    if row_prod: costo_u = row_prod["costo"]
-                cur.execute("""
-                    INSERT INTO venta_detalle (venta_id, producto_id, tienda_id, nombre_producto, cantidad, precio_unitario, costo_unitario, subtotal, es_precio_abierto)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (venta_id, pid, item["tienda_id"], item["nombre_producto"],
-                      item["cantidad"], item["precio_unitario"], costo_u,
-                      item["cantidad"]*item["precio_unitario"], item["es_precio_abierto"]))
-                # F-3: proteger stock contra negativos
-                if not item["es_precio_abierto"] and pid:
-                    rows_updated = cur.execute(
-                        "UPDATE productos SET stock_local = stock_local - ? WHERE id=? AND stock_local >= ?",
-                        (item["cantidad"], pid, item["cantidad"])
-                    ).rowcount
-                    if rows_updated == 0:
-                        raise ValueError(f"Stock insuficiente para producto id={pid}")
 
         # 5. Cerrar la orden actual
         cur.execute("UPDATE ordenes SET estado='cerrada' WHERE id=?", (orden_id,))
@@ -520,20 +472,6 @@ def cerrar_mesa(orden_id, usuario_id, metodo_pago="Efectivo", monto_efectivo=0.0
         abiertas_restantes = cur.execute("SELECT count(*) FROM ordenes WHERE mesa_id=? AND estado='abierta'", (mesa_id,)).fetchone()[0]
         if abiertas_restantes == 0:
             cur.execute("UPDATE mesas SET estado='libre', nombre=CAST(numero AS TEXT) WHERE id=?", (mesa_id,))
-
-        # 7. Comisión tarjeta (4%)
-        if metodo_pago == 'Tarjeta':
-            comision = round(total * 0.04, 2)
-        elif metodo_pago == 'Mixto' and monto_tarjeta > 0:
-            comision = round(monto_tarjeta * 0.04, 2)
-        else:
-            comision = 0.0
-        if comision > 0:
-            concepto_comision = f"Comisión Tarjeta 4% {folio}"
-            cur.execute("""
-                INSERT INTO gastos (usuario_id, categoria, tienda_id, concepto, monto, origen)
-                VALUES (?, 'General', NULL, ?, ?, 'Banco')
-            """, (usuario_id, concepto_comision, comision))
 
         conn.commit()
     except Exception as e:
@@ -599,24 +537,32 @@ def _generar_folio(conn):
     return f"VTA-{hoy}-{num:04d}"
 
 # ── GASTOS ──
-def registrar_gasto(usuario_id, tienda_id, concepto, monto, origen="Caja"):
-    categoria = "General"
-    tienda_nombre = None
-    if tienda_id:
+def registrar_gasto(usuario_id, tienda_id, concepto, monto, origen="Caja", conn=None):
+    propia = conn is None
+    if propia:
         conn = get_connection()
-        row = conn.execute("SELECT categoria, nombre FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
-        conn.close()
-        if row:
-            categoria = row["categoria"]
-            tienda_nombre = row["nombre"]
-    conn = get_connection()
-    conn.execute("INSERT INTO gastos (usuario_id,categoria,tienda_id,concepto,monto,origen) VALUES (?,?,?,?,?,?)",
-                 (usuario_id, categoria, tienda_id, concepto, monto, origen))
-    conn.commit(); conn.close()
-    # Si el gasto es de Estación 304, también reflejarlo en su balance
-    if tienda_nombre and 'Estaci' in tienda_nombre:
-        metodo = 'Transferencia' if origen == 'Banco' else 'Efectivo'
-        registrar_movimiento_estacion('gasto', concepto, monto, metodo)
+    try:
+        categoria = "General"
+        tienda_nombre = None
+        if tienda_id:
+            row = conn.execute("SELECT categoria, nombre FROM tiendas WHERE id=?", (tienda_id,)).fetchone()
+            if row:
+                categoria = row["categoria"]
+                tienda_nombre = row["nombre"]
+        conn.execute("INSERT INTO gastos (usuario_id,categoria,tienda_id,concepto,monto,origen) VALUES (?,?,?,?,?,?)",
+                     (usuario_id, categoria, tienda_id, concepto, monto, origen))
+        if tienda_nombre and 'Estaci' in tienda_nombre:
+            metodo = 'Transferencia' if origen == 'Banco' else 'Efectivo'
+            registrar_movimiento_estacion('gasto', concepto, monto, metodo, conn=conn)
+        if propia:
+            conn.commit()
+    except Exception:
+        if propia:
+            conn.rollback()
+        raise
+    finally:
+        if propia:
+            conn.close()
 
 def listar_gastos(limit=50, offset=0):
     """Retorna gastos activos con paginación real (S-9). Excluye registros anulados (S-6)."""
@@ -685,13 +631,26 @@ def registrar_ingreso(usuario_id, concepto, monto, metodo_pago="Efectivo"):
     conn.commit(); conn.close()
 
 # ── BALANCE ACUMULADO HISTÓRICO ──
+def _inicio_turno(conn):
+    corte = conn.execute("SELECT created_at FROM cortes_caja ORDER BY id DESC LIMIT 1").fetchone()
+    return corte["created_at"] if corte else f"{date.today():%Y-%m-%d} 00:00:00"
+
+
+def _ajuste_vigente(row, desde):
+    if row:
+        try:
+            ajuste = json.loads(row["valor"])
+            if isinstance(ajuste, dict) and ajuste.get("desde") == desde:
+                return float(ajuste.get("monto", 0))
+        except (ValueError, TypeError):
+            pass
+    return 0.0
+
+
 def obtener_balance_actual():
-    """Devuelve el balance real acumulado desde el inicio: ventas + ingresos - gastos - pagos."""
+    """Devuelve ventas + ingresos - gastos y ajustes del turno actual."""
     conn = get_connection()
-    fecha = __import__('datetime').date.today().strftime("%Y-%m-%d")
-    last_corte = conn.execute("SELECT created_at FROM cortes_caja WHERE fecha=? ORDER BY id DESC LIMIT 1", (fecha,)).fetchone()
-    desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
-    
+    desde = _inicio_turno(conn)
 
     ventas_row = conn.execute("""
         SELECT
@@ -717,16 +676,10 @@ def obtener_balance_actual():
         FROM gastos WHERE (anulado IS NULL OR anulado=0) AND created_at > ?
     """, (desde,)).fetchone()
 
-    # Pagos a tiendas: solo los externos afectan al balance "real" del negocio.
-    # Importante: deben descontarse también de caja/banco según el método de pago,
-    # o el total no cuadrará con (en_caja + en_banco).
+    # Total informativo: los pagos nuevos ya están reflejados en gastos.
     pagos_row = conn.execute("""
-        SELECT
-          COALESCE(SUM(monto), 0) as total,
-          COALESCE(SUM(CASE WHEN (es_interno=0 OR es_interno IS NULL) THEN monto ELSE 0 END), 0) as externos,
-          COALESCE(SUM(CASE WHEN (es_interno=0 OR es_interno IS NULL) AND metodo_pago='Efectivo' THEN monto ELSE 0 END), 0) as externos_efectivo,
-          COALESCE(SUM(CASE WHEN (es_interno=0 OR es_interno IS NULL) AND metodo_pago!='Efectivo' THEN monto ELSE 0 END), 0) as externos_banco
-        FROM pagos_tienda WHERE created_at > ?
+        SELECT COALESCE(SUM(monto), 0) as externos
+        FROM pagos_tienda WHERE created_at > ? AND (es_interno=0 OR es_interno IS NULL)
     """, (desde,)).fetchone()
 
     ajuste_caja_row  = conn.execute("SELECT valor FROM config WHERE clave='ajuste_caja'").fetchone()
@@ -736,12 +689,8 @@ def obtener_balance_actual():
     total_ventas   = ventas_row['total']
     total_ingresos = ingresos_row['total']
     total_gastos   = gastos_row['total']
-    total_pagos    = pagos_row['externos']
-    pagos_efectivo = pagos_row['externos_efectivo']
-    pagos_banco    = pagos_row['externos_banco']
-
-    ajuste_caja  = float(ajuste_caja_row['valor'])  if ajuste_caja_row  else 0.0
-    ajuste_banco = float(ajuste_banco_row['valor']) if ajuste_banco_row else 0.0
+    ajuste_caja = _ajuste_vigente(ajuste_caja_row, desde)
+    ajuste_banco = _ajuste_vigente(ajuste_banco_row, desde)
 
     efectivo = (
         ventas_row['efectivo']
@@ -764,41 +713,30 @@ def obtener_balance_actual():
         'total_ventas':   round(total_ventas, 2),
         'total_ingresos': round(total_ingresos, 2),
         'total_gastos':   round(total_gastos, 2),
-        'total_pagos':    round(total_pagos, 2),
+        'total_pagos':    round(pagos_row['externos'], 2),
         'ajuste_caja':    round(ajuste_caja, 2),
         'ajuste_banco':   round(ajuste_banco, 2),
     }
 
 def ajustar_balance(caja_real: float, banco_real: float):
     """Guarda ajustes para que el balance calculado coincida con los valores reales."""
+    bal = obtener_balance_actual()
     conn = get_connection()
-    fecha = __import__('datetime').date.today().strftime("%Y-%m-%d")
-    last_corte = conn.execute("SELECT created_at FROM cortes_caja WHERE fecha=? ORDER BY id DESC LIMIT 1", (fecha,)).fetchone()
-    desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
-    
-    # Calcular balance actual sin ajustes para determinar la diferencia
-    ventas_row = conn.execute("""
-        SELECT COALESCE(SUM(monto_efectivo),0) as ef, COALESCE(SUM(monto_tarjeta),0) as tar
-        FROM ventas WHERE (cancelada IS NULL OR cancelada=0) AND created_at > ?
-    """, (desde,)).fetchone()
-    ingresos_row = conn.execute("""
-        SELECT COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN monto ELSE 0 END),0) as ef,
-               COALESCE(SUM(CASE WHEN metodo_pago!='Efectivo' THEN monto ELSE 0 END),0) as banco
-        FROM ingresos WHERE created_at > ?
-    """, (desde,)).fetchone()
-    gastos_row = conn.execute("""
-        SELECT COALESCE(SUM(CASE WHEN origen='Caja' THEN monto ELSE 0 END),0) as caja,
-               COALESCE(SUM(CASE WHEN origen='Banco' THEN monto ELSE 0 END),0) as banco
-        FROM gastos WHERE created_at > ?
-    """, (desde,)).fetchone()
-    calculado_caja  = ventas_row['ef']  + ingresos_row['ef']     - gastos_row['caja']
-    calculado_banco = ventas_row['tar'] + ingresos_row['banco']  - gastos_row['banco']
-    ajuste_caja  = round(caja_real  - calculado_caja,  2)
-    ajuste_banco = round(banco_real - calculado_banco, 2)
-    conn.execute("INSERT OR REPLACE INTO config (clave,valor) VALUES ('ajuste_caja',?)",  (str(ajuste_caja),))
-    conn.execute("INSERT OR REPLACE INTO config (clave,valor) VALUES ('ajuste_banco',?)", (str(ajuste_banco),))
-    conn.commit(); conn.close()
+    try:
+        desde = _inicio_turno(conn)
+        ajuste_caja = round(caja_real - (bal['en_caja'] - bal['ajuste_caja']), 2)
+        ajuste_banco = round(banco_real - (bal['en_banco'] - bal['ajuste_banco']), 2)
+        for clave, monto in (('ajuste_caja', ajuste_caja), ('ajuste_banco', ajuste_banco)):
+            conn.execute("INSERT OR REPLACE INTO config (clave,valor) VALUES (?,?)",
+                         (clave, json.dumps({"monto": monto, "desde": desde})))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     return {'ajuste_caja': ajuste_caja, 'ajuste_banco': ajuste_banco}
+
 
 def limpiar_ingresos_gastos(fecha_inicio: str, fecha_fin: str):
     """
@@ -891,26 +829,36 @@ def get_fondo_apertura():
 
 # ── CORTE ──
 def obtener_resumen_dia(fecha=None):
-    if not fecha: fecha = date.today().strftime("%Y-%m-%d")
+    turno_actual = fecha is None
+    if not fecha:
+        fecha = date.today().strftime("%Y-%m-%d")
     conn = get_connection()
-
-    # Inicio del turno actual: desde el último corte de hoy, o desde medianoche
-    last_corte = conn.execute(
-        "SELECT created_at FROM cortes_caja WHERE fecha=? ORDER BY id DESC LIMIT 1",
-        (fecha,)
-    ).fetchone()
-    desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
+    if turno_actual:
+        desde = _inicio_turno(conn)
+        periodo = "{alias}created_at > ?"
+        params = (desde,)
+    else:
+        last_corte = conn.execute(
+            "SELECT created_at FROM cortes_caja WHERE fecha=? ORDER BY id DESC LIMIT 1",
+            (fecha,)
+        ).fetchone()
+        desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
+        periodo = "DATE({alias}created_at)=? AND {alias}created_at > ?"
+        params = (fecha, desde)
+    filtro = periodo.format(alias="")
+    filtro_ventas = periodo.format(alias="v.")
+    filtro_gastos = periodo.format(alias="g.")
 
     rv = conn.execute(
-        "SELECT COALESCE(SUM(total),0) as total_ventas, COALESCE(SUM(monto_efectivo),0) as total_efectivo, COUNT(*) as num_ventas FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
-        (fecha, desde)
+        f"SELECT COALESCE(SUM(total),0) as total_ventas, COALESCE(SUM(monto_efectivo),0) as total_efectivo, COUNT(*) as num_ventas FROM ventas WHERE {filtro} AND (cancelada IS NULL OR cancelada=0)",
+        params
     ).fetchone()
     canceladas_dia = conn.execute(
-        "SELECT COUNT(*) as n FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND cancelada=1",
-        (fecha, desde)
+        f"SELECT COUNT(*) as n FROM ventas WHERE {filtro} AND cancelada=1",
+        params
     ).fetchone()
     vt = conn.execute(
-        """SELECT COALESCE(t.nombre,'Sin Tienda') as tienda,
+        f"""SELECT COALESCE(t.nombre,'Sin Tienda') as tienda,
                   COALESCE(SUM(vd.subtotal),0) as total,
                   COALESCE(SUM(vd.subtotal * CASE
                       WHEN v.metodo_pago='Tarjeta' THEN 0.04
@@ -919,57 +867,57 @@ def obtener_resumen_dia(fecha=None):
            FROM venta_detalle vd
            JOIN ventas v ON v.id=vd.venta_id
            LEFT JOIN tiendas t ON t.id=vd.tienda_id
-           WHERE DATE(v.created_at)=? AND v.created_at>? AND (v.cancelada IS NULL OR v.cancelada=0)
+           WHERE {filtro_ventas} AND (v.cancelada IS NULL OR v.cancelada=0)
            GROUP BY COALESCE(t.nombre,'Sin Tienda')""",
-        (fecha, desde)
+        params
     ).fetchall()
     # Sabrodulce: pago = sum(cantidad * costo), filtrando por tienda_id de la venta
     sabro = conn.execute(
-        """SELECT COALESCE(SUM(vd.cantidad),0) as roles,
+        f"""SELECT COALESCE(SUM(vd.cantidad),0) as roles,
                   COALESCE(SUM(vd.cantidad * COALESCE(NULLIF(vd.costo_unitario,0), p.costo, 0)), 0) as pago_total
            FROM venta_detalle vd
            JOIN ventas v ON v.id=vd.venta_id
            LEFT JOIN productos p ON p.id=vd.producto_id
            LEFT JOIN tiendas t ON t.id=vd.tienda_id
            WHERE LOWER(COALESCE(t.nombre,'')) LIKE '%sabro%'
-             AND DATE(v.created_at)=? AND v.created_at>?
+             AND {filtro_ventas}
              AND (v.cancelada IS NULL OR v.cancelada=0)""",
-        (fecha, desde)
+        params
     ).fetchone()
     # Todos los gastos activos (para utilidad) — excluye anulados (S-6)
     rg = conn.execute(
-        "SELECT COALESCE(SUM(monto),0) as total_gastos FROM gastos WHERE DATE(created_at)=? AND created_at > ? AND (anulado IS NULL OR anulado=0)",
-        (fecha, desde)
+        f"SELECT COALESCE(SUM(monto),0) as total_gastos FROM gastos WHERE {filtro} AND (anulado IS NULL OR anulado=0)",
+        params
     ).fetchone()
     gd = conn.execute(
-        "SELECT g.concepto, g.monto, g.categoria, g.origen, COALESCE(t.nombre,'General') as tienda FROM gastos g LEFT JOIN tiendas t ON t.id = g.tienda_id WHERE DATE(g.created_at)=? AND g.created_at > ? AND (g.anulado IS NULL OR g.anulado=0) ORDER BY g.created_at",
-        (fecha, desde)
+        f"SELECT g.concepto, g.monto, g.categoria, g.origen, COALESCE(t.nombre,'General') as tienda FROM gastos g LEFT JOIN tiendas t ON t.id = g.tienda_id WHERE {filtro_gastos} AND (g.anulado IS NULL OR g.anulado=0) ORDER BY g.created_at",
+        params
     ).fetchall()
     # Solo gastos que salen de la caja física (excluye comisiones de tarjeta y los que salen del banco)
     gc = conn.execute(
-        "SELECT COALESCE(SUM(monto),0) as gastos_caja FROM gastos WHERE DATE(created_at)=? AND created_at > ? AND concepto NOT LIKE 'Comisi%n Tarjeta%' AND origen='Caja' AND (anulado IS NULL OR anulado=0)",
-        (fecha, desde)
+        f"SELECT COALESCE(SUM(monto),0) as gastos_caja FROM gastos WHERE {filtro} AND concepto NOT LIKE 'Comisi%n Tarjeta%' AND origen='Caja' AND (anulado IS NULL OR anulado=0)",
+        params
     ).fetchone()
     inv = conn.execute(
-        "SELECT COALESCE(SUM(vd.cantidad * vd.costo_unitario),0) as inversion FROM venta_detalle vd JOIN ventas v ON v.id=vd.venta_id WHERE DATE(v.created_at)=? AND v.created_at > ? AND (v.cancelada IS NULL OR v.cancelada=0)",
-        (fecha, desde)
+        f"SELECT COALESCE(SUM(vd.cantidad * vd.costo_unitario),0) as inversion FROM venta_detalle vd JOIN ventas v ON v.id=vd.venta_id WHERE {filtro_ventas} AND (v.cancelada IS NULL OR v.cancelada=0)",
+        params
     ).fetchone()
     efectivo_row = conn.execute(
-        "SELECT COALESCE(SUM(monto_efectivo), 0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
-        (fecha, desde)
+        f"SELECT COALESCE(SUM(monto_efectivo), 0) as monto FROM ventas WHERE {filtro} AND (cancelada IS NULL OR cancelada=0)",
+        params
     ).fetchone()
     # Solo Tarjeta y Mixto tienen comisión; Transferencia es independiente
     tarjeta_row = conn.execute(
-        "SELECT COALESCE(SUM(monto_tarjeta), 0) as monto FROM ventas WHERE metodo_pago IN ('Tarjeta','Mixto') AND DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
-        (fecha, desde)
+        f"SELECT COALESCE(SUM(monto_tarjeta), 0) as monto FROM ventas WHERE metodo_pago IN ('Tarjeta','Mixto') AND {filtro} AND (cancelada IS NULL OR cancelada=0)",
+        params
     ).fetchone()
     transferencia_row = conn.execute(
-        "SELECT COALESCE(SUM(total), 0) as monto FROM ventas WHERE metodo_pago='Transferencia' AND DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0)",
-        (fecha, desde)
+        f"SELECT COALESCE(SUM(total), 0) as monto FROM ventas WHERE metodo_pago='Transferencia' AND {filtro} AND (cancelada IS NULL OR cancelada=0)",
+        params
     ).fetchone()
     conteo_metodos = conn.execute(
-        "SELECT metodo_pago, COUNT(*) as n, COALESCE(SUM(total),0) as monto FROM ventas WHERE DATE(created_at)=? AND created_at > ? AND (cancelada IS NULL OR cancelada=0) GROUP BY metodo_pago",
-        (fecha, desde)
+        f"SELECT metodo_pago, COUNT(*) as n, COALESCE(SUM(total),0) as monto FROM ventas WHERE {filtro} AND (cancelada IS NULL OR cancelada=0) GROUP BY metodo_pago",
+        params
     ).fetchall()
 
     # Ingresos del día activos (excluye anulados, S-6)
@@ -977,12 +925,12 @@ def obtener_resumen_dia(fecha=None):
         "SELECT COALESCE(SUM(CASE WHEN metodo_pago='Efectivo' THEN monto ELSE 0 END),0) as ef,"
         " COALESCE(SUM(CASE WHEN metodo_pago='Tarjeta' THEN monto ELSE 0 END),0) as tar,"
         " COALESCE(SUM(monto),0) as total"
-        " FROM ingresos WHERE DATE(created_at)=? AND created_at > ? AND (anulado IS NULL OR anulado=0)",
-        (fecha, desde)
+        f" FROM ingresos WHERE {filtro} AND (anulado IS NULL OR anulado=0)",
+        params
     ).fetchone()
     ing_det = conn.execute(
-        "SELECT concepto, monto, metodo_pago FROM ingresos WHERE DATE(created_at)=? AND created_at > ? AND (anulado IS NULL OR anulado=0) ORDER BY created_at",
-        (fecha, desde)
+        f"SELECT concepto, monto, metodo_pago FROM ingresos WHERE {filtro} AND (anulado IS NULL OR anulado=0) ORDER BY created_at",
+        params
     ).fetchall()
 
     metodos = []
@@ -1036,6 +984,14 @@ def obtener_resumen_dia(fecha=None):
         "num_canceladas": canceladas_dia["n"] if canceladas_dia else 0,
     }
 
+# Un pago nuevo tiene un gasto activo del mismo monto registrado a la par.
+_PAGO_CON_GASTO_SQL = """EXISTS (
+    SELECT 1 FROM gastos g
+    WHERE (g.anulado IS NULL OR g.anulado=0) AND g.monto=pt.monto
+      AND ABS(julianday(g.created_at)-julianday(pt.created_at)) <= 5.0/86400
+)"""
+
+
 def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
     from datetime import timedelta
     hoy = date.today()
@@ -1059,11 +1015,24 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
         SELECT COALESCE(SUM(monto),0) as total
         FROM gastos WHERE DATE(created_at) < ? AND (anulado IS NULL OR anulado=0)
     """, (fecha_inicio,)).fetchone()
-    prev_pagos_ext = conn.execute("""
-        SELECT COALESCE(SUM(monto),0) as total
-        FROM pagos_tienda WHERE DATE(created_at) < ? AND (es_interno=0 OR es_interno IS NULL)
+    prev_pagos_ext = conn.execute(f"""
+        SELECT COALESCE(SUM(pt.monto),0) as total
+        FROM pagos_tienda pt
+        WHERE DATE(pt.created_at) < ? AND (pt.es_interno=0 OR pt.es_interno IS NULL)
+          AND NOT {_PAGO_CON_GASTO_SQL}
     """, (fecha_inicio,)).fetchone()
-    saldo_anterior = (prev_ventas['total'] + prev_ingresos['total']) - prev_gastos['total'] - prev_pagos_ext['total']
+    prev_gastos_internos = conn.execute("""
+        SELECT COALESCE(SUM(g.monto),0) as total
+        FROM gastos g
+        WHERE DATE(g.created_at) < ? AND (g.anulado IS NULL OR g.anulado=0)
+          AND EXISTS (
+              SELECT 1 FROM pagos_tienda pt
+              WHERE pt.es_interno=1 AND pt.monto=g.monto
+                AND ABS(julianday(g.created_at)-julianday(pt.created_at)) <= 5.0/86400
+          )
+    """, (fecha_inicio,)).fetchone()
+    saldo_anterior = (prev_ventas['total'] + prev_ingresos['total'] - prev_gastos['total']
+                      - prev_pagos_ext['total'] + prev_gastos_internos['total'])
 
     rv = conn.execute("""
         SELECT COALESCE(SUM(total),0) as total_ventas,
@@ -1250,14 +1219,27 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
     total_ingresos = ingresos_total_row['total'] if ingresos_total_row else 0
 
     # ── Pagos a tiendas de esta semana ──
-    pagos_rows = conn.execute("""
-        SELECT pt.*, t.nombre as tienda_nombre_actual
+    pagos_rows = conn.execute(f"""
+        SELECT pt.*, t.nombre as tienda_nombre_actual, {_PAGO_CON_GASTO_SQL} as pareado
         FROM pagos_tienda pt
         LEFT JOIN tiendas t ON t.id = pt.tienda_id
         WHERE pt.semana_inicio = ? AND pt.semana_fin = ?
         ORDER BY pt.created_at
     """, (fecha_inicio, fecha_fin)).fetchall()
     pagos_semana = [dict(r) for r in pagos_rows]
+    externos_sin_gasto = sum(p['monto'] for p in pagos_semana if not p['es_interno'] and not p['pareado'])
+    for pago in pagos_semana:
+        del pago['pareado']
+    gastos_internos = conn.execute("""
+        SELECT COALESCE(SUM(g.monto),0) as total
+        FROM gastos g
+        WHERE DATE(g.created_at) BETWEEN ? AND ? AND (g.anulado IS NULL OR g.anulado=0)
+          AND EXISTS (
+              SELECT 1 FROM pagos_tienda pt
+              WHERE pt.es_interno=1 AND pt.monto=g.monto
+                AND ABS(julianday(g.created_at)-julianday(pt.created_at)) <= 5.0/86400
+          )
+    """, (fecha_inicio, fecha_fin)).fetchone()['total']
 
     # ── Balances por tienda ──
     # 304 = sus ventas propias + transferencias internas recibidas
@@ -1267,10 +1249,10 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
     )
     total_pagos_internos = sum(p['monto'] for p in pagos_semana if p.get('es_interno'))
     total_pagos_externos = sum(p['monto'] for p in pagos_semana if not p.get('es_interno'))
-    acumulado_semana = total_semana + total_ingresos - gastos['total']
+    acumulado_semana = total_semana + total_ingresos - gastos['total'] + gastos_internos
     balance_estacion = estacion_ventas + total_pagos_internos
-    # Restar pagos a tiendas externas (Sabrodulce, proveedores, etc.) del balance de Estudio Deco
-    balance_estudio = acumulado_semana - balance_estacion - total_pagos_externos
+    # Los pagos externos pareados ya se restaron como gastos.
+    balance_estudio = acumulado_semana - balance_estacion - externos_sin_gasto
 
     conn.close()
     return {
@@ -1309,14 +1291,11 @@ def obtener_resumen_semana(fecha_inicio=None, fecha_fin=None):
 
 def registrar_corte(usuario_id, efectivo_real, fondo_caja=0.0, desglose=None):
     import json
+    # Sin fecha explícita, el resumen usa _inicio_turno incluso al cruzar medianoche.
     resumen = obtener_resumen_dia()
     dif = efectivo_real - resumen["efectivo_esperado"]
     desglose_str = json.dumps(desglose or {})
     conn = get_connection()
-    fecha = __import__('datetime').date.today().strftime("%Y-%m-%d")
-    last_corte = conn.execute("SELECT created_at FROM cortes_caja WHERE fecha=? ORDER BY id DESC LIMIT 1", (fecha,)).fetchone()
-    desde = last_corte["created_at"] if last_corte else f"{fecha} 00:00:00"
-    
     conn.execute(
         "INSERT INTO cortes_caja (usuario_id,fecha,total_ventas,total_gastos,efectivo_esperado,efectivo_real,diferencia,fondo_caja,desglose_billetes) VALUES (?,?,?,?,?,?,?,?,?)",
         (usuario_id, resumen["fecha"], resumen["total_ventas"], resumen["total_gastos"],
@@ -1329,14 +1308,13 @@ def registrar_corte(usuario_id, efectivo_real, fondo_caja=0.0, desglose=None):
     resumen["desglose_billetes"] = desglose or {}
     return resumen
 
-def generar_folio():
-    conn = get_connection()
-    f = _generar_folio(conn)
-    conn.close()
-    return f
+def _validar_mixto(metodo, ef, tar, total):
+    if metodo == "Mixto" and abs(ef + tar - total) > 0.02:
+        raise ValueError("La suma de efectivo y tarjeta no cuadra con el total")
 
-def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_tarjeta=0.0, efectivo_recibido=0.0):
-    conn = get_connection()
+
+def _guardar_venta(conn, usuario_id, metodo_pago, items, monto_efectivo, monto_tarjeta, mesa_id=None):
+    """Guarda el cobro completo; la transacción pertenece al llamador."""
     total = sum(i["precio_unitario"] * i["cantidad"] for i in items)
 
     if metodo_pago == "Efectivo":
@@ -1346,53 +1324,62 @@ def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_ta
         monto_efectivo = 0.0
         monto_tarjeta = total
 
-    try:  # F-1: bloque atómico con rollback en caso de fallo
-        folio = _generar_folio(conn)
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO ventas (folio,usuario_id,metodo_pago,monto_efectivo,monto_tarjeta,subtotal,total) VALUES (?,?,?,?,?,?,?)",
-            (folio, usuario_id, metodo_pago, monto_efectivo, monto_tarjeta, total, total)
-        )
-        venta_id = cur.lastrowid
+    _validar_mixto(metodo_pago, monto_efectivo, monto_tarjeta, total)
+    folio = _generar_folio(conn)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO ventas (folio,mesa_id,usuario_id,metodo_pago,monto_efectivo,monto_tarjeta,subtotal,total) VALUES (?,?,?,?,?,?,?,?)",
+        (folio, mesa_id, usuario_id, metodo_pago, monto_efectivo, monto_tarjeta, total, total)
+    )
+    venta_id = cur.lastrowid
 
-        for item in items:
-            pid = item.get("producto_id")
-            is_bundle = False
+    for item in items:
+        pid = item.get("producto_id")
+        is_bundle = False
+        if pid:
+            br = cur.execute("SELECT es_bundle FROM productos WHERE id=?", (pid,)).fetchone()
+            is_bundle = br and br["es_bundle"]
+
+        if is_bundle:
+            _expandir_bundle(conn, cur, venta_id, pid, item["cantidad"])
+        else:
+            sub = item["precio_unitario"] * item["cantidad"]
+            costo = 0.0
             if pid:
-                br = cur.execute("SELECT es_bundle FROM productos WHERE id=?", (pid,)).fetchone()
-                is_bundle = br and br["es_bundle"]
+                cr = cur.execute("SELECT costo FROM productos WHERE id=?", (pid,)).fetchone()
+                if cr: costo = cr["costo"] or 0.0
+            cur.execute(
+                "INSERT INTO venta_detalle (venta_id,producto_id,tienda_id,nombre_producto,cantidad,precio_unitario,costo_unitario,subtotal,es_precio_abierto) VALUES (?,?,?,?,?,?,?,?,?)",
+                (venta_id, pid, item["tienda_id"], item.get("nombre_producto", item.get("nombre")), item["cantidad"], item["precio_unitario"], costo, sub, 1 if item.get("es_precio_abierto") else 0)
+            )
+            # F-3: proteger stock contra negativos
+            if pid and not item.get("es_precio_abierto"):
+                rows_updated = cur.execute(
+                    "UPDATE productos SET stock_local=stock_local-?, sincronizado=0 WHERE id=? AND stock_local >= ?",
+                    (item["cantidad"], pid, item["cantidad"])
+                ).rowcount
+                if rows_updated == 0:
+                    raise ValueError(f"Stock insuficiente para producto id={pid}")
 
-            if is_bundle:
-                _expandir_bundle(conn, cur, venta_id, pid, item["cantidad"])
-            else:
-                sub = item["precio_unitario"] * item["cantidad"]
-                costo = 0.0
-                if pid:
-                    cr = cur.execute("SELECT costo FROM productos WHERE id=?", (pid,)).fetchone()
-                    if cr: costo = cr["costo"] or 0.0
-                cur.execute(
-                    "INSERT INTO venta_detalle (venta_id,producto_id,tienda_id,nombre_producto,cantidad,precio_unitario,costo_unitario,subtotal,es_precio_abierto) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (venta_id, pid, item["tienda_id"], item["nombre"], item["cantidad"], item["precio_unitario"], costo, sub, 1 if item.get("es_precio_abierto") else 0)
-                )
-                # F-3: proteger stock contra negativos
-                if pid and not item.get("es_precio_abierto"):
-                    rows_updated = cur.execute(
-                        "UPDATE productos SET stock_local=stock_local-?, sincronizado=0 WHERE id=? AND stock_local >= ?",
-                        (item["cantidad"], pid, item["cantidad"])
-                    ).rowcount
-                    if rows_updated == 0:
-                        raise ValueError(f"Stock insuficiente para producto id={pid}")
+    # Comisión tarjeta (4%)
+    if monto_tarjeta > 0 and metodo_pago in ('Tarjeta', 'Mixto'):
+        comision = round(monto_tarjeta * 0.04, 2)
+        if comision > 0:
+            concepto_comision = f"Comisión Tarjeta 4% {folio}"
+            cur.execute("""
+                INSERT INTO gastos (usuario_id, categoria, tienda_id, concepto, monto, origen)
+                VALUES (?, 'General', NULL, ?, ?, 'Banco')
+            """, (usuario_id, concepto_comision, comision))
 
-        # Comisión tarjeta (4%)
-        if monto_tarjeta > 0 and metodo_pago in ('Tarjeta', 'Mixto'):
-            comision = round(monto_tarjeta * 0.04, 2)
-            if comision > 0:
-                concepto_comision = f"Comisión Tarjeta 4% {folio}"
-                cur.execute("""
-                    INSERT INTO gastos (usuario_id, categoria, tienda_id, concepto, monto, origen)
-                    VALUES (?, 'General', NULL, ?, ?, 'Banco')
-                """, (usuario_id, concepto_comision, comision))
+    return venta_id, folio, total, monto_efectivo, monto_tarjeta
 
+
+def registrar_venta(usuario_id, metodo_pago, items, monto_efectivo=0.0, monto_tarjeta=0.0, efectivo_recibido=0.0):
+    conn = get_connection()
+    try:  # El cobro y el stock se confirman juntos.
+        venta_id, folio, total, monto_efectivo, monto_tarjeta = _guardar_venta(
+            conn, usuario_id, metodo_pago, items, monto_efectivo, monto_tarjeta
+        )
         conn.commit()
     except Exception as e:
         logging.error(f"DB Error: {e}")
@@ -1748,10 +1735,11 @@ def set_email_config(email_from, password, destino="estudiodecomx@gmail.com"):
 def corregir_venta(venta_id, metodo_pago, monto_efectivo, monto_tarjeta):
     """Corrige el método de pago y recalcula la comisión de tarjeta (F-2)."""
     conn = get_connection()
-    venta = conn.execute("SELECT folio, metodo_pago, monto_tarjeta, usuario_id FROM ventas WHERE id=?", (venta_id,)).fetchone()
+    venta = conn.execute("SELECT folio, metodo_pago, monto_tarjeta, usuario_id, total FROM ventas WHERE id=?", (venta_id,)).fetchone()
     if not venta:
         conn.close(); return
     try:
+        _validar_mixto(metodo_pago, monto_efectivo, monto_tarjeta, venta["total"])
         prev_data = dict(venta)
         concepto_com = f"Comisión Tarjeta 4% {venta['folio']}"
 
@@ -1793,14 +1781,25 @@ def anular_venta(venta_id, anulado_por=None):
     """Cancela la venta, revierte stock y anula (soft-delete) la comisión de tarjeta (S-7)."""
     conn = get_connection()
     venta = conn.execute("SELECT * FROM ventas WHERE id=?", (venta_id,)).fetchone()
-    if not venta:
+    if not venta or venta["cancelada"] == 1:
         conn.close(); return
     items = conn.execute("SELECT * FROM venta_detalle WHERE venta_id=?", (venta_id,)).fetchall()
     try:
         for item in items:
             if item["producto_id"] and not item["es_precio_abierto"]:
-                conn.execute("UPDATE productos SET stock_local = stock_local + ? WHERE id=?",
+                conn.execute("UPDATE productos SET stock_local = stock_local + ?, sincronizado=0 WHERE id=?",
                              (item["cantidad"], item["producto_id"]))
+            receta_key = ""
+            if item["producto_id"]:
+                producto = conn.execute("SELECT receta_key FROM productos WHERE id=?",
+                                        (item["producto_id"],)).fetchone()
+                if producto:
+                    receta_key = (producto["receta_key"] or "").strip()
+            if not receta_key:
+                receta_key = (item["nombre_producto"] or "").strip().upper()
+                receta_key = receta_key.removesuffix(" (FRÍO)").removesuffix(" (CALIENTE)")
+            for _ in range(item["cantidad"]):
+                devolver_ingredientes_bebida(receta_key, conn=conn)
         # Soft-delete de la comisión de tarjeta (evita borrar registros ya sincronizados con Sheets)
         comision_concepto = f"Comisión Tarjeta 4% {venta['folio']}"
         gasto_com = conn.execute("SELECT id FROM gastos WHERE concepto LIKE ?", (comision_concepto,)).fetchone()
@@ -1872,8 +1871,12 @@ def _expandir_bundle(conn, cur, venta_id, producto_id, cantidad_bundle):
             VALUES (?,?,?,?,?,?,?,?,0)
         """, (venta_id, c["componente_producto_id"], c["tienda_id"],
                c["nombre"], qty, c["precio_asignado"], c["costo"], sub))
-        cur.execute("UPDATE productos SET stock_local=stock_local-?, sincronizado=0 WHERE id=?",
-                    (qty, c["componente_producto_id"]))
+        rows_updated = cur.execute(
+            "UPDATE productos SET stock_local=stock_local-?, sincronizado=0 WHERE id=? AND stock_local >= ?",
+            (qty, c["componente_producto_id"], qty)
+        ).rowcount
+        if rows_updated == 0:
+            raise ValueError(f"Stock insuficiente para producto id={c['componente_producto_id']}")
 
 def marcar_sincronizado(tabla, record_id):
     conn = get_connection()
@@ -1881,13 +1884,24 @@ def marcar_sincronizado(tabla, record_id):
     conn.commit(); conn.close()
 
 # ── PAGOS A TIENDAS ──
-def registrar_movimiento_estacion(tipo, concepto, monto, metodo_pago='Efectivo'):
-    conn = get_connection()
-    conn.execute(
-        "INSERT INTO estacion_movimientos (tipo, concepto, monto, metodo_pago) VALUES (?,?,?,?)",
-        (tipo, concepto, monto, metodo_pago)
-    )
-    conn.commit(); conn.close()
+def registrar_movimiento_estacion(tipo, concepto, monto, metodo_pago='Efectivo', conn=None):
+    propia = conn is None
+    if propia:
+        conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO estacion_movimientos (tipo, concepto, monto, metodo_pago) VALUES (?,?,?,?)",
+            (tipo, concepto, monto, metodo_pago)
+        )
+        if propia:
+            conn.commit()
+    except Exception:
+        if propia:
+            conn.rollback()
+        raise
+    finally:
+        if propia:
+            conn.close()
 
 def obtener_balance_estacion():
     conn = get_connection()
@@ -1913,38 +1927,46 @@ def obtener_movimientos_estacion():
 def registrar_pago_tienda(tienda_id, tienda_nombre, monto, metodo_pago, concepto, es_interno, semana_inicio, semana_fin, usuario_id=None):
     """Registra un pago a una tienda. Si tienda_id=1 (Estación 304), también suma a su balance."""
     conn = get_connection()
-    conn.execute("""
-        INSERT INTO pagos_tienda (tienda_id, tienda_nombre, monto, metodo_pago, concepto, es_interno, semana_inicio, semana_fin)
-        VALUES (?,?,?,?,?,?,?,?)
-    """, (tienda_id, tienda_nombre, monto, metodo_pago, concepto, 1 if es_interno else 0, semana_inicio, semana_fin))
-    conn.commit()
-    conn.close()
-    
-    # NUEVO: DESCONTAR EL DINERO DE LA CAJA O BANCO
-    origen_pago = "Caja" if metodo_pago == "Efectivo" else "Banco"
-    uid = usuario_id if usuario_id else 1  # Fallback a Admin si no hay ID
-    
-    # Reutilizamos la función registrar_gasto para mantener la consistencia contable.
-    # Si el pago es a Estación 304 (tienda_id=1), no registramos el gasto con tienda_id=1
-    # para evitar que registrar_gasto lo descuente de su propio balance local (como si fuera un gasto interno de la Estación).
-    # En su lugar, lo registramos como gasto general y sumamos un ingreso a la Estación.
-    if tienda_id == 1 or (tienda_nombre and 'Estaci' in tienda_nombre):
-        registrar_gasto(
-            usuario_id=uid,
-            tienda_id=None,
-            concepto=concepto or f"Transferencia interna a {tienda_nombre}",
-            monto=monto,
-            origen=origen_pago
-        )
-        registrar_movimiento_estacion('ingreso', concepto or f"Transferencia interna de Estudio Deco", monto, metodo_pago)
-    else:
-        registrar_gasto(
-            usuario_id=uid,
-            tienda_id=tienda_id,
-            concepto=concepto or f"Pago semanal a {tienda_nombre}",
-            monto=monto,
-            origen=origen_pago
-        )
+    try:
+        conn.execute("""
+            INSERT INTO pagos_tienda (tienda_id, tienda_nombre, monto, metodo_pago, concepto, es_interno, semana_inicio, semana_fin)
+            VALUES (?,?,?,?,?,?,?,?)
+        """, (tienda_id, tienda_nombre, monto, metodo_pago, concepto, 1 if es_interno else 0, semana_inicio, semana_fin))
+
+        # El gasto y el movimiento se guardan en la misma transacción del pago.
+        origen_pago = "Caja" if metodo_pago == "Efectivo" else "Banco"
+        uid = usuario_id if usuario_id else 1  # Fallback a Admin si no hay ID
+
+        # Reutilizamos la función registrar_gasto para mantener la consistencia contable.
+        # Si el pago es a Estación 304 (tienda_id=1), no registramos el gasto con tienda_id=1
+        # para evitar que registrar_gasto lo descuente de su propio balance local (como si fuera un gasto interno de la Estación).
+        # En su lugar, lo registramos como gasto general y sumamos un ingreso a la Estación.
+        if tienda_id == 1 or (tienda_nombre and 'Estaci' in tienda_nombre):
+            registrar_gasto(
+                usuario_id=uid,
+                tienda_id=None,
+                concepto=concepto or f"Transferencia interna a {tienda_nombre}",
+                monto=monto,
+                origen=origen_pago,
+                conn=conn
+            )
+            registrar_movimiento_estacion('ingreso', concepto or f"Transferencia interna de Estudio Deco", monto, metodo_pago, conn=conn)
+        else:
+            registrar_gasto(
+                usuario_id=uid,
+                tienda_id=tienda_id,
+                concepto=concepto or f"Pago semanal a {tienda_nombre}",
+                monto=monto,
+                origen=origen_pago,
+                conn=conn
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
 
 def obtener_pagos_semana(semana_inicio, semana_fin):
     conn = get_connection()
@@ -1983,14 +2005,17 @@ def obtener_estadisticas():
     gastos_map = {r['mes']: r['gastos'] for r in gastos_mes}
 
     # Pagos a tiendas externas por mes
-    pagos_mes = conn.execute("""
-        SELECT strftime('%Y-%m', created_at) as mes,
-               COALESCE(SUM(monto),0) as pagos
-        FROM pagos_tienda
+    pagos_mes = conn.execute(f"""
+        SELECT strftime('%Y-%m', pt.created_at) as mes,
+               COALESCE(SUM(pt.monto),0) as pagos,
+               COALESCE(SUM(CASE WHEN NOT {_PAGO_CON_GASTO_SQL} THEN pt.monto ELSE 0 END),0) as pagos_sin_gasto
+        FROM pagos_tienda pt
         WHERE (es_interno=0 OR es_interno IS NULL)
         GROUP BY mes ORDER BY mes
     """).fetchall()
     pagos_map = {r['mes']: r['pagos'] for r in pagos_mes}
+
+    pagos_sin_gasto_mes = {r['mes']: r['pagos_sin_gasto'] for r in pagos_mes}
 
     por_mes = []
     for row in meses:
@@ -2002,6 +2027,7 @@ def obtener_estadisticas():
             'ingresos': round(ingresos_map.get(m, 0), 2),
             'gastos': round(gastos_map.get(m, 0), 2),
             'pagos': round(pagos_map.get(m, 0), 2),
+            'pagos_sin_gasto': round(pagos_sin_gasto_mes.get(m, 0), 2),
         })
 
     # Por año
@@ -2028,14 +2054,17 @@ def obtener_estadisticas():
     gastos_año_map = {r['año']: r['gastos'] for r in gastos_año}
 
     # Pagos a tiendas externas por año
-    pagos_año = conn.execute("""
-        SELECT strftime('%Y', created_at) as año,
-               COALESCE(SUM(monto),0) as pagos
-        FROM pagos_tienda
+    pagos_año = conn.execute(f"""
+        SELECT strftime('%Y', pt.created_at) as año,
+               COALESCE(SUM(pt.monto),0) as pagos,
+               COALESCE(SUM(CASE WHEN NOT {_PAGO_CON_GASTO_SQL} THEN pt.monto ELSE 0 END),0) as pagos_sin_gasto
+        FROM pagos_tienda pt
         WHERE (es_interno=0 OR es_interno IS NULL)
         GROUP BY año
     """).fetchall()
     pagos_año_map = {r['año']: r['pagos'] for r in pagos_año}
+
+    pagos_sin_gasto_año = {r['año']: r['pagos_sin_gasto'] for r in pagos_año}
 
     por_año = []
     for row in años:
@@ -2047,6 +2076,7 @@ def obtener_estadisticas():
             'ingresos': round(ingresos_año_map.get(a, 0), 2),
             'gastos': round(gastos_año_map.get(a, 0), 2),
             'pagos': round(pagos_año_map.get(a, 0), 2),
+            'pagos_sin_gasto': round(pagos_sin_gasto_año.get(a, 0), 2),
         })
 
     # Ventas por tienda por mes
@@ -2578,6 +2608,39 @@ def descontar_ingredientes_bebida(nombre_bebida: str) -> None:
         raise
     finally:
         conn.close()
+
+
+def devolver_ingredientes_bebida(nombre_receta, conn=None):
+    """Devuelve los insumos de una unidad; una receta inexistente se ignora."""
+    propia = conn is None
+    if propia:
+        conn = get_connection()
+    try:
+        receta = conn.execute(
+            "SELECT id FROM inv_recetas WHERE nombre=?",
+            (nombre_receta.strip().upper(),)
+        ).fetchone()
+        if not receta:
+            return
+        ingredientes = conn.execute(
+            "SELECT ingrediente_id, cantidad FROM inv_receta_ingredientes WHERE receta_id=?",
+            (receta["id"],)
+        ).fetchall()
+        for ingrediente in ingredientes:
+            conn.execute(
+                """UPDATE inv_ingredientes SET stock_actual=stock_actual+?,
+                   updated_at=datetime('now','localtime') WHERE id=?""",
+                (ingrediente["cantidad"], ingrediente["ingrediente_id"])
+            )
+        if propia:
+            conn.commit()
+    except Exception:
+        if propia:
+            conn.rollback()
+        raise
+    finally:
+        if propia:
+            conn.close()
 
 
 def restock_ingrediente(ingrediente_id: int, cantidad: float) -> None:
