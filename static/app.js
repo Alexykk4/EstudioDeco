@@ -3753,11 +3753,97 @@
     // ── LOGIN / SESSION ──────────────────────────────────────────────
     let _currentRole = null;
     let _loginReto = null;
+    let _verificando = false;
+    let _otpIntervalo = null, _otpReenvioHasta = 0;
+
+    function renderOtp() {
+      const campo = document.getElementById('loginCode');
+      const activa = document.activeElement === campo && !campo.readOnly ? Math.min(campo.selectionStart ?? campo.value.length, 3) : -1;
+      document.querySelectorAll('#otp .otp-slot').forEach((casilla, i) => {
+        const digito = campo.value[i] || '';
+        if (casilla.dataset.digito !== digito) {
+          const contenido = document.createElement('span');
+          contenido.textContent = digito;
+          if (!digito) contenido.className = 'otp-caret';
+          casilla.replaceChildren(contenido);
+          casilla.dataset.digito = digito;
+        }
+        casilla.classList.toggle('llena', !!digito);
+        casilla.classList.toggle('activa', i === activa);
+      });
+    }
+
+    const campoOtp = document.getElementById('loginCode');
+    ['focus', 'blur', 'select', 'keyup', 'click'].forEach(evento => campoOtp.addEventListener(evento, renderOtp));
+    campoOtp.addEventListener('input', () => {
+      const posicion = campoOtp.value.slice(0, campoOtp.selectionStart).replace(/\D/g, '').length;
+      const limpio = campoOtp.value.replace(/\D/g, '').slice(0, 4);
+      if (campoOtp.value !== limpio) {
+        campoOtp.value = limpio;
+        campoOtp.setSelectionRange(posicion, posicion);
+      }
+      campoOtp.removeAttribute('aria-invalid');
+      renderOtp();
+      if (_loginReto && campoOtp.value.length === 4) doLogin();
+    });
+    campoOtp.addEventListener('paste', evento => {
+      evento.preventDefault();
+      if (campoOtp.readOnly) return;
+      // Limpiar antes de maxlength para aceptar códigos con espacios.
+      campoOtp.value = evento.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+      campoOtp.dispatchEvent(new Event('input', {bubbles: true}));
+    });
+
+    async function otpError() {
+      const otp = document.getElementById('otp');
+      campoOtp.setAttribute('aria-invalid', 'true');
+      otp.classList.add('error');
+      await Promise.all(otp.getAnimations().map(animacion => animacion.finished.catch(() => {})));
+      otp.classList.remove('error');
+      campoOtp.value = '';
+      campoOtp.focus();
+      renderOtp();
+    }
+
+    async function otpOk() {
+      document.getElementById('otp').classList.add('ok');
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        await new Promise(resolver => setTimeout(resolver, 450));
+      }
+    }
+
+    function actualizarReenvio() {
+      const segundos = Math.max(0, Math.ceil((_otpReenvioHasta - Date.now()) / 1000));
+      const boton = document.getElementById('loginReenviar');
+      boton.disabled = _verificando || segundos > 0;
+      boton.textContent = segundos ? `Reenviar código (${segundos} s)` : 'Reenviar código';
+      if (!segundos) { clearInterval(_otpIntervalo); _otpIntervalo = null; }
+    }
+
+    function reenviarCodigo() {
+      if (_verificando || Date.now() < _otpReenvioHasta) return;
+      _loginReto = null;
+      doLogin();
+    }
 
     function showLogin() {
       _loginReto = null;
+      _verificando = false;
+      clearInterval(_otpIntervalo);
+      _otpIntervalo = null;
+      _otpReenvioHasta = 0;
       document.getElementById('loginCodeBox').style.display = 'none';
-      document.getElementById('loginCode').value = '';
+      campoOtp.value = '';
+      campoOtp.readOnly = false;
+      campoOtp.removeAttribute('aria-invalid');
+      document.getElementById('otp').className = 'otp';
+      document.getElementById('loginError').style.display = 'none';
+      document.getElementById('loginError').textContent = '';
+      document.getElementById('loginEntrar').style.display = '';
+      document.getElementById('loginEntrar').disabled = false;
+      document.getElementById('loginReenviar').disabled = true;
+      document.getElementById('loginReenviar').textContent = 'Reenviar código (30 s)';
+      renderOtp();
       const ls = document.getElementById('loginScreen');
       ls.style.display = 'flex';
       ls.style.alignItems = 'center';
@@ -3784,35 +3870,73 @@
     }
 
     async function doLogin() {
+      if (_verificando) return;
+      const verificar = !!_loginReto;
+      if (verificar && !/^\d{4}$/.test(campoOtp.value)) { campoOtp.focus(); return; }
       const username = document.getElementById('loginUser').value.trim();
       const password = document.getElementById('loginPass').value;
       const errEl = document.getElementById('loginError');
       errEl.style.display = 'none';
       if (!_loginReto && (!username || !password)) { errEl.textContent = 'Ingresa usuario y contraseña'; errEl.style.display = 'block'; return; }
+      _verificando = true;
+      campoOtp.readOnly = true;
+      document.getElementById('loginEntrar').disabled = true;
+      actualizarReenvio();
+      renderOtp();
       try {
         let device = null;
         try { device = localStorage.getItem('device_token'); } catch { }
         const ruta = _loginReto ? '/api/login/verificar' : '/api/login';
         const body = _loginReto ? {reto: _loginReto, codigo: document.getElementById('loginCode').value.trim()} : {username, password, device};
         const res = await fetch(ruta, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-        if (!res.ok) { const e = await res.json(); errEl.textContent = e.detail || 'Credenciales incorrectas'; errEl.style.display = 'block'; return; }
+        if (!res.ok) {
+          const e = await res.json();
+          errEl.textContent = e.detail || 'Credenciales incorrectas';
+          errEl.style.display = 'block';
+          if (verificar) await otpError();
+          return;
+        }
         const data = await res.json();
         if (data.verificar) {
           _loginReto = data.reto;
           document.getElementById('loginCodeBox').style.display = 'block';
-          document.getElementById('loginCode').value = '';
-          document.getElementById('loginCode').focus();
+          document.getElementById('loginEntrar').style.display = 'none';
+          campoOtp.value = '';
+          campoOtp.removeAttribute('aria-invalid');
+          const otp = document.getElementById('otp');
+          otp.className = 'otp';
+          renderOtp();
+          void otp.offsetWidth;
+          otp.classList.add('entra');
+          clearInterval(_otpIntervalo);
+          _otpReenvioHasta = Date.now() + 30000;
+          _otpIntervalo = setInterval(actualizarReenvio, 1000);
+          actualizarReenvio();
+          campoOtp.focus();
           return;
         }
         if (data.device) { try { localStorage.setItem('device_token', data.device); } catch { } }
+        if (verificar) await otpOk();
         _loginReto = null;
+        clearInterval(_otpIntervalo);
+        _otpIntervalo = null;
+        _otpReenvioHasta = 0;
         document.getElementById('loginCodeBox').style.display = 'none';
-        document.getElementById('loginCode').value = '';
+        campoOtp.value = '';
         sessionStorage.setItem('session', JSON.stringify({username: data.username, role: data.role, token: data.token}));
         _currentRole = data.role;
         if (data.role === 'deco') { showDecoApp(); init(); }
         else showEstacionApp();
-      } catch(e) { errEl.textContent = 'Error de conexión'; errEl.style.display = 'block'; }
+      } catch(e) {
+        errEl.textContent = 'Error de conexión'; errEl.style.display = 'block';
+        if (verificar) await otpError();
+      } finally {
+        _verificando = false;
+        campoOtp.readOnly = !_loginReto;
+        document.getElementById('loginEntrar').disabled = false;
+        actualizarReenvio();
+        renderOtp();
+      }
     }
 
     function doLogout() {
