@@ -181,13 +181,13 @@
     }
 
     .sidebar-logo {
-      padding: 12px 14px;
+      padding: 12px 6px 12px 14px;
       border-bottom: 1px solid var(--border-light);
       margin-bottom: 8px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 6px;
       position: relative;
     }
 
@@ -230,8 +230,10 @@
 
     .sb-toggle {
       margin-left: auto;
-      width: 30px;
-      height: 30px;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
       border: none;
       background: transparent;
       cursor: pointer;
@@ -294,6 +296,8 @@
 
     .nav-item {
       display: flex;
+      min-height: 44px;
+      flex-shrink: 0;
       align-items: center;
       gap: 10px;
       padding: 9px 14px;
@@ -380,9 +384,12 @@
 
     .sidebar.sb-collapsed .sb-toggle {
       margin-left: 0;
-      width: 36px;
-      height: 36px;
+      width: 44px;
+      height: 44px;
     }
+
+    .sidebar.sb-collapsed .sidebar-logo { gap: 0; }
+    .sidebar.sb-collapsed .sidebar-user { padding: 0 3px; }
 
     .sidebar.sb-collapsed .nav-label {
       opacity: 0;
@@ -415,6 +422,10 @@
 
     .user-pill {
       display: flex;
+      min-height: 44px;
+      font: inherit;
+      width: auto;
+      text-align: left;
       align-items: center;
       gap: 8px;
       padding: 6px 14px;
@@ -438,7 +449,12 @@
       height: 7px;
       border-radius: 50%;
       background: var(--red);
+      flex-shrink: 0;
     }
+
+    .user-pill { white-space: nowrap; }
+    .user-pill:not(.active) { border: 1px dashed var(--gold); }
+    .user-pill:not(.active) .dot { background: var(--gold); color: var(--gold); }
 
     .user-pill.active .dot {
       background: var(--green-ok);
@@ -510,6 +526,7 @@
 
     /* ── MAIN ── */
     .main {
+      min-width: 0; /* hijo flex: sin esto la fila de pestañas lo estira más que la pantalla */
       background: var(--bg);
       display: flex;
       flex-direction: column;
@@ -526,6 +543,7 @@
     }
 
     .view-btn {
+      min-height: 44px;
       padding: 9px 18px;
       border-radius: 50px;
       border: 1px solid transparent;
@@ -827,8 +845,10 @@
     }
 
     .mesa-header-bar .back-btn {
-      width: 34px;
-      height: 34px;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
       border-radius: 50%;
       border: 1px solid var(--border);
       background: var(--surface);
@@ -853,6 +873,7 @@
     }
 
     .tab {
+      min-height: 44px;
       padding: 8px 18px;
       border-radius: 50px;
       border: 1px solid var(--border);
@@ -957,6 +978,8 @@
     }
 
     .prod-add {
+      display: block;
+      text-align: center;
       width: 100%;
       padding: 6px;
       border-radius: 8px;
@@ -1083,6 +1106,7 @@
 
     .order-item {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 10px;
       padding: 10px 12px;
@@ -1119,16 +1143,15 @@
     }
 
     .oi-info {
-      flex: 1;
+      flex: 1 1 140px;
       min-width: 0;
     }
 
     .oi-name {
       font-size: 12px;
       font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
 
     .oi-detail {
@@ -1145,13 +1168,44 @@
       white-space: nowrap;
     }
 
-    .oi-remove {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
+    .oi-controls {
+      display: flex;
+      flex: 1 1 100%;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .qty-step { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+
+    .qty-btn {
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--tinta);
+      font-size: 20px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .qty-btn:hover, .qty-btn:active { border-color: var(--violeta); color: var(--violeta); }
+    .qty-val { min-width: 24px; text-align: center; font-family: var(--font-num); font-weight: 700; }
+
+    .oi-edit, .oi-remove {
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      border-radius: var(--radius-sm);
       border: none;
-      background: var(--red-light);
-      color: var(--red);
       font-size: 12px;
       cursor: pointer;
       transition: var(--transition);
@@ -1160,6 +1214,10 @@
       justify-content: center;
       flex-shrink: 0;
     }
+
+    .oi-edit { background: transparent; color: var(--text-secondary); }
+    .oi-edit:hover { background: var(--surface); }
+    .oi-remove { background: var(--red-light); color: var(--red); }
 
     .oi-remove:hover {
       background: var(--red);
@@ -1222,18 +1280,20 @@
 
     .pay-row {
       display: flex;
-      gap: 5px;
+      flex-wrap: wrap;
+      gap: 8px;
       margin-bottom: 12px;
     }
 
     .pay-btn {
       flex: 1;
+      min-height: 44px;
       padding: 7px;
       border: 1px solid var(--border);
       border-radius: 8px;
       background: transparent;
       font-family: inherit;
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-muted);
       cursor: pointer;
@@ -1244,6 +1304,12 @@
       justify-content: center;
       gap: 4px;
     }
+
+    .pay-row .pay-btn { flex-basis: calc(50% - 8px); }
+
+    .mixto-field { flex: 1; min-width: 0; }
+    .mixto-field label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    .mixto-field .input { min-height: 44px; font-size: 16px; padding: 6px; }
 
     .pay-btn:hover {
       border-color: var(--sage);
@@ -1259,6 +1325,7 @@
 
     .order-actions {
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
     }
 
@@ -1295,6 +1362,8 @@
     }
 
     .btn-clear {
+      min-width: 44px;
+      min-height: 44px;
       padding: 12px 16px;
       border: 1px solid var(--red-light);
       border-radius: var(--radius-sm);
@@ -1310,6 +1379,48 @@
       background: var(--red);
       color: white;
     }
+
+    .armado {
+      background: var(--red);
+      color: white;
+      width: auto;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .cash-quick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .cash-quick-btn {
+      min-height: 44px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-num);
+      font-weight: 600;
+      font-size: 16px;
+      background: var(--surface);
+      color: var(--tinta);
+      cursor: pointer;
+    }
+    .cash-quick-btn:hover, .cash-quick-btn:active { background: var(--violeta); border-color: var(--violeta); color: white; }
+
+    .search-wrap { position: relative; flex: 1; min-width: 0; }
+    .search-wrap .input { min-height: 44px; padding-right: 48px; }
+    .search-clear {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 44px;
+      height: 44px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 24px;
+      cursor: pointer;
+    }
+    .search-clear:hover { color: var(--violeta); }
 
     /* ── MODALS ── */
     .modal-bg {
@@ -1412,7 +1523,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       font-family: inherit;
-      font-size: 14px;
+      font-size: 16px;
       color: var(--text);
       transition: var(--transition);
       outline: none;
@@ -1529,7 +1640,7 @@
       padding: 3px 6px !important;
       text-align: center !important;
       font-family: var(--font-num) !important;
-      font-size: 12px !important;
+      font-size: 16px !important;
     }
 
     .denom-sub {
@@ -2030,6 +2141,7 @@
     }
 
     .propina-opt {
+      min-height: 44px;
       padding: 4px 10px;
       border-radius: 50px;
       border: 1px solid #81C784;
@@ -2052,7 +2164,7 @@
     .propina-custom {
       width: 90px !important;
       padding: 4px 8px !important;
-      font-size: 12px !important;
+      font-size: 16px !important;
     }
 
     .subtotal-row {
@@ -2363,8 +2475,10 @@
     }
 
     .fp-back {
-      width: 34px;
-      height: 34px;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
       border-radius: 50%;
       border: 1px solid var(--border);
       background: transparent;
@@ -2406,8 +2520,10 @@
     }
 
     .hamburger {
-      width: 36px;
-      height: 36px;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
       border: none;
       background: transparent;
       font-size: 20px;
@@ -2591,6 +2707,7 @@
 
       .topbar {
         display: flex;
+        padding-right: 60px; /* deja libre el botón fijo de tema */
       }
 
       .main {

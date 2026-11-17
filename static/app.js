@@ -4,6 +4,8 @@
     let tiendas = [], mesas = [], usuario = null, metodoPago = 'Efectivo';
     let currentView = 'mesas', selectedMesa = null, selectedOrden = null, currentOrden = null;
     let directCart = [];
+    let _cobrando = false;
+    let _cambiandoCantidad = false;
     let currentProducts = [], currentTienda = null, searchFilter = "", categoryFilter = "";
     let porcionesEstacion = {}; // {NOMBRE_BEBIDA: {porciones, cuello_de_botella}}
     let allProductsGlobal = null; // caché de todos los productos de todas las tiendas
@@ -193,6 +195,10 @@
       });
     }
 
+    function escaparHtml(valor) {
+      return String(valor).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
     async function init() {
       if (!_sessionToken()) return;  // sin sesión el servidor responde 401; init() corre tras el login
       loadPrintTicketPref();
@@ -358,7 +364,7 @@
           }
         }
 
-        return `<div class="mesa-card ${ocu ? 'ocupada' : ''}" onclick="clickMesa(${m.id})">
+        return `<div class="mesa-card ${ocu ? 'ocupada' : ''}" role="button" tabindex="0" aria-label="${escaparHtml(`Mesa ${m.numero}, ${lbl}${m.total_orden > 0 ? `, $${m.total_orden.toFixed(2)}` : ''}`)}" onclick="clickMesa(${m.id})">
       <div class="mesa-status"></div>
       <div class="mesa-num">${m.numero}</div>
       <div class="mesa-label">${lbl}</div>
@@ -524,6 +530,7 @@
       searchFilter = "";
       document.getElementById('searchInput').value = "";
       searchFilter = "";
+      document.getElementById('searchClear').hidden = true;
       categoryFilter = "";
 
       if (t.precio_abierto) {
@@ -586,6 +593,7 @@
     function filterProducts() {
       const sc = document.getElementById('productsScroll');
       searchFilter = document.getElementById('searchInput').value.toLowerCase().trim();
+      document.getElementById('searchClear').hidden = !document.getElementById('searchInput').value;
 
       // Con query: buscar en TODOS los productos de TODAS las tiendas
       if (searchFilter.length > 0) {
@@ -661,17 +669,17 @@
       }
 
       const out = efectivoStock <= 0, low = !out && efectivoStock <= p.stock_minimo && p.stock_minimo > 0;
-      let sc = 'stock-ok', st = esEstacion && porcionInfo ? `${efectivoStock} porc.` : `${efectivoStock}`;
+      let sc = 'stock-ok', st = esEstacion && porcionInfo ? `${efectivoStock} porc.` : `${efectivoStock} disp.`;
       if (out) { sc = 'stock-out'; st = esEstacion && porcionInfo ? 'Sin insumos' : 'Agotado'; }
-      else if (low) { sc = 'stock-low'; st = esEstacion && porcionInfo ? `⚠ ${efectivoStock} porc.` : `⚠ ${efectivoStock}`; }
+      else if (low) { sc = 'stock-low'; st = esEstacion && porcionInfo ? `⚠ ${efectivoStock} porc.` : `⚠ ${efectivoStock} disp.`; }
       if (isAbierto) st = 'Abierto';
       if (isBundle) st = '📦 Paquete';
       const canAdd = !out || isAbierto || isBundle;
-      return `<div class="prod-card ${!canAdd ? 'disabled' : ''}" onclick="${canAdd ? `prepareAddItem(${JSON.stringify(p).replace(/"/g, '&quot;')},${JSON.stringify(t).replace(/"/g, '&quot;')})` : ''}" ${isBundle ? 'style="border-color:var(--terracotta);background:var(--terracotta-light);"' : ''}>
+      return `<div class="prod-card ${!canAdd ? 'disabled' : ''}" role="button" ${canAdd ? 'tabindex="0"' : 'aria-disabled="true"'} onclick="${canAdd ? `prepareAddItem(${JSON.stringify(p).replace(/"/g, '&quot;')},${JSON.stringify(t).replace(/"/g, '&quot;')})` : ''}" ${isBundle ? 'style="border-color:var(--terracotta);background:var(--terracotta-light);"' : ''}>
     <div class="prod-name">${isBundle ? '📦 ' : ''} ${p.nombre}</div>
     <div class="prod-price">${isAbierto ? 'Monto Abierto' : '$' + p.precio.toFixed(2)}</div>
     <span class="stock-tag ${isBundle ? 'stock-low' : sc}">${st}</span>
-    ${canAdd ? `<button class="prod-add" onclick="event.stopPropagation();prepareAddItem(${JSON.stringify(p).replace(/"/g, '&quot;')},${JSON.stringify(t).replace(/"/g, '&quot;')})">+ Agregar</button>` : ''}
+    ${canAdd ? '<span class="prod-add" aria-hidden="true">+ Agregar</span>' : ''}
   </div>`;
     }
 
@@ -768,7 +776,10 @@
       const cnt = items.reduce((s, i) => s + i.cantidad, 0);
       document.getElementById('orderCount').textContent = cnt;
       document.getElementById('orderTotal').textContent = `$${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
-      document.getElementById('btnCobrar').disabled = items.length === 0;
+      const btnCobrar = document.getElementById('btnCobrar');
+      btnCobrar.disabled = _cobrando || items.length === 0;
+      btnCobrar.textContent = _cobrando ? 'Cobrando…' : items.length ? `Cobrar $${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : 'Cobrar';
+      document.getElementById('btnClear').style.display = selectedMesa || !items.length ? 'none' : '';
       const badge = document.getElementById('cartFabBadge');
       if (badge) { badge.textContent = cnt; badge.style.display = cnt > 0 ? 'flex' : 'none'; }
 
@@ -785,26 +796,31 @@
         calcMixto('efectivo');
       }
       const c = document.getElementById('orderItems');
-      if (!items.length) { c.innerHTML = `<div class="order-empty"><span class="order-empty-icon">📋</span><span>Sin artículos</span></div>`; return; }
+      if (!items.length) { c.innerHTML = `<div class="order-empty"><span class="order-empty-icon">📋</span><span>${currentView !== 'directa' && !selectedMesa ? 'Elige una mesa para ver su cuenta' : 'Toca un producto para agregarlo'}</span></div>`; return; }
 
       c.innerHTML = items.map((it, idx) => {
         const n = it.nombre_producto || it.nombre;
+        const nombreSeguro = escaparHtml(n);
         const sub = (it.cantidad * it.precio_unitario).toFixed(2);
         const removeAction = selectedMesa ? `removeDbItem(${it.id})` : `removeCartItem(${idx})`;
         const pId = it.producto_id || 'null';
-        const editAction = selectedMesa ? `showEditItemModalDb(${it.id}, '${n.replace(/'/g, "\\'")}', ${it.precio_unitario}, ${it.tienda_id}, ${pId}, ${it.cantidad})` : `showEditItemModalCart(${idx}, '${n.replace(/'/g, "\\'")}', ${it.precio_unitario}, ${pId}, ${it.cantidad})`;
+        const editAction = selectedMesa ? `showEditItemModalDb(${it.id}, ${JSON.stringify(n)}, ${it.precio_unitario}, ${it.tienda_id}, ${pId}, ${it.cantidad})` : `showEditItemModalCart(${idx}, ${JSON.stringify(n)}, ${it.precio_unitario}, ${pId}, ${it.cantidad})`;
         return `<div class="order-item">
-      <div class="oi-info"><div class="oi-name">${n}</div><div class="oi-detail">x${it.cantidad} · $${it.precio_unitario.toFixed(2)}</div></div>
-      <div class="oi-price" style="display:flex; align-items:center; gap:6px;">
-        $${sub}
-        <button class="oi-edit" onclick="${editAction}" style="background:none;border:none;cursor:pointer;font-size:12px;" title="Editar">✏️</button>
+      <div class="oi-info"><div class="oi-name">${nombreSeguro}</div><div class="oi-detail">$${it.precio_unitario.toFixed(2)} c/u</div></div>
+      <div class="oi-price">$${sub}</div>
+      <div class="oi-controls">
+        <div class="qty-step"><button type="button" class="qty-btn" aria-label="Quitar uno de ${nombreSeguro}" onclick="cambiarCantidad(${idx}, -1)">−</button><span class="qty-val">${it.cantidad}</span><button type="button" class="qty-btn" aria-label="Agregar uno de ${nombreSeguro}" onclick="cambiarCantidad(${idx}, 1)">+</button></div>
+        <button type="button" class="oi-edit" onclick="${escaparHtml(editAction)}" aria-label="Editar ${nombreSeguro}" title="Editar">✏️</button>
+        <button type="button" class="oi-remove" onclick="confirmarQuitar(this, () => ${removeAction})">✕</button>
       </div>
-      <button class="oi-remove" onclick="${removeAction}">✕</button>
     </div>`;
       }).join('');
     }
     async function removeDbItem(itemId) {
       await api(`/orden-items/${itemId}`, { method: 'DELETE' });
+      await recargarOrdenMesa();
+    }
+    async function recargarOrdenMesa() {
       const todas = await api(`/mesas/${selectedMesa.id}/ordenes`);
       currentOrden = todas.find(x => x.id === selectedOrden.id) || { items: [], total: 0 };
       selectedOrden = currentOrden;
@@ -812,8 +828,58 @@
     }
     function removeCartItem(idx) { directCart.splice(idx, 1); renderOrder(); }
 
+    async function cambiarCantidad(idx, delta) {
+      if (selectedMesa && _cambiandoCantidad) return;
+      const it = selectedMesa ? getOrderItems()[idx] : directCart[idx];
+      if (!it) return;
+      const nueva = it.cantidad + delta;
+      const nombre = it.nombre_producto || it.nombre;
+      const prod = currentProducts.find(p => p.id === it.producto_id);
+      if (delta > 0 && prod && !it.es_precio_abierto && !prod.es_precio_abierto && !prod.es_bundle && nueva > prod.stock_local) {
+        toast('⚠️', 'Sin más stock de ' + nombre, 'var(--gold)');
+        return;
+      }
+      if (!selectedMesa) {
+        if (nueva < 1) return removeCartItem(idx);
+        it.cantidad = nueva;
+        renderOrder();
+        return;
+      }
+      _cambiandoCantidad = true;
+      try {
+        if (nueva < 1) {
+          await removeDbItem(it.id);
+        } else {
+          await api(`/orden-items/${it.id}`, { method: 'PUT', body: { nombre: it.nombre_producto, precio_unitario: it.precio_unitario, cantidad: nueva } });
+          await recargarOrdenMesa();
+        }
+      } catch (e) { toast('❌', e.message, 'var(--red)'); }
+      finally { _cambiandoCantidad = false; }
+    }
+
+    function confirmarQuitar(btn, accion, texto = '¿Quitar?') {
+      if (btn.dataset.armado === '1') {
+        btn._restaurarQuitar();
+        accion();
+        return;
+      }
+      btn.dataset.armado = '1';
+      const original = btn.innerHTML;
+      btn.textContent = texto;
+      btn.classList.add('armado');
+      const restaurar = () => {
+        clearTimeout(timer);
+        delete btn.dataset.armado;
+        btn.innerHTML = original;
+        btn.classList.remove('armado');
+        delete btn._restaurarQuitar;
+      };
+      const timer = setTimeout(restaurar, 2500);
+      btn._restaurarQuitar = restaurar;
+    }
+
     function limpiarOrden() {
-      if (selectedMesa) { toast('ℹ️', 'Elimina artículos uno por uno'); return; }
+      if (selectedMesa) return;
       directCart = []; renderOrder();
     }
 
@@ -1064,6 +1130,7 @@
 
     /* ── COBRAR ── */
     async function cobrar() {
+      if (_cobrando) return;
       if (!usuario) return showNipModal(cobrar);
       const baseItems = getOrderItems();
       if (!baseItems.length) return;
@@ -1079,6 +1146,7 @@
 
     function showCashModal() {
       const total = getOrderTotal();
+      const montos = [total, ...[50, 100, 200, 500, 1000].filter(monto => monto > total).slice(0, 3)];
       showModal(`<div class="modal-body">
     <div class="modal-title">💵 Cobro en Efectivo</div>
     <div style="text-align:center;padding:16px 0 8px;">
@@ -1088,6 +1156,7 @@
     <div class="field">
       <label>Monto recibido del cliente</label>
       <input type="number" id="cashIn" class="input" style="font-size:28px;text-align:center;font-family:var(--font-num);padding:14px;" placeholder="0.00" step="0.01" oninput="updateCashChange(${total})" onkeydown="if(event.key==='Enter')confirmarCobroCash(${total})">
+      <div class="cash-quick">${montos.map((monto, idx) => `<button type="button" class="cash-quick-btn" onclick="document.getElementById('cashIn').value=${monto};updateCashChange(${total});document.getElementById('btnConfirmCash').focus()">${idx === 0 ? 'Exacto' : '$' + monto}</button>`).join('')}</div>
     </div>
     <div id="cashChangeBox" style="text-align:center;padding:20px 0;display:none;">
       <div style="font-size:11px;color:var(--text-muted);letter-spacing:1px;margin-bottom:6px;">Cambio a entregar</div>
@@ -1126,13 +1195,17 @@
     }
 
     async function confirmarCobroCash(total) {
+      const btn = document.getElementById('btnConfirmCash');
+      if (_cobrando || !btn || btn.disabled) return;
       const recibido = parseFloat(document.getElementById('cashIn')?.value) || 0;
       if (recibido < total) return;
+      btn.disabled = true;
       closeModal();
       await _procesarCobro(recibido);
     }
 
     async function _procesarCobro(efectivo_recibido) {
+      if (_cobrando) return;
       const baseItems = getOrderItems();
       const subtotal = getOrderSubtotal();
       const propinaMonto = calcPropina(subtotal);
@@ -1151,7 +1224,12 @@
         if (Math.abs((ef + tar) - total) > 0.01) { toast('⚠️', 'La suma mixta no cuadra', 'var(--gold)'); return; }
       }
 
+      _cobrando = true;
+      const btn = document.getElementById('btnCobrar');
       try {
+        btn.disabled = true;
+        btn.textContent = 'Cobrando…';
+        btn.setAttribute('aria-busy', 'true');
         let data;
         const imprimir_ticket = shouldPrintTicket();
         if (selectedOrden) {
@@ -1176,11 +1254,17 @@
         renderOrder();
         if (selectedMesa) { backToMesas(); }
       } catch (e) { toast('❌', e.message, 'var(--red)'); }
+      finally {
+        _cobrando = false;
+        btn.removeAttribute('aria-busy');
+        renderOrder();
+      }
     }
 
     /* ── MODALS ── */
     let _fpActive = false;
     let _fpRendered = false; // true after first render into fpBody
+    let _modalRetorno = null;
 
     function showModal(h) {
       h = demojify(h);
@@ -1195,10 +1279,14 @@
       const inner = h.trimStart().startsWith('<div class="modal-body">')
         ? h
         : `<div class="modal-simple">${h}</div>`;
-      document.getElementById('modals').innerHTML = `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">${inner}</div></div>`;
+      const modals = document.getElementById('modals');
+      if (!modals.hasChildNodes()) _modalRetorno = document.activeElement;
+      modals.innerHTML = `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" role="dialog" aria-modal="true">${inner}</div></div>`;
     }
     function closeModal() {
       document.getElementById('modals').innerHTML = '';
+      if (_modalRetorno && document.contains(_modalRetorno)) _modalRetorno.focus({ preventScroll: true });
+      _modalRetorno = null;
       // Si estamos en modo página, re-renderizar el contenido de la página
       if (_fpActive && document.getElementById('fpBody') && !document.getElementById('fpBody').innerHTML.trim()) {
         document.getElementById('fpBody').innerHTML = '<div style="padding:20px;color:var(--text-muted)">← Usa el botón Volver</div>';
@@ -1209,7 +1297,7 @@
       const fp = document.getElementById('fullpage');
       fp.innerHTML = demojify(`
     <div class="fp-header">
-      <button class="fp-back" onclick="closePage()">←</button>
+      <button class="fp-back" aria-label="Volver" onclick="closePage()">←</button>
       <div class="fp-title">${title}</div>
     </div>
     <div class="fp-body" id="fpBody" style="display:flex;align-items:center;justify-content:center;">
@@ -1233,6 +1321,34 @@
       // Re-enable closeModal for regular modals
       document.getElementById('modals').innerHTML = '';
     }
+
+    function limpiarBusqueda() {
+      const input = document.getElementById('searchInput');
+      input.value = '';
+      filterProducts();
+      input.focus();
+    }
+
+    document.addEventListener('keydown', event => {
+      const el = document.activeElement;
+      const modalAbierto = document.getElementById('modals').hasChildNodes();
+      if (event.key === 'Escape') {
+        if (el?.id === 'searchInput') return;
+        if (modalAbierto) closeModal();
+        else if (!document.getElementById('fullpage').classList.contains('hidden')) closePage();
+        return;
+      }
+      if (event.key === '/' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey &&
+          !el?.closest('input, textarea, select, [contenteditable]') && !modalAbierto) {
+        const input = document.getElementById('searchInput');
+        if (input.offsetParent !== null) { event.preventDefault(); input.focus(); }
+      }
+      if ((event.key === 'Enter' || event.key === ' ') && el?.getAttribute('role') === 'button' &&
+          el.tagName !== 'BUTTON' && el.getAttribute('aria-disabled') !== 'true') {
+        event.preventDefault();
+        el.click();
+      }
+    });
 
     function toggleSidebar() {
       const s = document.querySelector('.sidebar');
@@ -1699,9 +1815,12 @@
     function toast(ic, msg, bc) {
       document.querySelectorAll('.toast').forEach(t => t.remove());
       const t = document.createElement('div'); t.className = 'toast';
+      t.setAttribute('role', 'status');
+      t.setAttribute('aria-live', 'polite');
+      t.addEventListener('click', () => t.remove());
       if (bc) t.style.borderLeftColor = bc; t.style.borderLeft = `3px solid ${bc || 'var(--sage)'}`;
       t.innerHTML = `<span class="toast-ico">${iconize(ic, 16)}</span><span>${msg}</span>`;
-      document.body.appendChild(t); setTimeout(() => t.remove(), 3500);
+      document.body.appendChild(t); setTimeout(() => t.remove(), bc === 'var(--red)' ? 6000 : 3500);
     }
 
     /* ── VENTAS DEL DÍA ── */
@@ -2602,11 +2721,11 @@
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;">
             <div style="flex:1;min-width:130px;">
               <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Desde</label>
-              <input type="date" id="${idPrefix}Desde" value="${desde || ''}" class="input" style="padding:6px 8px;font-size:12px;">
+              <input type="date" id="${idPrefix}Desde" value="${desde || ''}" class="input" style="padding:6px 8px;">
             </div>
             <div style="flex:1;min-width:130px;">
               <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Hasta</label>
-              <input type="date" id="${idPrefix}Hasta" value="${hasta || ''}" class="input" style="padding:6px 8px;font-size:12px;">
+              <input type="date" id="${idPrefix}Hasta" value="${hasta || ''}" class="input" style="padding:6px 8px;">
             </div>
             <button class="btn btn-sage btn-sm" onclick="${onApply}" style="white-space:nowrap;">Aplicar</button>
           </div>
@@ -2940,7 +3059,7 @@
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:14px;">
             <div style="flex:1;min-width:180px;">
               <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Filtrar por tienda</label>
-              <select id="calTiendaSel" class="input" style="padding:6px 8px;font-size:12px;" onchange="window._calTiendaChange(this.value)">
+              <select id="calTiendaSel" class="input" style="padding:6px 8px;" onchange="window._calTiendaChange(this.value)">
                 ${tiendaOpts.join('')}
               </select>
             </div>
@@ -3520,19 +3639,19 @@
             <!-- Nuevo Gasto -->
             <div style="background:var(--red-light);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:8px;">
               <div style="font-size:13px;font-weight:700;color:var(--red);">💸 Nuevo Gasto</div>
-              <select id="mv_gOrigen" class="input" style="font-size:13px;padding:7px 10px;"><option value="Caja">Caja / Efectivo</option><option value="Banco">Banco / Transferencia</option></select>
-              <select id="mv_gTienda" class="input" style="font-size:13px;padding:7px 10px;">${gasOpts}</select>
-              <input id="mv_gConcepto" class="input" placeholder="Concepto" style="font-size:13px;padding:7px 10px;">
-              <input id="mv_gMonto" type="number" class="input" placeholder="Monto" step="0.01" style="font-size:13px;padding:7px 10px;">
+              <select id="mv_gOrigen" class="input" style="padding:7px 10px;"><option value="Caja">Caja / Efectivo</option><option value="Banco">Banco / Transferencia</option></select>
+              <select id="mv_gTienda" class="input" style="padding:7px 10px;">${gasOpts}</select>
+              <input id="mv_gConcepto" class="input" placeholder="Concepto" style="padding:7px 10px;">
+              <input id="mv_gMonto" type="number" class="input" placeholder="Monto" step="0.01" style="padding:7px 10px;">
               <button onclick="mvGuardarGasto()" style="padding:8px;background:var(--red);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;">Guardar Gasto</button>
             </div>
             <!-- Nuevo Ingreso -->
             <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:8px;">
               <div style="font-size:13px;font-weight:700;color:var(--green-ok);">💰 Nuevo Ingreso</div>
-              <select id="mv_iDestino" class="input" style="font-size:13px;padding:7px 10px;">${ingOpts}</select>
-              <select id="mv_iMetodo" class="input" style="font-size:13px;padding:7px 10px;"><option value="Efectivo">Efectivo</option><option value="Tarjeta">Tarjeta / Transferencia</option></select>
-              <input id="mv_iConcepto" class="input" placeholder="Concepto" style="font-size:13px;padding:7px 10px;">
-              <input id="mv_iMonto" type="number" class="input" placeholder="Monto" step="0.01" style="font-size:13px;padding:7px 10px;">
+              <select id="mv_iDestino" class="input" style="padding:7px 10px;">${ingOpts}</select>
+              <select id="mv_iMetodo" class="input" style="padding:7px 10px;"><option value="Efectivo">Efectivo</option><option value="Tarjeta">Tarjeta / Transferencia</option></select>
+              <input id="mv_iConcepto" class="input" placeholder="Concepto" style="padding:7px 10px;">
+              <input id="mv_iMonto" type="number" class="input" placeholder="Monto" step="0.01" style="padding:7px 10px;">
               <button onclick="mvGuardarIngreso()" style="padding:8px;background:var(--green-ok);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;">Guardar Ingreso</button>
             </div>
           </div>
