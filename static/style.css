@@ -2831,6 +2831,33 @@
       from { opacity: 0; transform: translateY(-18px) rotate(-2.5deg) scale(.97); }
     }
 
+    /* Código: un solo campo con cuatro casillas visuales. */
+    .otp { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: 248px; max-width: 100%; margin: 12px auto 0; }
+    .otp input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; opacity: 0; font-size: 32px; cursor: text; }
+    .otp-slot { display: grid; place-items: center; height: 64px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--violeta); font: 600 32px var(--font-num); transition: border-color .18s, box-shadow .18s; }
+    .otp.entra .otp-slot { animation: otpEntra .3s var(--ease-spring) backwards; }
+    .otp-slot.activa { border-color: var(--violeta); box-shadow: 0 0 0 2px var(--violeta); }
+    .otp-slot.llena > span { animation: otpPop .28s var(--ease-spring); }
+    .otp-caret { width: 2px; height: 28px; background: var(--violeta); visibility: hidden; }
+    .otp-slot.activa .otp-caret { visibility: visible; animation: otpParpadeo 1s step-end infinite; }
+    .otp.error { animation: otpShake .4s ease; }
+    .otp.error .otp-slot { border-color: var(--red); color: var(--red); box-shadow: none; }
+    .otp.ok .otp-slot { animation: otpOk .28s var(--ease-spring) forwards; box-shadow: none; }
+    .otp .otp-slot:nth-child(2) { animation-delay: .04s; }
+    .otp .otp-slot:nth-child(3) { animation-delay: .08s; }
+    .otp .otp-slot:nth-child(4) { animation-delay: .12s; }
+    .otp.error .otp-caret, .otp.ok .otp-caret { visibility: hidden; }
+    .otp-reenviar { display: block; margin: 8px auto 0; padding: 8px 4px; border: 0; background: none; color: var(--violeta); font: 600 13px var(--font-ui); cursor: pointer; }
+    .otp-reenviar:disabled { opacity: .55; cursor: default; }
+    .otp-reenviar:enabled:hover { text-decoration: underline; }
+    .otp-reenviar:focus-visible { outline: 2px solid var(--violeta); outline-offset: 2px; border-radius: var(--radius-sm); }
+
+    @keyframes otpEntra { from { opacity: 0; transform: translateY(10px); } }
+    @keyframes otpPop { from { transform: scale(.65); } 65% { transform: scale(1.14); } to { transform: scale(1); } }
+    @keyframes otpShake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+    @keyframes otpParpadeo { 50% { opacity: 0; } }
+    @keyframes otpOk { to { border-color: var(--green-ok); color: var(--green-ok); } }
+
     /* Mesas: aparecen en cascada corta cada vez que se dibujan. */
     .mesa-card { animation: entraArriba .4s var(--ease-out) backwards; }
     .mesa-card:nth-child(2) { animation-delay: .03s; }
@@ -2845,6 +2872,8 @@
     .catalog-view:not(.hidden) { animation: entraArriba .35s var(--ease-out); }
 
     @media (prefers-reduced-motion: reduce) {
+      .otp, .otp .otp-slot, .otp .otp-slot > span { animation: none !important; transition: none !important; }
+      .otp.ok .otp-slot { border-color: var(--green-ok); color: var(--green-ok); }
       *, *::before, *::after {
         animation-duration: .01ms !important;
         animation-delay: 0s !important;
