@@ -659,21 +659,30 @@ def _inicio_turno(conn):
     return corte["created_at"] if corte else f"{date.today():%Y-%m-%d} 00:00:00"
 
 
-def _ajuste_vigente(row, desde):
-    if row:
-        try:
-            ajuste = json.loads(row["valor"])
-            if isinstance(ajuste, dict) and ajuste.get("desde") == desde:
-                return float(ajuste.get("monto", 0))
-        except (ValueError, TypeError):
-            pass
-    return 0.0
+def _leer_ajuste(row):
+    """(monto, desde) del ajuste guardado: el balance es monto + movimientos posteriores a desde."""
+    if not row:
+        return 0.0, ""  # sin ajuste: todo el historial
+    try:
+        ajuste = json.loads(row["valor"])
+        if isinstance(ajuste, dict):
+            return float(ajuste.get("monto", 0)), str(ajuste.get("desde", ""))
+        return float(ajuste), None  # formato viejo (número): era relativo al turno actual
+    except (ValueError, TypeError):
+        return 0.0, ""
 
 
 def obtener_balance_actual():
-    """Devuelve ventas + ingresos - gastos y ajustes del turno actual."""
+    """Balance acumulado: último ajuste + ventas + ingresos - gastos posteriores a ese ajuste."""
     conn = get_connection()
-    desde = _inicio_turno(conn)
+    ajuste_caja_row  = conn.execute("SELECT valor FROM config WHERE clave='ajuste_caja'").fetchone()
+    ajuste_banco_row = conn.execute("SELECT valor FROM config WHERE clave='ajuste_banco'").fetchone()
+    ajuste_caja, desde = _leer_ajuste(ajuste_caja_row)
+    ajuste_banco, desde_banco = _leer_ajuste(ajuste_banco_row)
+    if not ajuste_caja_row:
+        desde = desde_banco
+    if desde is None:
+        desde = _inicio_turno(conn)
 
     ventas_row = conn.execute("""
         SELECT
@@ -705,15 +714,11 @@ def obtener_balance_actual():
         FROM pagos_tienda WHERE created_at > ? AND (es_interno=0 OR es_interno IS NULL)
     """, (desde,)).fetchone()
 
-    ajuste_caja_row  = conn.execute("SELECT valor FROM config WHERE clave='ajuste_caja'").fetchone()
-    ajuste_banco_row = conn.execute("SELECT valor FROM config WHERE clave='ajuste_banco'").fetchone()
     conn.close()
 
     total_ventas   = ventas_row['total']
     total_ingresos = ingresos_row['total']
     total_gastos   = gastos_row['total']
-    ajuste_caja = _ajuste_vigente(ajuste_caja_row, desde)
-    ajuste_banco = _ajuste_vigente(ajuste_banco_row, desde)
 
     efectivo = (
         ventas_row['efectivo']
@@ -746,12 +751,13 @@ def ajustar_balance(caja_real: float, banco_real: float):
     bal = obtener_balance_actual()
     conn = get_connection()
     try:
-        desde = _inicio_turno(conn)
-        ajuste_caja = round(caja_real - (bal['en_caja'] - bal['ajuste_caja']), 2)
-        ajuste_banco = round(banco_real - (bal['en_banco'] - bal['ajuste_banco']), 2)
-        for clave, monto in (('ajuste_caja', ajuste_caja), ('ajuste_banco', ajuste_banco)):
+        desde = f"{datetime.now():%Y-%m-%d %H:%M:%S}"
+        ajuste_caja = round(caja_real - bal['en_caja'], 2)
+        ajuste_banco = round(banco_real - bal['en_banco'], 2)
+        # Se guarda lo contado como punto de partida; lo posterior se suma encima.
+        for clave, monto in (('ajuste_caja', caja_real), ('ajuste_banco', banco_real)):
             conn.execute("INSERT OR REPLACE INTO config (clave,valor) VALUES (?,?)",
-                         (clave, json.dumps({"monto": monto, "desde": desde})))
+                         (clave, json.dumps({"monto": round(monto, 2), "desde": desde})))
         conn.commit()
     except Exception:
         conn.rollback()
