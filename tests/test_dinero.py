@@ -2,6 +2,7 @@
 Ejecutar con: python -m unittest discover -s tests
 Usan una BD en memoria creada con init_db(); nunca tocan pos_estudio_deco.db."""
 import sqlite3
+import json
 import unittest
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
@@ -124,17 +125,30 @@ class BalanceYCorte(DineroBase):
         db.ajustar_balance(5000, 0)
         self.assertEqual(db.obtener_balance_actual()["en_caja"], 5000)
 
-    def test_ajuste_de_un_turno_anterior_no_se_aplica(self):
-        db.ajustar_balance(5000, 0)
+    def test_balance_es_acumulado_y_no_se_reinicia_con_el_corte(self):
+        with patch.object(db, "datetime") as dt:  # el ajuste ocurrió antes que lo que sigue
+            dt.now.return_value = datetime.now() - timedelta(minutes=1)
+            db.ajustar_balance(5000, 300)
         db.registrar_corte(self.uid, 0)  # nuevo turno
+        db.registrar_venta(self.uid, 'Efectivo', [self.item()])
         bal = db.obtener_balance_actual()
-        self.assertEqual(bal["ajuste_caja"], 0)
-        self.assertEqual(bal["en_caja"], 0)
+        self.assertEqual(bal["en_caja"], 5100)
+        self.assertEqual(bal["en_banco"], 300)
+        self.assertEqual(bal["total"], 5400)
 
-    def test_ajuste_viejo_numerico_no_se_aplica(self):
+    def test_ajuste_viejo_numerico_se_suma_al_turno(self):
         self.conn.execute("INSERT OR REPLACE INTO config(clave,valor) VALUES ('ajuste_caja','1000')")
         self.conn.commit()
-        self.assertEqual(db.obtener_balance_actual()["en_caja"], 0)
+        db.registrar_venta(self.uid, 'Efectivo', [self.item()])
+        self.assertEqual(db.obtener_balance_actual()["en_caja"], 1100)
+
+    def test_ajuste_json_previo_sigue_valiendo_tras_el_corte(self):
+        # Formato guardado por la versión anterior: monto = diferencia, desde = inicio de turno.
+        self.conn.execute("INSERT OR REPLACE INTO config(clave,valor) VALUES ('ajuste_caja',?)",
+                          (json.dumps({"monto": 800, "desde": "2000-01-01 00:00:00"}),))
+        self.conn.commit()
+        db.registrar_corte(self.uid, 0)
+        self.assertEqual(db.obtener_balance_actual()["en_caja"], 800)
 
     def test_corte_despues_de_medianoche_incluye_el_turno_completo(self):
         c = self.conn
