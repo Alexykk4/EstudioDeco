@@ -10,11 +10,11 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Fraunces:opsz,wght,SOFT,WONK@9..144,600..900,0..100,0..1&family=JetBrains+Mono:wght@400;500&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=graficas-1">
+  <link rel="stylesheet" href="/static/style.css?v=scroll-zoom-1">
   <!-- Chart.js 4.4.4 (MIT), copia local para que las gráficas funcionen sin internet en la caja -->
   <script src="/static/vendor/chart.umd.js?v=4.4.4" defer></script>
-  <script src="/static/app.js?v=graficas-1" defer></script>
-  <script src="/static/motion.js?v=graficas-1" defer></script>
+  <script src="/static/app.js?v=scroll-zoom-1" defer></script>
+  <script src="/static/motion.js?v=scroll-zoom-1" defer></script>
 </head>
 
 <body>
@@ -280,13 +280,13 @@
         <div class="tabs-row" id="tabsRow"></div>
 
         <!-- Búsqueda y Categorías -->
-        <div style="padding:0 18px 10px; display:flex; gap:10px; align-items:center;">
+        <div class="products-toolbar">
           <div class="search-wrap">
             <input type="text" id="searchInput" class="input" placeholder="Buscar artículo (tecla /)"
               oninput="filterProducts()" onkeydown="if(event.key==='Escape'){event.preventDefault();limpiarBusqueda()}">
             <button type="button" class="search-clear" id="searchClear" aria-label="Limpiar búsqueda" onclick="limpiarBusqueda()" hidden>×</button>
           </div>
-          <div id="catFilters" style="display:none; gap:6px;">
+          <div id="catFilters" class="cat-filters" style="display:none;">
             <button class="pay-btn active" id="btnCatAll" onclick="setCategoryFilter('')"
               style="padding:6px 12px">Todos</button>
             <button class="pay-btn" id="btnCatRoles" onclick="setCategoryFilter('roles')"
@@ -362,7 +362,7 @@
           <span class="order-total-amount" id="orderTotal">$0.00</span>
         </div>
         <!-- Sección propina -->
-        <div class="propina-section" style="margin-bottom:10px">
+        <div class="propina-section">
           <div class="propina-row">
             <input type="checkbox" class="propina-check" id="propinaCheck" onchange="togglePropina()">
             <label for="propinaCheck" class="propina-label">🪙 Agregar propina</label>

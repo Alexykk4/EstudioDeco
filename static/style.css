@@ -142,26 +142,33 @@
     ::selection { background: var(--cielo); color: var(--sobre-cielo); }
 
     ::-webkit-scrollbar {
-      width: 5px;
+      width: 8px;
+      height: 8px;
     }
 
     ::-webkit-scrollbar-track {
-      background: transparent;
+      background: var(--bg-warm);
+      border-radius: 10px;
     }
 
     ::-webkit-scrollbar-thumb {
-      background: var(--border);
+      background: color-mix(in srgb, var(--violeta) 45%, var(--border));
       border-radius: 10px;
+      border: 1.5px solid var(--bg-warm);
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--violeta);
     }
 
     /* ── LAYOUT ── */
     :root {
-      --sb-w: 210px;
+      --sb-w: 190px;
     }
 
     .app {
       display: grid;
-      grid-template-columns: var(--sb-w) 1fr 360px;
+      grid-template-columns: var(--sb-w) 1fr 330px;
       grid-template-rows: 100vh;
       height: 100vh;
       transition: grid-template-columns .25s cubic-bezier(.4, 0, .2, 1);
@@ -285,11 +292,11 @@
     }
 
     .nav-section-label {
-      padding: 4px 16px 4px;
+      padding: 2px 14px 2px;
       font-size: 11px;
       font-weight: 700;
       color: var(--text-muted);
-      margin-top: 10px;
+      margin-top: 6px;
       flex-shrink: 0;
       white-space: nowrap;
       overflow: hidden;
@@ -298,11 +305,11 @@
 
     .nav-item {
       display: flex;
-      min-height: 44px;
+      min-height: 36px;
       flex-shrink: 0;
       align-items: center;
       gap: 10px;
-      padding: 9px 14px;
+      padding: 6px 12px;
       margin: 1px 6px;
       border-radius: var(--radius-sm);
       font-size: 13px;
@@ -367,7 +374,7 @@
     }
 
     .app.sb-collapsed {
-      grid-template-columns: 52px 1fr 360px;
+      grid-template-columns: 52px 1fr 330px;
     }
 
     .sidebar.sb-collapsed .sidebar-logo {
@@ -529,33 +536,38 @@
     /* ── MAIN ── */
     .main {
       min-width: 0; /* hijo flex: sin esto la fila de pestañas lo estira más que la pantalla */
+      min-height: 0;
       background: var(--bg);
       display: flex;
       flex-direction: column;
-      overflow: hidden;
-      padding: 20px 24px;
-      gap: 16px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 12px 16px;
+      gap: 10px;
     }
 
     /* ── NAV: Mesas / Venta Directa ── */
     .view-nav {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       flex-shrink: 0;
+      overflow-x: auto;
+      padding-bottom: 2px;
     }
 
     .view-btn {
-      min-height: 44px;
-      padding: 9px 18px;
+      min-height: 36px;
+      padding: 6px 14px;
       border-radius: 50px;
       border: 1px solid transparent;
       background: transparent;
       font-family: inherit;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-secondary);
       cursor: pointer;
       transition: var(--transition);
+      white-space: nowrap;
     }
 
     .view-btn:hover {
@@ -709,16 +721,18 @@
     /* ── CATALOG VIEW ── */
     .catalog-view {
       flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      overflow: hidden;
+      gap: 12px;
+      overflow-y: auto;
     }
 
     .catalog-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-shrink: 0;
     }
 
     .catalog-title {
@@ -728,7 +742,9 @@
 
     .catalog-table-wrap {
       flex: 1;
+      min-height: 160px;
       overflow-y: auto;
+      overflow-x: auto;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
@@ -806,29 +822,32 @@
     /* ── PRODUCTS VIEW ── */
     .products-view {
       flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      overflow: hidden;
+      gap: 8px;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
 
     .mesa-header-bar {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
+      gap: 10px;
+      padding: 8px 12px;
       background: var(--surface);
       border-radius: var(--radius);
       border: 1px solid var(--border);
+      flex-shrink: 0;
     }
 
     .mesa-header-bar .mesa-badge {
       background: var(--cielo);
       color: var(--sobre-cielo);
-      padding: 6px 14px;
+      padding: 5px 12px;
       border-radius: 50px;
       font-weight: 700;
-      font-size: 14px;
+      font-size: 13px;
       cursor: pointer;
       transition: var(--transition);
       display: flex;
@@ -847,15 +866,15 @@
     }
 
     .mesa-header-bar .back-btn {
-      width: 44px;
-      height: 44px;
-      min-width: 44px;
-      min-height: 44px;
+      width: 34px;
+      height: 34px;
+      min-width: 34px;
+      min-height: 34px;
       border-radius: 50%;
       border: 1px solid var(--border);
       background: var(--surface);
       cursor: pointer;
-      font-size: 16px;
+      font-size: 15px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -871,17 +890,17 @@
       gap: 6px;
       overflow-x: auto;
       flex-shrink: 0;
-      padding-bottom: 2px;
+      padding-bottom: 4px;
     }
 
     .tab {
-      min-height: 44px;
-      padding: 8px 18px;
+      min-height: 34px;
+      padding: 5px 14px;
       border-radius: 50px;
       border: 1px solid var(--border);
       background: var(--surface);
       font-family: inherit;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 600;
       color: var(--text-secondary);
       cursor: pointer;
@@ -900,28 +919,48 @@
       border-color: var(--sage);
     }
 
+    .products-toolbar {
+      padding: 0 2px 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .cat-filters {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      max-width: 100%;
+      padding-bottom: 2px;
+      flex: 0 1 auto;
+    }
+
     .products-scroll {
-      flex: 1;
-      overflow-y: auto;
+      flex: 1 1 auto;
+      min-height: 140px;
+      overflow-y: scroll;
+      padding-right: 4px;
     }
 
     .products-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
     }
 
     .prod-card {
       background: var(--surface);
       border-radius: var(--radius-sm);
-      padding: 16px 12px 12px;
+      padding: 10px 10px 8px;
       border: 1px solid var(--border);
       cursor: pointer;
       transition: transform .18s var(--ease-out), box-shadow .18s var(--ease-out), border-color .18s;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 5px;
+      gap: 3px;
       text-align: center;
     }
 
@@ -944,15 +983,15 @@
     }
 
     .prod-name {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
-      line-height: 1.3;
+      line-height: 1.25;
       color: var(--text);
     }
 
     .prod-price {
       font-family: var(--font-brand);
-      font-size: 19px;
+      font-size: 16px;
       font-weight: 700;
       color: var(--violeta);
     }
@@ -960,7 +999,7 @@
     .stock-tag {
       font-size: 10px;
       font-weight: 600;
-      padding: 2px 8px;
+      padding: 1px 7px;
       border-radius: 50px;
     }
 
@@ -983,14 +1022,14 @@
       display: block;
       text-align: center;
       width: 100%;
-      padding: 6px;
-      border-radius: 8px;
+      padding: 4px;
+      border-radius: 6px;
       border: none;
-      margin-top: 4px;
+      margin-top: 2px;
       background: var(--sage-light);
       color: var(--sage);
       font-family: inherit;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       cursor: pointer;
       transition: var(--transition);
@@ -1047,23 +1086,26 @@
       border-left: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
 
     .order-header {
-      padding: 20px 20px 14px;
+      padding: 10px 14px 8px;
       border-bottom: 1px dashed var(--border);
+      flex-shrink: 0;
     }
 
     .order-title {
       font-family: var(--font-brand);
-      font-size: 20px;
+      font-size: 17px;
       font-weight: 800;
       font-variation-settings: "SOFT" 100;
       color: var(--violeta);
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
 
     .order-count {
@@ -1081,13 +1123,15 @@
     .order-mesa-info {
       font-size: 11px;
       color: var(--text-muted);
-      margin-top: 4px;
+      margin-top: 2px;
     }
 
     .order-items {
-      flex: 1;
-      overflow-y: auto;
-      padding: 10px 18px;
+      flex: 1 1 auto;
+      min-height: 140px;
+      overflow-y: scroll;
+      overflow-x: hidden;
+      padding: 6px 10px;
     }
 
     .order-empty {
@@ -1097,24 +1141,25 @@
       justify-content: center;
       height: 100%;
       color: var(--text-muted);
-      gap: 8px;
-      font-size: 13px;
+      gap: 6px;
+      font-size: 12.5px;
     }
 
     .order-empty-icon {
-      font-size: 36px;
+      font-size: 30px;
       opacity: 0.3;
     }
 
     .order-item {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 5px 8px;
       background: var(--bg);
-      border-radius: var(--radius-sm);
-      margin-bottom: 6px;
+      border-radius: 8px;
+      margin-bottom: 4px;
       border: 1px solid transparent;
       transition: var(--transition);
     }
@@ -1145,70 +1190,76 @@
     }
 
     .oi-info {
-      flex: 1 1 140px;
+      flex: 1 1 auto;
       min-width: 0;
     }
 
     .oi-name {
       font-size: 12px;
       font-weight: 600;
+      line-height: 1.2;
       white-space: normal;
       overflow-wrap: anywhere;
     }
 
     .oi-detail {
       font-size: 10px;
+      line-height: 1.15;
       color: var(--text-muted);
       font-family: var(--font-num);
     }
 
     .oi-price {
       font-family: var(--font-num);
-      font-size: 13px;
-      font-weight: 600;
+      font-size: 12.5px;
+      font-weight: 700;
       color: var(--sage);
       white-space: nowrap;
+      min-width: 44px;
+      text-align: right;
+      margin: 0 2px;
     }
 
     .oi-controls {
       display: flex;
-      flex: 1 1 100%;
-      flex-wrap: wrap;
+      flex: 0 0 auto;
+      flex-wrap: nowrap;
       align-items: center;
-      gap: 8px;
+      gap: 4px;
       min-width: 0;
     }
 
-    .qty-step { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+    .qty-step { display: flex; align-items: center; gap: 3px; }
 
     .qty-btn {
-      width: 44px;
-      height: 44px;
-      min-width: 44px;
-      min-height: 44px;
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      min-height: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
       border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
+      border-radius: 6px;
       background: var(--surface);
       color: var(--tinta);
-      font-size: 20px;
+      font-size: 15px;
       font-weight: 700;
+      line-height: 1;
       cursor: pointer;
     }
 
     .qty-btn:hover, .qty-btn:active { border-color: var(--violeta); color: var(--violeta); }
-    .qty-val { min-width: 24px; text-align: center; font-family: var(--font-num); font-weight: 700; }
+    .qty-val { min-width: 16px; font-size: 12px; text-align: center; font-family: var(--font-num); font-weight: 700; }
 
     .oi-edit, .oi-remove {
-      width: 44px;
-      height: 44px;
-      min-width: 44px;
-      min-height: 44px;
-      border-radius: var(--radius-sm);
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      min-height: 24px;
+      border-radius: 6px;
       border: none;
-      font-size: 12px;
+      font-size: 11px;
       cursor: pointer;
       transition: var(--transition);
       display: flex;
@@ -1229,9 +1280,10 @@
     /* El pie del pedido es el talón del ticket: perforación arriba y muescas a los lados. */
     .order-footer {
       position: relative;
-      padding: 18px 20px 20px;
+      padding: 8px 12px 10px;
       background: var(--bg-warm);
       border-top: 2px dashed var(--border);
+      flex-shrink: 0;
     }
 
     .order-footer::before,
@@ -1252,18 +1304,19 @@
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      margin-bottom: 12px;
+      margin-bottom: 6px;
     }
 
     .order-total-label {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-secondary);
     }
 
     .order-total-amount {
       font-family: var(--font-brand);
-      font-size: 38px;
+      font-size: 26px;
+      line-height: 1.05;
       font-weight: 800;
       font-variation-settings: "SOFT" 100, "WONK" 1;
       letter-spacing: -0.5px;
@@ -1283,19 +1336,19 @@
     .pay-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 12px;
+      gap: 5px;
+      margin-bottom: 6px;
     }
 
     .pay-btn {
       flex: 1;
-      min-height: 44px;
-      padding: 7px;
+      min-height: 30px;
+      padding: 4px 6px;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 6px;
       background: transparent;
       font-family: inherit;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-muted);
       cursor: pointer;
@@ -1307,11 +1360,11 @@
       gap: 4px;
     }
 
-    .pay-row .pay-btn { flex-basis: calc(50% - 8px); }
+    .pay-row .pay-btn { flex-basis: calc(50% - 5px); }
 
     .mixto-field { flex: 1; min-width: 0; }
-    .mixto-field label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-    .mixto-field .input { min-height: 44px; font-size: 16px; padding: 6px; }
+    .mixto-field label { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+    .mixto-field .input { min-height: 30px; font-size: 13px; padding: 4px 6px; }
 
     .pay-btn:hover {
       border-color: var(--sage);
@@ -1328,18 +1381,18 @@
     .order-actions {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 6px;
     }
 
     .btn-cobrar {
       flex: 1;
-      padding: 14px;
+      padding: 9px 12px;
       border: none;
       border-radius: var(--radius-sm);
       background: var(--cielo);
       color: var(--sobre-cielo);
       font-family: inherit;
-      font-size: 16px;
+      font-size: 14.5px;
       font-weight: 800;
       cursor: pointer;
       transition: transform .18s var(--ease-out), box-shadow .18s var(--ease-out), filter .18s;
@@ -1364,15 +1417,15 @@
     }
 
     .btn-clear {
-      min-width: 44px;
-      min-height: 44px;
-      padding: 12px 16px;
+      min-width: 36px;
+      min-height: 36px;
+      padding: 8px 12px;
       border: 1px solid var(--red-light);
       border-radius: var(--radius-sm);
       background: var(--red-light);
       color: var(--red);
       font-family: inherit;
-      font-size: 13px;
+      font-size: 12px;
       cursor: pointer;
       transition: var(--transition);
     }
@@ -1386,40 +1439,40 @@
       background: var(--red);
       color: white;
       width: auto;
-      padding: 0 10px;
-      font-size: 12px;
+      padding: 0 7px;
+      font-size: 10.5px;
       font-weight: 700;
     }
 
     .cash-quick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .cash-quick-btn {
-      min-height: 44px;
-      padding: 0 14px;
+      min-height: 36px;
+      padding: 0 12px;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       font-family: var(--font-num);
       font-weight: 600;
-      font-size: 16px;
+      font-size: 14px;
       background: var(--surface);
       color: var(--tinta);
       cursor: pointer;
     }
     .cash-quick-btn:hover, .cash-quick-btn:active { background: var(--violeta); border-color: var(--violeta); color: white; }
 
-    .search-wrap { position: relative; flex: 1; min-width: 0; }
-    .search-wrap .input { min-height: 44px; padding-right: 48px; }
+    .search-wrap { position: relative; flex: 1 1 180px; min-width: 150px; }
+    .search-wrap .input { min-height: 36px; padding: 6px 38px 6px 12px; font-size: 13.5px; }
     .search-clear {
       position: absolute;
       right: 0;
       top: 50%;
       transform: translateY(-50%);
-      width: 44px;
-      height: 44px;
+      width: 36px;
+      height: 36px;
       border: none;
       border-radius: var(--radius-sm);
       background: transparent;
       color: var(--text-secondary);
-      font-size: 24px;
+      font-size: 20px;
       cursor: pointer;
     }
     .search-clear:hover { color: var(--violeta); }
@@ -1433,6 +1486,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 10px;
+      overflow-y: auto;
       z-index: 100;
       animation: fadeIn .15s ease;
     }
@@ -1453,13 +1508,14 @@
       padding: 0;
       width: 420px;
       max-width: 96vw;
-      max-height: 90vh;
+      max-height: calc(100vh - 20px);
       box-shadow: var(--shadow-lg);
       animation: modalUp .32s var(--ease-spring);
       border: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      margin: auto;
     }
 
     @keyframes modalUp {
@@ -1476,56 +1532,76 @@
 
     .modal-title {
       font-family: var(--font-brand);
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 800;
       font-variation-settings: "SOFT" 100;
       color: var(--violeta);
       line-height: 1.15;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .modal-sub {
-      font-size: 12px;
+      font-size: 11.5px;
       color: var(--text-muted);
-      margin-bottom: 20px;
+      margin-bottom: 12px;
     }
 
     .modal-body {
-      flex: 1;
+      flex: 1 1 auto;
+      min-height: 0;
       overflow-y: auto;
-      padding: 28px 28px 16px;
+      padding: 18px 20px 12px;
     }
 
     .modal-footer {
-      padding: 12px 28px 20px;
+      padding: 10px 20px 14px;
       border-top: 1px solid var(--border-light);
       flex-shrink: 0;
+      background: var(--surface);
     }
 
     .modal-simple {
-      padding: 28px;
+      padding: 18px 20px;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    .modal-simple .modal-simple {
+      padding: 0;
+      overflow: visible;
+    }
+
+    .modal-simple > .modal-btns {
+      position: sticky;
+      bottom: -18px;
+      background: var(--surface);
+      padding: 10px 0 4px;
+      margin-top: 10px;
+      border-top: 1px solid var(--border-light);
+      z-index: 2;
     }
 
     .field {
-      margin-bottom: 14px;
+      margin-bottom: 10px;
     }
 
     .field label {
       display: block;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--text-secondary);
-      margin-bottom: 5px;
+      margin-bottom: 3px;
     }
 
     .input {
       width: 100%;
-      padding: 10px 14px;
+      padding: 8px 11px;
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       font-family: inherit;
-      font-size: 16px;
+      font-size: 14px;
       color: var(--text);
       transition: var(--transition);
       outline: none;
@@ -1717,9 +1793,9 @@
     /* ── PROPINA ── */
     .propina-section {
       background: var(--green-light);
-      border-radius: var(--radius-sm);
-      padding: 10px 12px;
-      margin-bottom: 10px;
+      border-radius: 8px;
+      padding: 5px 10px;
+      margin-bottom: 5px;
     }
 
     .propina-row {
@@ -1958,7 +2034,6 @@
       overflow-y: auto;
       pointer-events: auto;
       z-index: 2;
-      scrollbar-width: thin;
     }
 
     #notesTaskbar:empty {
@@ -2057,7 +2132,7 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 700;
       color: #388E3C;
       flex: 1;
@@ -2066,9 +2141,9 @@
     }
 
     .toggle-option-card {
-      border-radius: var(--radius-sm);
-      padding: 12px 14px;
-      margin-bottom: 10px;
+      border-radius: 8px;
+      padding: 6px 10px;
+      margin-bottom: 6px;
       transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
       display: flex;
       flex-direction: column;
@@ -2117,8 +2192,8 @@
     .toggle-option-label {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      font-size: 13px;
+      gap: 6px;
+      font-size: 12px;
       font-weight: 700;
       cursor: pointer;
       margin: 0;
@@ -2126,10 +2201,10 @@
     }
 
     .toggle-badge {
-      font-size: 10.5px;
+      font-size: 10px;
       font-weight: 800;
       letter-spacing: 0.04em;
-      padding: 3px 9px;
+      padding: 2px 7px;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.25);
       color: #ffffff;
@@ -2138,14 +2213,14 @@
 
     .propina-controls {
       display: flex;
-      gap: 6px;
-      margin-top: 8px;
+      gap: 5px;
+      margin-top: 6px;
       flex-wrap: wrap;
     }
 
     .propina-opt {
-      min-height: 44px;
-      padding: 4px 10px;
+      min-height: 28px;
+      padding: 2px 8px;
       border-radius: 50px;
       border: 1px solid #81C784;
       background: white;
@@ -2165,35 +2240,37 @@
     }
 
     .propina-custom {
-      width: 90px !important;
-      padding: 4px 8px !important;
-      font-size: 16px !important;
+      width: 80px !important;
+      height: 28px;
+      padding: 2px 6px !important;
+      font-size: 13px !important;
     }
 
     .subtotal-row {
       display: flex;
       justify-content: space-between;
-      font-size: 12px;
+      font-size: 11.5px;
       color: var(--text-muted);
-      margin-bottom: 3px;
+      margin-bottom: 2px;
     }
 
     .propina-amt-row {
       display: flex;
       justify-content: space-between;
-      font-size: 12px;
+      font-size: 11.5px;
       color: #388E3C;
       font-weight: 600;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     /* ── RESUMEN SEMANAL ── */
     .semanal-view {
       flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      overflow: hidden;
+      gap: 12px;
+      overflow-y: auto;
     }
 
     .semanal-kpis {
@@ -2505,8 +2582,15 @@
 
     .fp-body {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
-      padding: 20px 24px;
+      overflow-x: auto;
+      padding: 16px 20px;
+    }
+
+    .fp-body > .modal-body {
+      overflow: visible;
+      padding: 4px 0 12px;
     }
 
     /* ── MOBILE TOPBAR ── */
@@ -2632,10 +2716,10 @@
       line-height: 1;
     }
 
-    /* ── RESPONSIVE: Tablet (≤1024px) ── */
-    @media (max-width:1024px) {
+    /* ── RESPONSIVE: Tablet (≤860px) ── */
+    @media (max-width:860px) {
       .app {
-        grid-template-columns: 190px 1fr;
+        grid-template-columns: 180px 1fr;
       }
 
       #semanalSidebar {

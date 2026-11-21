@@ -807,9 +807,9 @@
         const editAction = selectedMesa ? `showEditItemModalDb(${it.id}, ${JSON.stringify(n)}, ${it.precio_unitario}, ${it.tienda_id}, ${pId}, ${it.cantidad})` : `showEditItemModalCart(${idx}, ${JSON.stringify(n)}, ${it.precio_unitario}, ${pId}, ${it.cantidad})`;
         return `<div class="order-item">
       <div class="oi-info"><div class="oi-name">${nombreSeguro}</div><div class="oi-detail">$${it.precio_unitario.toFixed(2)} c/u</div></div>
-      <div class="oi-price">$${sub}</div>
       <div class="oi-controls">
         <div class="qty-step"><button type="button" class="qty-btn" aria-label="Quitar uno de ${nombreSeguro}" onclick="cambiarCantidad(${idx}, -1)">−</button><span class="qty-val">${it.cantidad}</span><button type="button" class="qty-btn" aria-label="Agregar uno de ${nombreSeguro}" onclick="cambiarCantidad(${idx}, 1)">+</button></div>
+        <div class="oi-price">$${sub}</div>
         <button type="button" class="oi-edit" onclick="${escaparHtml(editAction)}" aria-label="Editar ${nombreSeguro}" title="Editar">✏️</button>
         <button type="button" class="oi-remove" onclick="confirmarQuitar(this, () => ${removeAction})">✕</button>
       </div>
@@ -944,15 +944,23 @@
       }
 
       const labelCliente = tienda_id === 1 ? 'Nombre en vaso / Cliente' : 'Nota / Cliente';
-      showModal(`<div class="modal-title">✏️ Editar Artículo</div>
-    <div class="field"><label>Descripción Base</label><input type="text" id="edN_base" class="input" value="${baseNombre}" readonly style="background:#f4f4f4; color:#888;"></div>
+      const rowTempExtra = (tempHtml || extrasHtml)
+        ? `<div style="display:grid;grid-template-columns:${tempHtml && extrasHtml ? '1fr 1fr' : '1fr'};gap:10px;">${tempHtml}${extrasHtml}</div>`
+        : '';
+      showModal(`<div class="modal-body">
+    <div class="modal-title">✏️ Editar Artículo</div>
+    <div class="field" style="margin-top:8px;"><label>Descripción Base</label><input type="text" id="edN_base" class="input" value="${baseNombre}" readonly style="background:var(--bg-warm); color:var(--text-muted);"></div>
     <div class="field"><label>${labelCliente}</label><input type="text" id="edN_cliente" class="input" value="${clienteNombre}"></div>
-    <div class="field"><label>Cantidad de Artículos</label><input type="number" id="edCant" class="input" min="1" step="1" value="${cantidad}"></div>
-    ${tempHtml}
-    ${extrasHtml}
-    <div class="field"><label>Precio Unitario</label><input type="number" id="edP" class="input" step="0.01" value="${precio}" onkeydown="if(event.key==='Enter')doEditItemDb(${id})"></div>
-    <div class="field"><label>Descuento (%)</label><div style="display:flex;gap:8px;align-items:center;"><input type="number" id="edDsc" class="input" style="width:80px" min="0" max="100" step="1" value="0" data-orig="${precio}" oninput="applyDiscount('edDsc','edP')"><button type="button" class="btn btn-ghost btn-sm" onclick="applyDiscount('edDsc','edP')">Aplicar</button><span style="font-size:11px;color:var(--text-muted)">0% = sin descuento</span></div></div>
-    <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="doEditItemDb(${id})">Guardar</button></div>`);
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="field"><label>Cantidad de Artículos</label><input type="number" id="edCant" class="input" min="1" step="1" value="${cantidad}"></div>
+      <div class="field"><label>Precio Unitario</label><input type="number" id="edP" class="input" step="0.01" value="${precio}" onkeydown="if(event.key==='Enter')doEditItemDb(${id})"></div>
+    </div>
+    ${rowTempExtra}
+    <div class="field" style="margin-bottom:4px;"><label>Descuento (%)</label><div style="display:flex;gap:8px;align-items:center;"><input type="number" id="edDsc" class="input" style="width:80px" min="0" max="100" step="1" value="0" data-orig="${precio}" oninput="applyDiscount('edDsc','edP')"><button type="button" class="btn btn-ghost btn-sm" onclick="applyDiscount('edDsc','edP')">Aplicar</button><span style="font-size:11px;color:var(--text-muted)">0% = sin descuento</span></div></div>
+  </div>
+  <div class="modal-footer">
+    <div class="modal-btns" style="margin-top:0"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="doEditItemDb(${id})">Guardar</button></div>
+  </div>`);
       setTimeout(() => document.getElementById('edN_cliente')?.focus(), 100);
     }
 
@@ -1038,15 +1046,23 @@
       }
 
       const labelClienteC = es304 ? 'Nombre en vaso / Cliente' : 'Nota / Cliente';
-      showModal(`<div class="modal-title">✏️ Editar Artículo</div>
-    <div class="field"><label>Descripción Base</label><input type="text" id="edN_base" class="input" value="${baseNombre}" readonly style="background:#f4f4f4; color:#888;"></div>
+      const rowTempExtraC = (tempHtml || extrasHtml)
+        ? `<div style="display:grid;grid-template-columns:${tempHtml && extrasHtml ? '1fr 1fr' : '1fr'};gap:10px;">${tempHtml}${extrasHtml}</div>`
+        : '';
+      showModal(`<div class="modal-body">
+    <div class="modal-title">✏️ Editar Artículo</div>
+    <div class="field" style="margin-top:8px;"><label>Descripción Base</label><input type="text" id="edN_base" class="input" value="${baseNombre}" readonly style="background:var(--bg-warm); color:var(--text-muted);"></div>
     <div class="field"><label>${labelClienteC}</label><input type="text" id="edN_cliente" class="input" value="${clienteNombre}"></div>
-    <div class="field"><label>Cantidad de Artículos</label><input type="number" id="edCant" class="input" min="1" step="1" value="${cantidad}"></div>
-    ${tempHtml}
-    ${extrasHtml}
-    <div class="field"><label>Precio Unitario</label><input type="number" id="edP" class="input" step="0.01" value="${precio}" onkeydown="if(event.key==='Enter')doEditItemCart(${idx})"></div>
-    <div class="field"><label>Descuento (%)</label><div style="display:flex;gap:8px;align-items:center;"><input type="number" id="edDsc" class="input" style="width:80px" min="0" max="100" step="1" value="0" data-orig="${precio}" oninput="applyDiscount('edDsc','edP')"><button type="button" class="btn btn-ghost btn-sm" onclick="applyDiscount('edDsc','edP')">Aplicar</button><span style="font-size:11px;color:var(--text-muted)">0% = sin descuento</span></div></div>
-    <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="doEditItemCart(${idx})">Guardar</button></div>`);
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="field"><label>Cantidad de Artículos</label><input type="number" id="edCant" class="input" min="1" step="1" value="${cantidad}"></div>
+      <div class="field"><label>Precio Unitario</label><input type="number" id="edP" class="input" step="0.01" value="${precio}" onkeydown="if(event.key==='Enter')doEditItemCart(${idx})"></div>
+    </div>
+    ${rowTempExtraC}
+    <div class="field" style="margin-bottom:4px;"><label>Descuento (%)</label><div style="display:flex;gap:8px;align-items:center;"><input type="number" id="edDsc" class="input" style="width:80px" min="0" max="100" step="1" value="0" data-orig="${precio}" oninput="applyDiscount('edDsc','edP')"><button type="button" class="btn btn-ghost btn-sm" onclick="applyDiscount('edDsc','edP')">Aplicar</button><span style="font-size:11px;color:var(--text-muted)">0% = sin descuento</span></div></div>
+  </div>
+  <div class="modal-footer">
+    <div class="modal-btns" style="margin-top:0"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-sage" onclick="doEditItemCart(${idx})">Guardar</button></div>
+  </div>`);
       setTimeout(() => document.getElementById('edN_cliente')?.focus(), 100);
     }
 
