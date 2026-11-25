@@ -201,6 +201,16 @@ class PagosTienda(DineroBase):
         self.assertEqual(r["balance_estacion_304"], 500)
         self.assertEqual(r["balance_estudio_deco"], -500)
 
+    def test_pago_semanal_en_efectivo_no_descuadra_el_corte(self):
+        ini, fin = self.semana()
+        db.registrar_venta(self.uid, 'Efectivo', [self.item()])
+        db.registrar_pago_tienda(self.tienda, 'Externa', 3048, 'Efectivo', f'Pago semanal {ini} a {fin}', False, ini, fin, self.uid)
+        db.registrar_gasto(self.uid, None, 'domos', 30)  # gasto normal de caja: sí se resta
+        r = db.obtener_resumen_dia()
+        self.assertEqual(r["efectivo_esperado"], 70)
+        self.assertEqual(r["tarjeta_esperado"], 0)
+        self.assertEqual(db.obtener_balance_actual()["en_caja"], 100 - 3048 - 30)
+
     def test_pago_a_tienda_es_atomico(self):
         ini, fin = self.semana()
         # Usuario inexistente: el gasto falla por llave foránea; el pago no debe quedar guardado.

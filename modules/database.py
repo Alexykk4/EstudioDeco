@@ -922,9 +922,13 @@ def obtener_resumen_dia(fecha=None):
         f"SELECT g.concepto, g.monto, g.categoria, g.origen, COALESCE(t.nombre,'General') as tienda FROM gastos g LEFT JOIN tiendas t ON t.id = g.tienda_id WHERE {filtro_gastos} AND (g.anulado IS NULL OR g.anulado=0) ORDER BY g.created_at",
         params
     ).fetchall()
-    # Solo gastos que salen de la caja física (excluye comisiones de tarjeta y los que salen del banco)
+    # Solo gastos que salen de la caja física (excluye comisiones de tarjeta y los que salen del banco).
+    # Los pagos semanales a tiendas se pagan con lo juntado en la semana, no con el cajón del turno:
+    # no se restan del esperado del corte (el balance acumulado sí los resta).
     gc = conn.execute(
-        f"SELECT COALESCE(SUM(monto),0) as gastos_caja FROM gastos WHERE {filtro} AND concepto NOT LIKE 'Comisi%n Tarjeta%' AND origen='Caja' AND (anulado IS NULL OR anulado=0)",
+        f"SELECT COALESCE(SUM(CASE WHEN concepto LIKE 'Pago semanal%' THEN 0 ELSE monto END),0) as gastos_caja,"
+        f" COALESCE(SUM(monto),0) as caja_total"
+        f" FROM gastos WHERE {filtro} AND concepto NOT LIKE 'Comisi%n Tarjeta%' AND origen='Caja' AND (anulado IS NULL OR anulado=0)",
         params
     ).fetchone()
     inv = conn.execute(
@@ -973,7 +977,7 @@ def obtener_resumen_dia(fecha=None):
     total_transfer     = transferencia_row["monto"]
     # Gastos de Caja se restan de efectivo, gastos de Banco (comisiones) se restan de tarjeta
     gastos_caja        = gc["gastos_caja"] if gc else 0
-    gastos_banco       = rg["total_gastos"] - gastos_caja
+    gastos_banco       = rg["total_gastos"] - (gc["caja_total"] if gc else 0)
     efectivo_esperado  = total_ef - gastos_caja
     tarjeta_esperado   = total_tar - gastos_banco
     total_esperado     = efectivo_esperado + tarjeta_esperado + total_transfer
